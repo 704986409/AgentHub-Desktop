@@ -145,4 +145,8 @@ const SPEC = {
   "we-opened-a-discord": { a: "talk", blue: "come say hi", blue2: "employee of the month", orange: "the office got a lobby" },
   "launching-munder-difflin-v0-4-6": { a: "ship", blue: "v0.4.6 · three languages", orange: "it speaks your language now" },
   "launching-munder-difflin-v0-5-2": { a: "ship", blue: "0.5.2 · pro workspace · stapler", orange: "one download, three plans" },
+  "how-to-connect-ollama-to-claude-code": { a: "wire", blue: "ollama launch claude", orange: "a local model behind claude code" },
+  "claude-code-vs-antigravity": { a: "versus", blue: "claude code", blue2: "antigravity", orange: "a shell prompt or a window" },
+  "is-claude-code-open-source": { a: "book", blue: "LICENSE.md: all rights reserved", orange: "public is not open source" },
+  "is-claude-code-max-worth-it": { a: "ledger", blue: "pro · max 5x · max 20x", orange: "pay for the limit you hit" },
 };
