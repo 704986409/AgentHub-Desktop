@@ -16,6 +16,14 @@
     <summary>Stretch a Claude Code Max plan: model choice, context hygiene, prompt caching, subagents and unattended runs, checked against Anthropic&#39;s own pages.</summary>
   </entry>
   <entry>
+    <title>Claude Code vs Cursor: Which Is Better in 2026?</title>
+    <link href="https://munderdiffl.in/blog/claude-code-vs-cursor/" />
+    <id>https://munderdiffl.in/blog/claude-code-vs-cursor/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Comparisons" />
+    <summary>Claude Code vs Cursor, checked 14 Sep 2026: where each runs, models, plans, the new Claude Code weekly limits, parallel agents and using both.</summary>
+  </entry>
+  <entry>
     <title>How to Make the Most of Your Codex Max Plan</title>
     <link href="https://munderdiffl.in/blog/codex-max-plan-tips/" />
     <id>https://munderdiffl.in/blog/codex-max-plan-tips/</id>
@@ -40,12 +48,36 @@
     <summary>Herdr alternatives checked on 14 Sep 2026: tmux, Munder Difflin, Claude Squad, cmux, Orca, Conductor, Superset and Emdash, and who each fits.</summary>
   </entry>
   <entry>
+    <title>How to Install Codex CLI on Mac, Windows and Linux</title>
+    <link href="https://munderdiffl.in/blog/how-to-install-codex-cli/" />
+    <id>https://munderdiffl.in/blog/how-to-install-codex-cli/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
+    <summary>Install OpenAI&#39;s Codex CLI with the official script, npm or Homebrew, sign in with ChatGPT or an API key, then update it and check your version.</summary>
+  </entry>
+  <entry>
     <title>OmniAgent Alternatives: What to Use Instead of Databricks Omnigent</title>
     <link href="https://munderdiffl.in/blog/omniagent-alternatives/" />
     <id>https://munderdiffl.in/blog/omniagent-alternatives/</id>
     <published>2026-09-14T00:00:00.000Z</published>
     <updated>2026-09-14T00:00:00.000Z</updated><category term="Comparisons" />
     <summary>OmniAgent is really Omnigent, the open source meta harness from Databricks. Alternatives checked on 14 Sep 2026, and who each one fits.</summary>
+  </entry>
+  <entry>
+    <title>What Is Vibe Coding? Meaning, Risks and Safer Habits</title>
+    <link href="https://munderdiffl.in/blog/what-is-vibe-coding/" />
+    <id>https://munderdiffl.in/blog/what-is-vibe-coding/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Concepts" />
+    <summary>Vibe coding means building software from AI prompts without reading the code. Where the term came from, when it is fine, where it bites, and what to check.</summary>
+  </entry>
+  <entry>
+    <title>Why Does Claude Code Keep Asking for Permission?</title>
+    <link href="https://munderdiffl.in/blog/why-does-claude-code-keep-asking-for-permission/" />
+    <id>https://munderdiffl.in/blog/why-does-claude-code-keep-asking-for-permission/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
+    <summary>Claude Code asks because Manual mode gates edits, shell commands and web requests. The fixes, safest first: modes, allow rules, sandboxing, then bypass.</summary>
   </entry>
   <entry>
     <title>How to Use Claude Code Plan Mode</title>
@@ -454,37 +486,5 @@
     <published>2026-06-10T00:00:00.000Z</published>
     <updated>2026-06-10T00:00:00.000Z</updated><category term="Guides" />
     <summary>Wire a GitHub webhook to Munder Difflin: a secret-gated local endpoint turns each repo event into a task for your GOD orchestrator — POST a message, get a token, poll the result. No server to host.</summary>
-  </entry>
-  <entry>
-    <title>Why CLI Agents Are So Powerful — and How Munder Difflin Spends Fewer Tokens Doing the Same Work</title>
-    <link href="https://munderdiffl.in/blog/why-cli-agents-are-powerful/" />
-    <id>https://munderdiffl.in/blog/why-cli-agents-are-powerful/</id>
-    <published>2026-06-10T00:00:00.000Z</published>
-    <updated>2026-06-10T00:00:00.000Z</updated><category term="Concepts" />
-    <summary>CLI agents are powerful because they have terminal-level access: they run builds, tests, and git, and verify their own work by executing it. Here&#39;s why that matters — and the concrete ways Munder Difflin cuts token consumption while doing it.</summary>
-  </entry>
-  <entry>
-    <title>Launching Munder Difflin v0.2.4</title>
-    <link href="https://munderdiffl.in/blog/launching-munder-difflin-v0-2-4/" />
-    <id>https://munderdiffl.in/blog/launching-munder-difflin-v0-2-4/</id>
-    <published>2026-06-09T00:00:00.000Z</published>
-    <updated>2026-06-09T00:00:00.000Z</updated><category term="Story" />
-    <summary>Munder Difflin v0.2.4 is here: Claude Code, OpenAI Codex, and Antigravity (Gemini) agents now run as one hive with full parity — no API keys, no setup. Brief a GOD orchestrator, automate basically anything in one prompt, and close the lid while it keeps working.</summary>
-  </entry>
-  <entry>
-    <title>Munder Difflin v0.2.4 Feature Walkthrough</title>
-    <link href="https://munderdiffl.in/blog/munder-difflin-v0-2-4-feature-walkthrough/" />
-    <id>https://munderdiffl.in/blog/munder-difflin-v0-2-4-feature-walkthrough/</id>
-    <published>2026-06-09T00:00:00.000Z</published>
-    <updated>2026-06-09T00:00:00.000Z</updated><category term="Guides" />
-    <summary>A comprehensive guide to every change in Munder Difflin v0.2.4 — how the Codex lifecycle-hook bridge achieves full hive parity, what the Schedules tab adds, why tunnelmole replaced localtunnel, and what else shipped.</summary>
-  </entry>
-  <entry>
-    <title>Launching Munder Difflin v0.2.0</title>
-    <link href="https://munderdiffl.in/blog/launching-munder-difflin-v0-2-0/" />
-    <id>https://munderdiffl.in/blog/launching-munder-difflin-v0-2-0/</id>
-    <published>2026-06-07T00:00:00.000Z</published>
-    <updated>2026-06-07T00:00:00.000Z</updated><category term="Story" />
-    <summary>Munder Difflin v0.2.0 is here: a Command Center overhaul, per-agent token budgets, live OpenTelemetry observability, a circuit breaker, durable SQLite persistence, and a big round of community fixes.</summary>
   </entry>
 </feed>

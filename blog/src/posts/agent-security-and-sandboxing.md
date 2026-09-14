@@ -36,7 +36,7 @@ keep autonomous agents safe, grounded in how a [multi-agent harness](/#what) act
 
 Coding agents ship with a built-in gate: the **permission prompt**. By default Claude Code pauses before
 a sensitive action and asks. That's great when a human is watching — and useless when the entire premise
-is "run a hive of agents unattended overnight." You can't approve a prompt you're asleep for.
+is "run a hive of agents unattended overnight." You can't approve a prompt you're asleep for. If the prompts are wearing you down in the daytime too, see [why Claude Code keeps asking for permission](/blog/why-does-claude-code-keep-asking-for-permission/).
 
 So autonomous setups reach for the other end of the dial. In Munder Difflin that's **auto mode**, which
 spawns each agent with `--permission-mode bypassPermissions`. The onboarding flow says it plainly:
