@@ -88,15 +88,6 @@ p.lead{font-size:1.1rem;color:var(--muted);max-width:660px}
 .btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
 .btn.lg{padding:15px 26px;font-size:1.05rem}
 .btn.sm{padding:8px 14px;font-size:.9rem}
-.dl-wrap{position:relative;display:inline-block}
-.dl-menu.right{left:auto;right:0;transform:none}
-.dl-menu{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 10px);min-width:300px;background:var(--card);border:1px solid var(--line-strong);border-radius:var(--radius-sm);box-shadow:0 14px 34px rgba(26,19,32,.18);padding:6px;z-index:60;text-align:left}
-.dl-menu a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;text-decoration:none;color:var(--ink)}
-.dl-menu a:hover{background:var(--paper-2)}
-.dl-menu .dl-ic{font-size:1.3rem;line-height:1}
-.dl-menu b{display:block;font-size:.95rem;font-weight:600}
-.dl-menu b em{font-style:normal;font-family:var(--mono);font-size:.72rem;color:var(--faint)}
-.dl-menu .sub{display:block;font-family:var(--mono);font-size:.72rem;color:var(--muted)}
 .nav-burger{display:none;flex-direction:column;justify-content:center;gap:5px;width:40px;height:40px;padding:8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--card);cursor:pointer}
 .nav-burger span{display:block;height:2px;width:100%;background:var(--ink);border-radius:2px;transition:transform .18s ease,opacity .18s ease}
 .nav-burger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
@@ -332,7 +323,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px}
       <a class="txt" href="https://harnessmd.com/signin">Sign in</a>
       <!-- Star count: GitHub API on 2026-09-09 said 6,686. Every .starct on the page is written correct and then refreshed live; see updateStars(). -->
       <a class="btn sm" href="https://github.com/chaitanyagiri/munder-difflin" target="_blank" rel="noopener">★ <span class="starct">6.7K</span></a>
-      <span class="dl-wrap"><button type="button" class="btn primary sm" id="dlBtnNav" aria-haspopup="true" aria-expanded="false">Download</button><div class="dl-menu right" id="dlMenuNav" hidden></div></span>
+      <a class="btn primary sm" href="./download.html">Download</a>
     </div>
     <button type="button" class="nav-burger" id="navBurger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
   </div>
@@ -365,10 +356,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px}
     <h1>Agent harness to run an office of your clones</h1>
     <p class="lead"><strong>Free, open source and performant</strong> multi-agent harness, works with your existing subscriptions (uses hourly limits).</p>
     <div class="btn-row">
-      <div class="dl-wrap">
-        <button type="button" class="btn primary lg" id="dlBtn" aria-haspopup="true" aria-expanded="false">⤓ Download free</button>
-        <div class="dl-menu" id="dlMenu" hidden></div>
-      </div>
+      <a class="btn primary lg" href="./download.html">⤓ Download free</a>
     </div>
     <p class="teams-link"><a href="https://harnessmd.com/console">Munder Difflin for Teams</a></p>
     <div class="media2">
@@ -658,7 +646,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px}
           <li>Unlimited local agents, twelve providers</li>
           <li>MIT licensed</li>
         </ul>
-        <a class="btn dl-direct" href="https://harnessmd.com/download" target="_blank" rel="noopener">Download free</a>
+        <a class="btn" href="./download.html">Download free</a>
       </div>
       <div class="tier hot">
         <div class="th"><span class="tn">PRO</span><span class="chip on">14 day trial</span></div>
@@ -722,7 +710,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px}
       <h2>Clock in your clone.</h2>
       <p>You do the work only you can do. Your clone does the rest.</p>
       <div class="btn-row" style="justify-content:center">
-        <a class="btn primary lg dl-direct" href="https://harnessmd.com/download" target="_blank" rel="noopener">Download free</a>
+        <a class="btn primary lg" href="./download.html">Download free</a>
         <a class="btn lg" href="https://harnessmd.com/pro">Get Pro</a>
         <a class="btn lg" href="https://harnessmd.com/console">Start a team</a>
       </div>
@@ -741,7 +729,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 40px}
         <a href="#pricing">Pricing</a>
         <a href="https://munderdiffl.in/wall.html" target="_blank" rel="noopener">Founders' Wall</a>
         <a href="mailto:girichaitanya11@gmail.com">Contact</a>
-        <a class="dl-direct" href="https://harnessmd.com/download">Download</a>
+        <a href="./download.html">Download</a>
         <a href="https://github.com/chaitanyagiri/munder-difflin/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
         <a href="https://github.com/chaitanyagiri/munder-difflin/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
         <a href="https://munderdiffl.in/terms.html" target="_blank" rel="noopener">Terms</a>
@@ -966,57 +954,9 @@ function O({l:t,c:e,h:s}){let n=s*Math.PI/180,r=e*Math.cos(n),o=e*Math.sin(n),c=
   var slots = document.querySelectorAll('.slot');
   for (var s = 0; s < slots.length; s++) { var im = slots[s].querySelector('img'); if (im) settle(slots[s], im); }
 
-  /* ---- download menu: three direct OS downloads, one click each. REL is the one
-     constant to update at go-live so the latest release's asset names match. ---- */
-  (function () {
-    // 0.5.2 verified live on 10 Sep 2026: every asset below returns 200 from
-    // app.harnessmd.com and a bogus version returns 404, so these are real files
-    // and not a catch-all. NOTE the releases live on app.harnessmd.com, NOT on
-    // GitHub, whose latest published release is still v0.4.6 — do not "correct"
-    // this against the GitHub tag.
-    var REL = '0.5.2';
-    // BASE STAYS ON THE ARTIFACT DIRECTORY AND MUST NOT BECOME harnessmd.com/download.
-    // It is concatenated with a filename to make a one-click direct download;
-    // harnessmd.com/download/<file> returns 404 (checked 10 Sep 2026), so pointing
-    // this at the page would break all three OS downloads. The three PLAIN hrefs
-    // in the markup are the ones that belong on /download, and they are, for the
-    // visitor whose OS was not detected. When it is detected, the code below
-    // swaps those same buttons to a direct file link.
-    // KNOWN COST: REL is hand-edited, so a release that ships without updating it
-    // serves the previous version silently rather than failing loudly. /download
-    // reads the release channel and cannot go stale that way.
-    var BASE = 'https://app.harnessmd.com/releases/';
-    var PLATFORMS = [
-      { key: 'mac', icon: '\uD83C\uDF4E', os: 'macOS', sub: 'Universal \u00B7 Apple Silicon + Intel', file: 'Munder-Difflin-' + REL + '-mac-universal.dmg' },
-      { key: 'win', icon: '\uD83E\uDE9F', os: 'Windows', sub: '64 bit installer (.exe)', file: 'Munder-Difflin-' + REL + '-win-x64-setup.exe' },
-      { key: 'linux', icon: '\uD83D\uDC27', os: 'Linux', sub: 'AppImage \u00B7 x86_64', file: 'Munder-Difflin-' + REL + '-linux-x86_64.AppImage' }
-    ];
-    var ua = navigator.userAgent;
-    var cur = /Windows/.test(ua) ? 'win' : (/Mac|iPhone|iPad/.test(ua) ? 'mac' : (/Linux|Android|X11/.test(ua) ? 'linux' : null));
-    function wire(btnId, menuId) {
-      var btn = document.getElementById(btnId), menu = document.getElementById(menuId);
-      if (!btn || !menu) return;
-      PLATFORMS.forEach(function (pf) {
-        var a = document.createElement('a');
-        a.href = BASE + pf.file;
-        a.setAttribute('download', '');
-        a.innerHTML = '<span class="dl-ic">' + pf.icon + '</span><span><b>' + pf.os + (pf.key === cur ? ' <em>your OS</em>' : '') + '</b><span class="sub">' + pf.sub + '</span></span>';
-        menu.appendChild(a);
-      });
-      function setOpen(v) { menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); }
-      btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(menu.hidden); });
-      document.addEventListener('click', function (e) { var t = e.target; if (!menu.hidden && !(t && t.closest && t.closest('.dl-wrap'))) setOpen(false); });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) setOpen(false); });
-    }
-    wire('dlBtn', 'dlMenu');
-    wire('dlBtnNav', 'dlMenuNav');
-    var mine = null;
-    for (var i = 0; i < PLATFORMS.length; i++) if (PLATFORMS[i].key === cur) mine = PLATFORMS[i];
-    if (mine) {
-      var direct = document.querySelectorAll('.dl-direct');
-      for (var d = 0; d < direct.length; d++) { direct[d].href = BASE + mine.file; direct[d].setAttribute('download', ''); }
-    }
-  })();
+  /* ---- downloads: every Download button links to ./download.html, the site's
+     own download page. The direct OS file links, REL and the sizes live there,
+     and only there; this page carries none of them any more. ---- */
 
   /* ---- mobile nav: the burger turns into a cross and opens the link drawer ---- */
   (function () {
@@ -1115,15 +1055,6 @@ function O({l:t,c:e,h:s}){let n=s*Math.PI/180,r=e*Math.cos(n),o=e*Math.sin(n),c=
           return event;
         }
       });
-      // download_clicked: the OS menu items and the direct buttons both end up
-      // as anchors carrying a download attribute, and .dl-direct covers the one
-      // case where the OS was not detected and the attribute was never set.
-      document.addEventListener('click', function (ev) {
-        var a = ev.target && ev.target.closest ? ev.target.closest('a[download], a.dl-direct') : null;
-        if (!a) return;
-        var href = a.getAttribute('href') || '';
-        window.posthog.capture('download_clicked', { file: href.split('/').pop() || 'releases-index' });
-      }, true);
       // support_clicked: the single Founding Supporters button through to the
       // wall. Same event name and the same "wall-link" value as docs/index.html,
       // so the two pages report into one funnel rather than two.
