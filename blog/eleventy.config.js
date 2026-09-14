@@ -240,6 +240,23 @@ export default function (eleventyConfig) {
   eleventyConfig.addFilter("heroFile", (slug) => media[slug]?.hero?.file || "");
   eleventyConfig.addFilter("heroAlt", (slug) => media[slug]?.hero?.alt || "");
 
+  // Link preview (og:image / twitter:image) for a post: its own hero once it is
+  // ready, so a shared link shows the post's picture instead of the site default.
+  // Width and height come from the PNG header so Facebook and LinkedIn can draw
+  // the card on the first share without fetching the file first.
+  eleventyConfig.addFilter("heroOg", (slug) => {
+    const hero = media[slug]?.hero;
+    if (hero?.status !== "ready" || !hero.file) return false;
+    const png = readFileSync(`src/${hero.file}`);
+    const isPng = png.toString("ascii", 12, 16) === "IHDR";
+    return {
+      path: `${BASE}/${hero.file}`,
+      alt: hero.alt || "",
+      width: isPng ? png.readUInt32BE(16) : 0,
+      height: isPng ? png.readUInt32BE(20) : 0,
+    };
+  });
+
   // ---- config ----
   return {
     dir: {
