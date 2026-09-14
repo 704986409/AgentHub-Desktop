@@ -16,6 +16,14 @@
     <summary>Stretch a Claude Code Max plan: model choice, context hygiene, prompt caching, subagents and unattended runs, checked against Anthropic&#39;s own pages.</summary>
   </entry>
   <entry>
+    <title>Claude Code vs Antigravity: Which One Fits Your Work?</title>
+    <link href="https://munderdiffl.in/blog/claude-code-vs-antigravity/" />
+    <id>https://munderdiffl.in/blog/claude-code-vs-antigravity/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Comparisons" />
+    <summary>Claude Code vs Google Antigravity, checked 14 Sep 2026: terminal agent or desktop agent app, Claude inside Antigravity, plans, limits and a verdict.</summary>
+  </entry>
+  <entry>
     <title>Claude Code vs Cursor: Which Is Better in 2026?</title>
     <link href="https://munderdiffl.in/blog/claude-code-vs-cursor/" />
     <id>https://munderdiffl.in/blog/claude-code-vs-cursor/</id>
@@ -48,12 +56,36 @@
     <summary>Herdr alternatives checked on 14 Sep 2026: tmux, Munder Difflin, Claude Squad, cmux, Orca, Conductor, Superset and Emdash, and who each fits.</summary>
   </entry>
   <entry>
+    <title>How to Connect Ollama to Claude Code</title>
+    <link href="https://munderdiffl.in/blog/how-to-connect-ollama-to-claude-code/" />
+    <id>https://munderdiffl.in/blog/how-to-connect-ollama-to-claude-code/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
+    <summary>Point Claude Code at Ollama with ollama launch claude or three environment variables, give the model 64K of context, and know what stops working.</summary>
+  </entry>
+  <entry>
     <title>How to Install Codex CLI on Mac, Windows and Linux</title>
     <link href="https://munderdiffl.in/blog/how-to-install-codex-cli/" />
     <id>https://munderdiffl.in/blog/how-to-install-codex-cli/</id>
     <published>2026-09-14T00:00:00.000Z</published>
     <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
     <summary>Install OpenAI&#39;s Codex CLI with the official script, npm or Homebrew, sign in with ChatGPT or an API key, then update it and check your version.</summary>
+  </entry>
+  <entry>
+    <title>Is It Worth Paying for Claude Code Max?</title>
+    <link href="https://munderdiffl.in/blog/is-claude-code-max-worth-it/" />
+    <id>https://munderdiffl.in/blog/is-claude-code-max-worth-it/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Concepts" />
+    <summary>Who should pay for Claude Max 5x or 20x, who should stay on Pro or an API key, and the break even math to run on your own Claude Code usage.</summary>
+  </entry>
+  <entry>
+    <title>Is Claude Code Open Source?</title>
+    <link href="https://munderdiffl.in/blog/is-claude-code-open-source/" />
+    <id>https://munderdiffl.in/blog/is-claude-code-open-source/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Concepts" />
+    <summary>No. Claude Code is proprietary under Anthropic&#39;s terms. What its GitHub repo holds, what the 2026 leak changed, and which open tools sit around it.</summary>
   </entry>
   <entry>
     <title>OmniAgent Alternatives: What to Use Instead of Databricks Omnigent</title>
@@ -454,37 +486,5 @@
     <published>2026-06-10T00:00:00.000Z</published>
     <updated>2026-09-10T00:00:00.000Z</updated><category term="Use Cases" />
     <summary>How the Munder Difflin blog is written by agents in our own office: a brief, a house style, a draft in its own worktree, drawings made in code, a pull request, and one human merge. The pipeline, and how to build your own.</summary>
-  </entry>
-  <entry>
-    <title>Deploy a PR Reviewer That Never Sleeps — In About One Prompt</title>
-    <link href="https://munderdiffl.in/blog/deploy-automated-pr-reviewer-agent/" />
-    <id>https://munderdiffl.in/blog/deploy-automated-pr-reviewer-agent/</id>
-    <published>2026-06-10T00:00:00.000Z</published>
-    <updated>2026-08-20T00:00:00.000Z</updated><category term="Orchestration" />
-    <summary>A how-to for standing up a fully automated PR-reviewing agent in Munder Difflin — one that reads your real source (not just the PR description), de-dupes noise, and only escalates what matters. With a real triage run that turned 22 duplicate firings into a clean v0.2.5 patch queue.</summary>
-  </entry>
-  <entry>
-    <title>Run Your AI Agent Hive from Slack: The Complete Setup</title>
-    <link href="https://munderdiffl.in/blog/run-ai-agent-hive-from-slack-setup/" />
-    <id>https://munderdiffl.in/blog/run-ai-agent-hive-from-slack-setup/</id>
-    <published>2026-06-10T00:00:00.000Z</published>
-    <updated>2026-06-10T00:00:00.000Z</updated><category term="Guides" />
-    <summary>Step-by-step setup for driving Munder Difflin&#39;s AI agent hive from Slack: create the app, set scopes, paste the tunnel Request URL, and @mention your bot to start work — done-summaries post back in-thread.</summary>
-  </entry>
-  <entry>
-    <title>The Clone Army Is a Trap: Why a Mixed Swarm Beats Ten Identical Agents</title>
-    <link href="https://munderdiffl.in/blog/the-clone-army-trap-mixed-swarm-vs-identical-agents/" />
-    <id>https://munderdiffl.in/blog/the-clone-army-trap-mixed-swarm-vs-identical-agents/</id>
-    <published>2026-06-10T00:00:00.000Z</published>
-    <updated>2026-06-10T00:00:00.000Z</updated><category term="Concepts" />
-    <summary>Spinning up tens of identical top-tier CLI agents feels powerful and burns tokens on work a cheaper agent could do. A mixed-capability swarm with shared memory wins on cost — and often on quality.</summary>
-  </entry>
-  <entry>
-    <title>How to Trigger Your AI Agent Hive from a GitHub Webhook</title>
-    <link href="https://munderdiffl.in/blog/trigger-ai-agents-from-github-webhook/" />
-    <id>https://munderdiffl.in/blog/trigger-ai-agents-from-github-webhook/</id>
-    <published>2026-06-10T00:00:00.000Z</published>
-    <updated>2026-06-10T00:00:00.000Z</updated><category term="Guides" />
-    <summary>Wire a GitHub webhook to Munder Difflin: a secret-gated local endpoint turns each repo event into a task for your GOD orchestrator — POST a message, get a token, poll the result. No server to host.</summary>
   </entry>
 </feed>

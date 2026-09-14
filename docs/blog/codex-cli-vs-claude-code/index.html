@@ -195,6 +195,7 @@ wherever you open it (<a href="https://code.claude.com/docs/en/overview">code.cl
 2026). Hooks run shell commands before or after Claude Code’s own actions, like formatting after every file edit or
 running lint before a commit, so a rule you write once holds for every session instead of living in a README nobody
 rereads. If you already pay for Claude, that is a lot of control for no extra setup.</p>
+<p>Weighing Google’s agent as well? Read <a href="/blog/claude-code-vs-antigravity/">Claude Code vs Antigravity</a>.</p>
 <h2 id="can-you-run-codex-cli-and-claude-code-together" tabindex="-1">Can you run Codex CLI and Claude Code together? <a class="anchor" href="#can-you-run-codex-cli-and-claude-code-together" aria-hidden="true">#</a></h2>
 <p>Yes, and running both inside one harness is often more useful than picking a single winner. Munder Difflin wraps CLIs like <code>claude</code> and <code>codex</code> as real processes in their own terminals and runs them side by side on the same office floor, so a Codex agent and a Claude Code agent can each work on their own task at the same time. Munder Difflin 0.5.0 (2026-09-08) added GPT-6 Astra to Codex’s model picker, and that slug needs Codex 0.153.1 or newer to be accepted when the agent spawns; the Codex CLI checked for this piece, <code>codex-cli 0.153.4</code>, clears that bar.</p>
 <p>For the wider field beyond these two, the <a href="/blog/best-ai-coding-agents/">2026 field guide to AI coding agents</a> covers where in-editor and autonomous agents fit next to CLI ones. For this specific pair, the honest answer holds: reach for Claude Code when you already pay for Claude and want hooks and one permission mode, reach for Codex CLI when you want separate sandbox and approval dials and a free way to start, and don’t feel obligated to pick just one.</p>
@@ -259,6 +260,22 @@ rereads. If you already pay for Claude, that is a lot of control for no extra se
       <h2>Related in Comparisons</h2>
       <div class="post-grid">
         <article class="card t-comparisons">
+  <a class="thumb t-comparisons" href="/blog/claude-code-vs-antigravity/" aria-hidden="true" tabindex="-1"><img src="/blog/assets/media/claude-code-vs-antigravity/hero.png" alt="" loading="lazy" decoding="async" /></a>
+  <div class="body">
+    <div class="meta">
+      <time datetime="2026-09-14">Sep 14, 2026</time>
+      <span class="dot" aria-hidden="true"></span>
+      <span>5 min</span>
+    </div>
+    <h3><a href="/blog/claude-code-vs-antigravity/">Claude Code vs Antigravity: Which One Fits Your Work?</a></h3>
+    <p class="dek">Claude Code vs Google Antigravity, checked 14 Sep 2026: terminal agent or desktop agent app, Claude inside Antigravity, plans, limits and a verdict.</p>
+    <div class="foot">
+      <span class="tag kind">Comparisons</span>
+      <a class="more" href="/blog/claude-code-vs-antigravity/" aria-label="Read: Claude Code vs Antigravity: Which One Fits Your Work?">Read →</a>
+    </div>
+  </div>
+</article>
+<article class="card t-comparisons">
   <a class="thumb t-comparisons" href="/blog/claude-code-vs-cursor/" aria-hidden="true" tabindex="-1"><img src="/blog/assets/media/claude-code-vs-cursor/hero.png" alt="" loading="lazy" decoding="async" /></a>
   <div class="body">
     <div class="meta">
@@ -287,22 +304,6 @@ rereads. If you already pay for Claude, that is a lot of control for no extra se
     <div class="foot">
       <span class="tag kind">Comparisons</span>
       <a class="more" href="/blog/grok-bot-alternatives/" aria-label="Read: Grok Bot Alternatives: Six Picks, Grouped by What You Want">Read →</a>
-    </div>
-  </div>
-</article>
-<article class="card t-comparisons">
-  <a class="thumb t-comparisons" href="/blog/herdr-alternatives/" aria-hidden="true" tabindex="-1"><img src="/blog/assets/media/herdr-alternatives/hero.png" alt="" loading="lazy" decoding="async" /></a>
-  <div class="body">
-    <div class="meta">
-      <time datetime="2026-09-14">Sep 14, 2026</time>
-      <span class="dot" aria-hidden="true"></span>
-      <span>5 min</span><span class="pin">Pinned</span>
-    </div>
-    <h3><a href="/blog/herdr-alternatives/">Herdr Alternatives: What to Pick and Who Each One Fits</a></h3>
-    <p class="dek">Herdr alternatives checked on 14 Sep 2026: tmux, Munder Difflin, Claude Squad, cmux, Orca, Conductor, Superset and Emdash, and who each fits.</p>
-    <div class="foot">
-      <span class="tag kind">Comparisons</span>
-      <a class="more" href="/blog/herdr-alternatives/" aria-label="Read: Herdr Alternatives: What to Pick and Who Each One Fits">Read →</a>
     </div>
   </div>
 </article>

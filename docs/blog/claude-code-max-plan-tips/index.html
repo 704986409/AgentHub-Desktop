@@ -173,7 +173,7 @@
   <div class="post-wrap wrap">
     <div class="prose">
       <p>To get the most out of Claude Max in Claude Code, spend the plan on work, not on rereading context. Pick the model per task, <code>/clear</code> between tasks, plan before big edits, keep sessions inside the one hour cache, and watch <code>/usage</code> so the weekly limit never surprises you. Anthropic’s figures below were checked on 14 Sep 2026.</p>
-<p>Prices are in our post on <a href="/blog/how-much-does-claude-code-cost/">what Claude Code costs</a>, so this one sticks to using the plan well. If you already run more than one terminal, read <a href="/blog/manage-multiple-claude-code-sessions/">how to manage multiple Claude Code sessions</a> too, because every extra session draws from the same allowance.</p>
+<p>Prices are in our post on <a href="/blog/how-much-does-claude-code-cost/">what Claude Code costs</a>, and whether to upgrade at all is in <a href="/blog/is-claude-code-max-worth-it/">is it worth paying for Claude Code Max</a>, so this one sticks to using the plan well. If you already run more than one terminal, read <a href="/blog/manage-multiple-claude-code-sessions/">how to manage multiple Claude Code sessions</a> too, because every extra session draws from the same allowance.</p>
 <p>You can do all of this by hand, or use <a href="https://harnessmd.com/download">Munder Difflin</a>, a free and open source desktop app that runs your Claude Code agents on the login you already have. Give each agent its own model and token cap, schedule long jobs for when you are away, and watch every session from one screen. One tip first: in 0.5.2 the default agent model is Fable 5, which on Max can use at most half your weekly limit, so pick another default under Settings &gt; Agents &amp; Models.</p>
 <h2 id="how-do-claude-max-usage-limits-work-in-claude-code" tabindex="-1">How do Claude Max usage limits work in Claude Code? <a class="anchor" href="#how-do-claude-max-usage-limits-work-in-claude-code" aria-hidden="true">#</a></h2>
 <p>Two meters run at once: a session limit that resets every five hours, and a weekly limit. The weekly one covers all models and resets at a fixed time assigned to your account (<a href="https://support.claude.com/en/articles/11049741-what-is-the-max-plan">Anthropic, What is the Max plan</a>, checked 14 Sep 2026). Max 5x and Max 20x multiply Pro’s usage per session, and chat, Claude Code and the IDE extensions share one pool. Because both meters are shared across models, switching with <code>/model</code> does not bring back a spent session or week. The separate Opus and Sonnet family limits are different: switch outside that family and you keep working (Claude Code errors reference). Run <code>/usage</code> to see both bars and their reset times.</p>
@@ -257,7 +257,7 @@
   </div>
 
   <footer class="post-foot wrap"><div class="prevnext">
-      <a class="pn prev" href="/blog/claude-code-vs-cursor/"><span class="k">← Older</span><span class="t">Claude Code vs Cursor: Which Is Better in 2026?</span></a>
+      <a class="pn prev" href="/blog/claude-code-vs-antigravity/"><span class="k">← Older</span><span class="t">Claude Code vs Antigravity: Which One Fits Your Work?</span></a>
       <span></span>
     </div>
     <section class="related">
@@ -280,6 +280,22 @@
   </div>
 </article>
 <article class="card t-guides">
+  <a class="thumb t-guides" href="/blog/how-to-connect-ollama-to-claude-code/" aria-hidden="true" tabindex="-1"><img src="/blog/assets/media/how-to-connect-ollama-to-claude-code/hero.png" alt="" loading="lazy" decoding="async" /></a>
+  <div class="body">
+    <div class="meta">
+      <time datetime="2026-09-14">Sep 14, 2026</time>
+      <span class="dot" aria-hidden="true"></span>
+      <span>5 min</span>
+    </div>
+    <h3><a href="/blog/how-to-connect-ollama-to-claude-code/">How to Connect Ollama to Claude Code</a></h3>
+    <p class="dek">Point Claude Code at Ollama with ollama launch claude or three environment variables, give the model 64K of context, and know what stops working.</p>
+    <div class="foot">
+      <span class="tag kind">Guides</span>
+      <a class="more" href="/blog/how-to-connect-ollama-to-claude-code/" aria-label="Read: How to Connect Ollama to Claude Code">Read →</a>
+    </div>
+  </div>
+</article>
+<article class="card t-guides">
   <a class="thumb t-guides" href="/blog/how-to-install-codex-cli/" aria-hidden="true" tabindex="-1"><img src="/blog/assets/media/how-to-install-codex-cli/hero.png" alt="" loading="lazy" decoding="async" /></a>
   <div class="body">
     <div class="meta">
@@ -292,22 +308,6 @@
     <div class="foot">
       <span class="tag kind">Guides</span>
       <a class="more" href="/blog/how-to-install-codex-cli/" aria-label="Read: How to Install Codex CLI on Mac, Windows and Linux">Read →</a>
-    </div>
-  </div>
-</article>
-<article class="card t-guides">
-  <a class="thumb t-guides" href="/blog/why-does-claude-code-keep-asking-for-permission/" aria-hidden="true" tabindex="-1"><img src="/blog/assets/media/why-does-claude-code-keep-asking-for-permission/hero.png" alt="" loading="lazy" decoding="async" /></a>
-  <div class="body">
-    <div class="meta">
-      <time datetime="2026-09-14">Sep 14, 2026</time>
-      <span class="dot" aria-hidden="true"></span>
-      <span>5 min</span>
-    </div>
-    <h3><a href="/blog/why-does-claude-code-keep-asking-for-permission/">Why Does Claude Code Keep Asking for Permission?</a></h3>
-    <p class="dek">Claude Code asks because Manual mode gates edits, shell commands and web requests. The fixes, safest first: modes, allow rules, sandboxing, then bypass.</p>
-    <div class="foot">
-      <span class="tag kind">Guides</span>
-      <a class="more" href="/blog/why-does-claude-code-keep-asking-for-permission/" aria-label="Read: Why Does Claude Code Keep Asking for Permission?">Read →</a>
     </div>
   </div>
 </article>
