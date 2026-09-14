@@ -57,7 +57,7 @@ Six good options, grouped by why you're looking.
 
 ### You want coding agents on your own machine
 
-Munder Difflin, which we make, is a free and open source desktop app for a narrower need: a team of coding agents (Claude Code, Codex, Gemini CLI and nine others) working on your own computer. A Slack message can start an agent, missions run on a schedule, and with your own OpenAI API key you direct the agents by voice, with a spoken confirmation before anything destructive. It will not clear your inbox, so for errands and email, pick from the other groups.
+[Munder Difflin](https://harnessmd.com/download), which we make, is a free and open source desktop app for a narrower need: a team of coding agents (Claude Code, Codex, Gemini CLI and nine others) working on your own computer. A Slack message can start an agent, missions run on a schedule, and with your own OpenAI API key you direct the agents by voice, with a spoken confirmation before anything destructive. It will not clear your inbox, so for errands and email, pick from the other groups.
 
 ### Your work lives in files on your computer
 
