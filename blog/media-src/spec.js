@@ -149,4 +149,7 @@ const SPEC = {
   "claude-code-vs-antigravity": { a: "versus", blue: "claude code", blue2: "antigravity", orange: "a shell prompt or a window" },
   "is-claude-code-open-source": { a: "book", blue: "LICENSE.md: all rights reserved", orange: "public is not open source" },
   "is-claude-code-max-worth-it": { a: "ledger", blue: "pro · max 5x · max 20x", orange: "pay for the limit you hit" },
+  "how-to-install-gemini-cli": { a: "terminal", blue: "npm install -g @google/gemini-cli", amber: "gemini --version", orange: "install, then check who google still serves" },
+  "aider-vs-claude-code": { a: "versus", blue: "aider", blue2: "claude code", orange: "you pick the files or it does" },
+  "is-ollama-good-for-coding": { a: "stack", blue: "model size vs memory", orange: "good enough for the small jobs" },
 };

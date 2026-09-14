@@ -4032,5 +4032,80 @@
       }
     },
     "youtube": []
+  },
+  "how-to-install-gemini-cli": {
+    "title": "How to Install Gemini CLI, and Who Can Still Use It in 2026",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/how-to-install-gemini-cli/hero.png",
+      "alt": "Illustration: How to Install Gemini CLI, and Who Can Still Use It in 2026",
+      "prompt": "Hero image for a blog post titled \"How to Install Gemini CLI, and Who Can Still Use It in 2026\". The post is about: Install Google's Gemini CLI with npm on Mac, Windows or Linux, why Homebrew is stuck on 0.46.0, and which sign in still works after 18 Jun 2026.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/how-to-install-gemini-cli/note-1.png",
+        "alt": "Hand-drawn sketch from “How to Install Gemini CLI, and Who Can Still Use It in 2026”",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/how-to-install-gemini-cli/note-2.png",
+        "alt": "Hand-drawn sketch from “How to Install Gemini CLI, and Who Can Still Use It in 2026”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "aider-vs-claude-code": {
+    "title": "Aider vs Claude Code in 2026: Which Should You Use?",
+    "category": "comparisons",
+    "hero": {
+      "file": "assets/media/aider-vs-claude-code/hero.png",
+      "alt": "Illustration: Aider vs Claude Code in 2026: Which Should You Use?",
+      "prompt": "Hero image for a blog post titled \"Aider vs Claude Code in 2026: Which Should You Use?\". The post is about: Aider vs Claude Code, checked 15 Sep 2026: how each edits code, which models it runs, what it costs, MCP, and Aider's stalled releases.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/aider-vs-claude-code/note-1.png",
+        "alt": "Hand-drawn sketch from “Aider vs Claude Code in 2026: Which Should You Use?”",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/aider-vs-claude-code/note-2.png",
+        "alt": "Hand-drawn sketch from “Aider vs Claude Code in 2026: Which Should You Use?”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "is-ollama-good-for-coding": {
+    "title": "Is Ollama Good for Coding? What Local Models Can and Can't Do",
+    "category": "concepts",
+    "hero": {
+      "file": "assets/media/is-ollama-good-for-coding/hero.png",
+      "alt": "Illustration: Is Ollama Good for Coding? What Local Models Can and Can't Do",
+      "prompt": "Hero image for a blog post titled \"Is Ollama Good for Coding? What Local Models Can and Can't Do\". The post is about: Ollama only runs the model, so the answer depends on which one you pull and your memory. What local models do well, where Claude wins, and a verdict.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/is-ollama-good-for-coding/note-1.png",
+        "alt": "Hand-drawn sketch from “Is Ollama Good for Coding? What Local Models Can and Can't Do”",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/is-ollama-good-for-coding/note-2.png",
+        "alt": "Hand-drawn sketch from “Is Ollama Good for Coding? What Local Models Can and Can't Do”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
   }
 }

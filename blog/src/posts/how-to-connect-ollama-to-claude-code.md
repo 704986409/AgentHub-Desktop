@@ -81,7 +81,7 @@ The context window is the trap. Ollama's [context length page](https://docs.olla
 
 {% img "note-2" %}
 
-Cloud tags such as `kimi-k2.7-code:cloud` and `glm-5.1:cloud` skip both limits: no download, full context. They need an ollama.com account (`ollama signin`), their library pages list a per token cost, and your code leaves the machine.
+Cloud tags such as `kimi-k2.7-code:cloud` and `glm-5.1:cloud` skip both limits: no download, full context. They need an ollama.com account (`ollama signin`), their library pages list a per token cost, and your code leaves the machine. Whether a local model can carry your coding work at all is a separate question, weighed in [is Ollama good for coding](/blog/is-ollama-good-for-coding/).
 
 ## What breaks when Claude Code runs on Ollama?
 

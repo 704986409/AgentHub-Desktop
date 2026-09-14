@@ -4,9 +4,33 @@
   <subtitle>Guides, deep dives, and comparisons on running multi-agent Claude Code: orchestration, agent memory, automation, and the tooling landscape.</subtitle>
   <link href="https://munderdiffl.in/blog/feed.xml" rel="self" />
   <link href="https://munderdiffl.in/blog/" />
-  <updated>2026-09-14T00:00:00.000Z</updated>
+  <updated>2026-09-15T00:00:00.000Z</updated>
   <id>https://munderdiffl.in/blog/</id>
   <author><name>Chaitanya Giri</name><uri>https://munderdiffl.in</uri></author>
+  <entry>
+    <title>Aider vs Claude Code in 2026: Which Should You Use?</title>
+    <link href="https://munderdiffl.in/blog/aider-vs-claude-code/" />
+    <id>https://munderdiffl.in/blog/aider-vs-claude-code/</id>
+    <published>2026-09-15T00:00:00.000Z</published>
+    <updated>2026-09-15T00:00:00.000Z</updated><category term="Comparisons" />
+    <summary>Aider vs Claude Code, checked 15 Sep 2026: how each edits code, which models it runs, what it costs, MCP, and Aider&#39;s stalled releases.</summary>
+  </entry>
+  <entry>
+    <title>How to Install Gemini CLI, and Who Can Still Use It in 2026</title>
+    <link href="https://munderdiffl.in/blog/how-to-install-gemini-cli/" />
+    <id>https://munderdiffl.in/blog/how-to-install-gemini-cli/</id>
+    <published>2026-09-15T00:00:00.000Z</published>
+    <updated>2026-09-15T00:00:00.000Z</updated><category term="Guides" />
+    <summary>Install Google&#39;s Gemini CLI with npm on Mac, Windows or Linux, why Homebrew is stuck on 0.46.0, and which sign in still works after 18 Jun 2026.</summary>
+  </entry>
+  <entry>
+    <title>Is Ollama Good for Coding? What Local Models Can and Can&#39;t Do</title>
+    <link href="https://munderdiffl.in/blog/is-ollama-good-for-coding/" />
+    <id>https://munderdiffl.in/blog/is-ollama-good-for-coding/</id>
+    <published>2026-09-15T00:00:00.000Z</published>
+    <updated>2026-09-15T00:00:00.000Z</updated><category term="Concepts" />
+    <summary>Ollama only runs the model, so the answer depends on which one you pull and your memory. What local models do well, where Claude wins, and a verdict.</summary>
+  </entry>
   <entry>
     <title>How to Get the Most Out of Your Claude Code Max Plan</title>
     <link href="https://munderdiffl.in/blog/claude-code-max-plan-tips/" />
@@ -462,29 +486,5 @@
     <published>2026-06-21T00:00:00.000Z</published>
     <updated>2026-06-21T00:00:00.000Z</updated><category term="Story" />
     <summary>Munder Difflin v0.3.0 makes every hire — and Michael himself — a pluggable engine, adds an integrations registry with a write-only secret broker, and lets the god orchestrator spawn an ephemeral worker straight from Slack.</summary>
-  </entry>
-  <entry>
-    <title>Treating a Hire Manifest as Untrusted Input</title>
-    <link href="https://munderdiffl.in/blog/hire-manifest-untrusted-input/" />
-    <id>https://munderdiffl.in/blog/hire-manifest-untrusted-input/</id>
-    <published>2026-06-15T00:00:00.000Z</published>
-    <updated>2026-06-15T00:00:00.000Z</updated><category term="Internals" />
-    <summary>A shareable agent-config manifest is attacker input. How Munder Difflin&#39;s import pipeline stays inert: no auto-spawn, default-deny flags, and an SSRF-safe bounded fetch.</summary>
-  </entry>
-  <entry>
-    <title>Launching Munder Difflin v0.2.8: Shareable Hires</title>
-    <link href="https://munderdiffl.in/blog/launching-munder-difflin-v0-2-8/" />
-    <id>https://munderdiffl.in/blog/launching-munder-difflin-v0-2-8/</id>
-    <published>2026-06-15T00:00:00.000Z</published>
-    <updated>2026-06-15T00:00:00.000Z</updated><category term="Story" />
-    <summary>Munder Difflin v0.2.8 ships Shareable Hires: a one-click, portable agent role manifest + The Hiring Fair gallery. Click a hire link, review every field, then spawn it yourself.</summary>
-  </entry>
-  <entry>
-    <title>Shareable Agent Roles: A Portable Format for Hiring AI Coworkers</title>
-    <link href="https://munderdiffl.in/blog/shareable-agent-roles/" />
-    <id>https://munderdiffl.in/blog/shareable-agent-roles/</id>
-    <published>2026-06-15T00:00:00.000Z</published>
-    <updated>2026-06-15T00:00:00.000Z</updated><category term="Concepts" />
-    <summary>Why agent roles should be portable: what a hire manifest encodes, how one-click hiring stays safe, and how The Hiring Fair turns tacit setup into a shareable artifact.</summary>
   </entry>
 </feed>
