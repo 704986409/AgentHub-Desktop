@@ -20,7 +20,7 @@ faq:
     a: "No. The webhook runs on your own machine. A best-effort local tunnel gives Slack a public URL to reach that local port, so there's nothing to deploy or keep online — and if the tunnel can't start, your local handler still runs."
 ---
 
-**On Munder Difflin 0.5.2 or later?** Slack now connects without a public URL, and the fields have moved. Follow [How to Connect Slack to Munder Difflin 0.5.2](/blog/connect-slack-to-munder-difflin/) for the current setup.
+<div class="callout note"><span class="ic">0.5.2 update</span><p>On Munder Difflin 0.5.2 or later, Slack connects without a public URL, and the fields have moved. Follow <a href="/blog/connect-slack-to-munder-difflin/">How to Connect Slack to Munder Difflin 0.5.2</a> for the current setup.</p></div>
 
 <div class="callout tldr"><span class="ic">TL;DR</span><p>Munder Difflin v0.1.7 can <strong>trigger your
 agent hive from Slack</strong>: a tiny local webhook listens to a channel, <strong>verifies every
