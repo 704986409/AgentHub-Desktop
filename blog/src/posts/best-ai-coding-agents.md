@@ -87,6 +87,8 @@ needs human review.
 a Copilot CLI with specialized sub-agents (Explore/Task/Code Review/Plan); Copilot Workspace keeps a
 human-approves-each-step philosophy. Best if your team already lives in GitHub.
 
+Licences differ across this list, and Claude Code's surprises people: a public GitHub repo, but not open source. Details in [is Claude Code open source](/blog/is-claude-code-open-source/).
+
 ## Where a local multi-agent hive fits
 
 All five tools above are essentially *one agent* helping you (or one autonomous agent on a task). A

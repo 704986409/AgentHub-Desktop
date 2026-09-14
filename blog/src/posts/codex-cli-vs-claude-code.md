@@ -60,6 +60,8 @@ wherever you open it ([code.claude.com/docs/en/overview](https://code.claude.com
 running lint before a commit, so a rule you write once holds for every session instead of living in a README nobody
 rereads. If you already pay for Claude, that is a lot of control for no extra setup.
 
+Weighing Google's agent as well? Read [Claude Code vs Antigravity](/blog/claude-code-vs-antigravity/).
+
 ## Can you run Codex CLI and Claude Code together?
 
 Yes, and running both inside one harness is often more useful than picking a single winner. Munder Difflin wraps CLIs like `claude` and `codex` as real processes in their own terminals and runs them side by side on the same office floor, so a Codex agent and a Claude Code agent can each work on their own task at the same time. Munder Difflin 0.5.0 (2026-09-08) added GPT-6 Astra to Codex's model picker, and that slug needs Codex 0.153.1 or newer to be accepted when the agent spawns; the Codex CLI checked for this piece, `codex-cli 0.153.4`, clears that bar.

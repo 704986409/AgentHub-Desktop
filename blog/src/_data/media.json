@@ -550,6 +550,56 @@
     },
     "youtube": []
   },
+  "claude-code-vs-antigravity": {
+    "title": "Claude Code vs Antigravity: Which One Fits Your Work?",
+    "category": "comparisons",
+    "hero": {
+      "file": "assets/media/claude-code-vs-antigravity/hero.png",
+      "alt": "Illustration: Claude Code vs Antigravity: Which One Fits Your Work?",
+      "prompt": "Hero image for a blog post titled \"Claude Code vs Antigravity: Which One Fits Your Work?\". The post is about: Claude Code vs Google Antigravity, checked 14 Sep 2026: terminal agent or desktop agent app, Claude inside Antigravity, plans, limits and a verdict.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/claude-code-vs-antigravity/note-1.png",
+        "alt": "Hand-drawn sketch from “Claude Code vs Antigravity: Which One Fits Your Work?”",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/claude-code-vs-antigravity/note-2.png",
+        "alt": "Hand-drawn sketch from “Claude Code vs Antigravity: Which One Fits Your Work?”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "claude-code-vs-cursor": {
+    "title": "Claude Code vs Cursor: Which Is Better in 2026?",
+    "category": "comparisons",
+    "hero": {
+      "file": "assets/media/claude-code-vs-cursor/hero.png",
+      "alt": "Hand drawn sketch: a yellow character with a magnifying glass between two windows labelled claude code and cursor",
+      "prompt": "Hero image for a blog post titled \"Claude Code vs Cursor: Which Is Better in 2026?\". The post is about: Claude Code vs Cursor, checked 14 Sep 2026: where each runs, models, plans, the new Claude Code weekly limits, parallel agents and using both.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/claude-code-vs-cursor/note-1.png",
+        "alt": "Hand drawn sketch: two windows side by side with a character inspecting one",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/claude-code-vs-cursor/note-2.png",
+        "alt": "Hand drawn sketch: a character presenting a board on an easel",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
   "claude-squad-alternative": {
     "title": "Looking for a Claude Squad Alternative?",
     "category": "comparisons",
@@ -1400,6 +1450,31 @@
     },
     "youtube": []
   },
+  "how-to-connect-ollama-to-claude-code": {
+    "title": "How to Connect Ollama to Claude Code",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/how-to-connect-ollama-to-claude-code/hero.png",
+      "alt": "Illustration: How to Connect Ollama to Claude Code",
+      "prompt": "Hero image for a blog post titled \"How to Connect Ollama to Claude Code\". The post is about: Point Claude Code at Ollama with ollama launch claude or three environment variables, give the model 64K of context, and know what stops working.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/how-to-connect-ollama-to-claude-code/note-1.png",
+        "alt": "Hand-drawn sketch from “How to Connect Ollama to Claude Code”",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/how-to-connect-ollama-to-claude-code/note-2.png",
+        "alt": "Hand-drawn sketch from “How to Connect Ollama to Claude Code”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
   "how-to-hire-from-the-agent-gallery": {
     "title": "How to Hire From the Agent Gallery",
     "category": "guides",
@@ -1528,6 +1603,31 @@
       "shot-focus": {
         "file": "assets/media/how-to-install-and-use-munder-difflin/shot-focus.png",
         "alt": "Munder Difflin in focus mode, showing a single agent's terminal at full width with the agent list on the left",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "how-to-install-codex-cli": {
+    "title": "How to Install Codex CLI on Mac, Windows and Linux",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/how-to-install-codex-cli/hero.png",
+      "alt": "Hand drawn sketch: a yellow character at a desk with a terminal window, labelled npm, brew or script, and install, sign in, update",
+      "prompt": "Hero image for a blog post titled \"How to Install Codex CLI on Mac, Windows and Linux\". The post is about: Install OpenAI's Codex CLI with the official script, npm or Homebrew, sign in with ChatGPT or an API key, then update it and check your version.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/how-to-install-codex-cli/note-1.png",
+        "alt": "Hand drawn sketch: a character at a desk typing into a terminal",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/how-to-install-codex-cli/note-2.png",
+        "alt": "Hand drawn sketch: a character carrying a letter towards a box",
         "prompt": "",
         "status": "ready"
       }
@@ -1678,6 +1778,56 @@
       "note-2": {
         "file": "assets/media/human-in-the-loop-approving-ai-agents/note-2.png",
         "alt": "Hand-drawn sketch from “Approving AI Agents: Human-in-the-Loop Without a Queue”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "is-claude-code-max-worth-it": {
+    "title": "Is It Worth Paying for Claude Code Max?",
+    "category": "concepts",
+    "hero": {
+      "file": "assets/media/is-claude-code-max-worth-it/hero.png",
+      "alt": "Illustration: Is It Worth Paying for Claude Code Max?",
+      "prompt": "Hero image for a blog post titled \"Is It Worth Paying for Claude Code Max?\". The post is about: Who should pay for Claude Max 5x or 20x, who should stay on Pro or an API key, and the break even math to run on your own Claude Code usage.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/is-claude-code-max-worth-it/note-1.png",
+        "alt": "Hand-drawn sketch from “Is It Worth Paying for Claude Code Max?”",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/is-claude-code-max-worth-it/note-2.png",
+        "alt": "Hand-drawn sketch from “Is It Worth Paying for Claude Code Max?”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "is-claude-code-open-source": {
+    "title": "Is Claude Code Open Source?",
+    "category": "concepts",
+    "hero": {
+      "file": "assets/media/is-claude-code-open-source/hero.png",
+      "alt": "Illustration: Is Claude Code Open Source?",
+      "prompt": "Hero image for a blog post titled \"Is Claude Code Open Source?\". The post is about: No. Claude Code is proprietary under Anthropic's terms. What its GitHub repo holds, what the 2026 leak changed, and which open tools sit around it.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/is-claude-code-open-source/note-1.png",
+        "alt": "Hand-drawn sketch from “Is Claude Code Open Source?”",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/is-claude-code-open-source/note-2.png",
+        "alt": "Hand-drawn sketch from “Is Claude Code Open Source?”",
         "prompt": "",
         "status": "ready"
       }
@@ -3421,6 +3571,31 @@
     },
     "youtube": []
   },
+  "what-is-vibe-coding": {
+    "title": "What Is Vibe Coding? Meaning, Risks and Safer Habits",
+    "category": "concepts",
+    "hero": {
+      "file": "assets/media/what-is-vibe-coding/hero.png",
+      "alt": "Hand drawn sketch: two yellow characters talking, one saying just vibes, captioned then someone reads the diff",
+      "prompt": "Hero image for a blog post titled \"What Is Vibe Coding? Meaning, Risks and Safer Habits\". The post is about: Vibe coding means building software from AI prompts without reading the code. Where the term came from, when it is fine, where it bites, and what to check.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/what-is-vibe-coding/note-1.png",
+        "alt": "Hand drawn sketch: two characters exchanging speech bubbles",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/what-is-vibe-coding/note-2.png",
+        "alt": "Hand drawn sketch: letters arriving in an inbox",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
   "what-reddit-told-us-about-munder-difflin": {
     "title": "What Reddit Told Us About Munder Difflin",
     "category": "story",
@@ -3540,6 +3715,31 @@
       "note-2": {
         "file": "assets/media/why-cli-agents-are-powerful/note-2.png",
         "alt": "Hand-drawn sketch from “Why CLI Agents Are So Powerful — and How Munder Difflin Spends Fewer Tokens Doing the Same Work”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "why-does-claude-code-keep-asking-for-permission": {
+    "title": "Why Does Claude Code Keep Asking for Permission?",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/why-does-claude-code-keep-asking-for-permission/hero.png",
+      "alt": "Hand drawn sketch: a yellow character behind a shield that blocks lightning bolts, labelled allow this command and allow rules",
+      "prompt": "Hero image for a blog post titled \"Why Does Claude Code Keep Asking for Permission?\". The post is about: Claude Code asks because Manual mode gates edits, shell commands and web requests. The fixes, safest first: modes, allow rules, sandboxing, then bypass.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/why-does-claude-code-keep-asking-for-permission/note-1.png",
+        "alt": "Hand drawn sketch: a shield with a check mark stopping a lightning bolt",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/why-does-claude-code-keep-asking-for-permission/note-2.png",
+        "alt": "Hand drawn sketch: a character raising its arms under a ringing bell",
         "prompt": "",
         "status": "ready"
       }
@@ -3795,106 +3995,6 @@
         "status": "placeholder"
       }
     ]
-  },
-  "how-to-install-codex-cli": {
-    "title": "How to Install Codex CLI on Mac, Windows and Linux",
-    "category": "guides",
-    "hero": {
-      "file": "assets/media/how-to-install-codex-cli/hero.png",
-      "alt": "Hand drawn sketch: a yellow character at a desk with a terminal window, labelled npm, brew or script, and install, sign in, update",
-      "prompt": "Hero image for a blog post titled \"How to Install Codex CLI on Mac, Windows and Linux\". The post is about: Install OpenAI's Codex CLI with the official script, npm or Homebrew, sign in with ChatGPT or an API key, then update it and check your version.",
-      "status": "ready"
-    },
-    "inline": {
-      "note-1": {
-        "file": "assets/media/how-to-install-codex-cli/note-1.png",
-        "alt": "Hand drawn sketch: a character at a desk typing into a terminal",
-        "prompt": "",
-        "status": "ready"
-      },
-      "note-2": {
-        "file": "assets/media/how-to-install-codex-cli/note-2.png",
-        "alt": "Hand drawn sketch: a character carrying a letter towards a box",
-        "prompt": "",
-        "status": "ready"
-      }
-    },
-    "youtube": []
-  },
-  "claude-code-vs-cursor": {
-    "title": "Claude Code vs Cursor: Which Is Better in 2026?",
-    "category": "comparisons",
-    "hero": {
-      "file": "assets/media/claude-code-vs-cursor/hero.png",
-      "alt": "Hand drawn sketch: a yellow character with a magnifying glass between two windows labelled claude code and cursor",
-      "prompt": "Hero image for a blog post titled \"Claude Code vs Cursor: Which Is Better in 2026?\". The post is about: Claude Code vs Cursor, checked 14 Sep 2026: where each runs, models, plans, the new Claude Code weekly limits, parallel agents and using both.",
-      "status": "ready"
-    },
-    "inline": {
-      "note-1": {
-        "file": "assets/media/claude-code-vs-cursor/note-1.png",
-        "alt": "Hand drawn sketch: two windows side by side with a character inspecting one",
-        "prompt": "",
-        "status": "ready"
-      },
-      "note-2": {
-        "file": "assets/media/claude-code-vs-cursor/note-2.png",
-        "alt": "Hand drawn sketch: a character presenting a board on an easel",
-        "prompt": "",
-        "status": "ready"
-      }
-    },
-    "youtube": []
-  },
-  "what-is-vibe-coding": {
-    "title": "What Is Vibe Coding? Meaning, Risks and Safer Habits",
-    "category": "concepts",
-    "hero": {
-      "file": "assets/media/what-is-vibe-coding/hero.png",
-      "alt": "Hand drawn sketch: two yellow characters talking, one saying just vibes, captioned then someone reads the diff",
-      "prompt": "Hero image for a blog post titled \"What Is Vibe Coding? Meaning, Risks and Safer Habits\". The post is about: Vibe coding means building software from AI prompts without reading the code. Where the term came from, when it is fine, where it bites, and what to check.",
-      "status": "ready"
-    },
-    "inline": {
-      "note-1": {
-        "file": "assets/media/what-is-vibe-coding/note-1.png",
-        "alt": "Hand drawn sketch: two characters exchanging speech bubbles",
-        "prompt": "",
-        "status": "ready"
-      },
-      "note-2": {
-        "file": "assets/media/what-is-vibe-coding/note-2.png",
-        "alt": "Hand drawn sketch: letters arriving in an inbox",
-        "prompt": "",
-        "status": "ready"
-      }
-    },
-    "youtube": []
-  },
-  "why-does-claude-code-keep-asking-for-permission": {
-    "title": "Why Does Claude Code Keep Asking for Permission?",
-    "category": "guides",
-    "hero": {
-      "file": "assets/media/why-does-claude-code-keep-asking-for-permission/hero.png",
-      "alt": "Hand drawn sketch: a yellow character behind a shield that blocks lightning bolts, labelled allow this command and allow rules",
-      "prompt": "Hero image for a blog post titled \"Why Does Claude Code Keep Asking for Permission?\". The post is about: Claude Code asks because Manual mode gates edits, shell commands and web requests. The fixes, safest first: modes, allow rules, sandboxing, then bypass.",
-      "status": "ready"
-    },
-    "inline": {
-      "note-1": {
-        "file": "assets/media/why-does-claude-code-keep-asking-for-permission/note-1.png",
-        "alt": "Hand drawn sketch: a shield with a check mark stopping a lightning bolt",
-        "prompt": "",
-        "status": "ready"
-      },
-      "note-2": {
-        "file": "assets/media/why-does-claude-code-keep-asking-for-permission/note-2.png",
-        "alt": "Hand drawn sketch: a character raising its arms under a ringing bell",
-        "prompt": "",
-        "status": "ready"
-      }
-    },
-    "youtube": []
   },
   "connect-slack-to-munder-difflin": {
     "title": "How to Connect Slack to Munder Difflin 0.5.2",
