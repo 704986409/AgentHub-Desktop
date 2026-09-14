@@ -67,7 +67,7 @@ shipping bigger work. The "one tool wins everything" framing is over.
 **Cursor** — a dedicated AI-first IDE that leads on in-editor agent ergonomics; reference pricing runs
 [~$20 (Pro) to $200 (Ultra)/mo](https://www.developersdigest.tech/blog/ai-coding-tools-pricing-2026)
 with partial bring-your-own-model. If you want the smoothest in-editor experience and don't mind a
-dedicated app, it's the benchmark.
+dedicated app, it's the benchmark. Our [Claude Code vs Cursor](/blog/claude-code-vs-cursor/) comparison goes deeper on that choice.
 
 **Cline** — a free, open VS Code extension; the standout for **local / bring-your-own-key** (run on
 your API keys or free local models via Ollama), and per 2026 roundups
