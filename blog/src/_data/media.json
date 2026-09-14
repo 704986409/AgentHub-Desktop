@@ -3822,30 +3822,168 @@
     "youtube": []
   },
   "your-first-hour-with-munder-difflin": {
-    "title": "Your First Hour With Munder Difflin",
+    "title": "Your First Hour With Munder Difflin: Onboarding to a Pro Office",
     "category": "guides",
     "hero": {
       "file": "assets/media/your-first-hour-with-munder-difflin/hero.png",
-      "alt": "Illustration: Your First Hour With Munder Difflin",
-      "prompt": "Hero image for a blog post titled \"Your First Hour With Munder Difflin\". The post is about: A minute-by-minute walkthrough of your first hour with Munder Difflin: install, the onboarding wizard, your first brief to Michael, watching the floor, approving your first escalation, and leaving a schedule running.",
+      "alt": "Michael, the orchestrator, in the Pro app after dispatching four tasks to his agents",
+      "prompt": "",
       "status": "ready"
     },
     "inline": {
-      "floor-view": {
-        "file": "assets/media/your-first-hour-with-munder-difflin/floor-view.png",
-        "alt": "The office floor: suited agents at desks, one carrying a sticky note to the kanban wall",
-        "prompt": "Inline figure: the office floor as a system, mid-task. Several suited Xiaohei agents at simple hand-drawn desks with terminals; one Xiaohei carries a sticky note from his desk toward a kanban wall with three columns. Annotate the columns 'todo', 'doing', 'done' in blue, and the walking agent 'message in transit' in orange.",
-        "status": "ready"
-      },
-      "note-1": {
-        "file": "assets/media/your-first-hour-with-munder-difflin/note-1.png",
-        "alt": "Hand-drawn sketch from “Your First Hour With Munder Difflin”",
+      "a1-landing": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/a1-landing.png",
+        "alt": "The top of munderdiffl.in with the Download free button",
         "prompt": "",
         "status": "ready"
       },
-      "note-2": {
-        "file": "assets/media/your-first-hour-with-munder-difflin/note-2.png",
-        "alt": "Hand-drawn sketch from “Your First Hour With Munder Difflin”",
+      "a3-download": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/a3-download.png",
+        "alt": "The Munder Difflin 0.5.2 download card with macOS, Windows and Linux builds",
+        "prompt": "",
+        "status": "ready"
+      },
+      "b1-terminal": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/b1-terminal.png",
+        "alt": "A terminal installing Claude Code, Codex and OpenCode with npm, then printing each version",
+        "prompt": "",
+        "status": "ready"
+      },
+      "b2-prerequisites": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/b2-prerequisites.png",
+        "alt": "Settings, Prerequisites in Munder Difflin listing agent engines, with Claude Code, Codex and OpenCode marked Found",
+        "prompt": "",
+        "status": "ready"
+      },
+      "c1-entry": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/c1-entry.png",
+        "alt": "The first onboarding step, How are you using Munder Difflin, with On my own selected",
+        "prompt": "",
+        "status": "ready"
+      },
+      "c2-signin": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/c2-signin.png",
+        "alt": "The Sign in to continue step with a box to paste the code from the browser",
+        "prompt": "",
+        "status": "ready"
+      },
+      "c4-orchestrator": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/c4-orchestrator.png",
+        "alt": "The Meet your orchestrator step: Michael on Claude Code, marked Installed, with Opus 4.8 1M",
+        "prompt": "",
+        "status": "ready"
+      },
+      "c5-engines": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/c5-engines.png",
+        "alt": "The orchestrator engine list open, from Claude Code and Codex down to OpenCode, Pi, Copilot and Cursor",
+        "prompt": "",
+        "status": "ready"
+      },
+      "c7-paywall": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/c7-paywall.png",
+        "alt": "The Go PRO on this machine screen listing what Pro adds, with Continue with the free version, I have a licence key and Get PRO",
+        "prompt": "",
+        "status": "ready"
+      },
+      "c8-license": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/c8-license.png",
+        "alt": "The Enter your license key screen with an empty key field and an Activate button",
+        "prompt": "",
+        "status": "ready"
+      },
+      "d2-agents": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/d2-agents.png",
+        "alt": "The Pro Agents screen with Michael's budget and breaker cards above Jim, Dwight, Angela on Codex and Oscar on OpenCode",
+        "prompt": "",
+        "status": "ready"
+      },
+      "d3-add-agent": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/d3-add-agent.png",
+        "alt": "Add an agent: the Provider list, Model set to Sonnet 5, the exact command, and Token cap chips with 800k chosen",
+        "prompt": "",
+        "status": "ready"
+      },
+      "d4-agent": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/d4-agent.png",
+        "alt": "Jim's agent room: a live Claude Code terminal reviewing a change, with an 800k token cap in force on the right",
+        "prompt": "",
+        "status": "ready"
+      },
+      "e1-pr-sweep": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/e1-pr-sweep.png",
+        "alt": "A scheduled automation named PR review sweep, every 30 minutes, sent to Jim",
+        "prompt": "",
+        "status": "ready"
+      },
+      "h3-slack": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/h3-slack.png",
+        "alt": "The Slack card in Settings, Connections with the bot token field, required scopes and the three ways Slack reaches the office",
+        "prompt": "",
+        "status": "ready"
+      },
+      "e2-morning-brief": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/e2-morning-brief.png",
+        "alt": "A weekly automation named Morning brief, Monday to Friday at 08:30, asking a Claude Code agent to use the Gmail and Google Calendar connectors",
+        "prompt": "",
+        "status": "ready"
+      },
+      "e7-connectors": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/e7-connectors.png",
+        "alt": "The /mcp list in a Claude Code agent's terminal showing claude.ai Gmail and Google Calendar connected",
+        "prompt": "",
+        "status": "ready"
+      },
+      "e4-automations": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/e4-automations.png",
+        "alt": "The Automations list with PR review sweep, Morning brief, Blog writer and the default automations",
+        "prompt": "",
+        "status": "ready"
+      },
+      "e5-webhook": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/e5-webhook.png",
+        "alt": "A webhook endpoint sheet: name, endpoint, secret, strict gate, standing prompt, security warning switch and payload schema",
+        "prompt": "",
+        "status": "ready"
+      },
+      "f1-tasks": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/f1-tasks.png",
+        "alt": "The Pro Tasks board with cards in To do, Doing, Blocked and Done",
+        "prompt": "",
+        "status": "ready"
+      },
+      "f2-inbox": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/f2-inbox.png",
+        "alt": "The Pro Inbox with For you, Your team, Everyone and Outside, showing Dwight's done message",
+        "prompt": "",
+        "status": "ready"
+      },
+      "f4-memory": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/f4-memory.png",
+        "alt": "Memory search results for test, grouped as Tickets, Agents and Memories, across everyone's memory",
+        "prompt": "",
+        "status": "ready"
+      },
+      "f5-capabilities": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/f5-capabilities.png",
+        "alt": "The Capabilities marketplace, a curated catalog with Skills, MCP, Engines and Plugins filters",
+        "prompt": "",
+        "status": "ready"
+      },
+      "f8-voice": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/f8-voice.png",
+        "alt": "Settings, Voice: Free Flow dictation with a Groq API key field, and Realtime Michael with an OpenAI API key field",
+        "prompt": "",
+        "status": "ready"
+      },
+      "g1-stapler": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/g1-stapler.png",
+        "alt": "The Stapler screen with the stapler on screen and its face, shape, expression, size and colour settings",
+        "prompt": "",
+        "status": "ready"
+      },
+      "g3-ring": {
+        "file": "assets/media/your-first-hour-with-munder-difflin/g3-ring.png",
+        "alt": "The floating Stapler with its action ring open",
         "prompt": "",
         "status": "ready"
       }
@@ -3857,5 +3995,42 @@
         "status": "placeholder"
       }
     ]
+  },
+  "connect-slack-to-munder-difflin": {
+    "title": "How to Connect Slack to Munder Difflin 0.5.2",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/connect-slack-to-munder-difflin/hero.png",
+      "alt": "The Slack card in Munder Difflin 0.5.2 settings, with the bot token field, required scopes and Test connection",
+      "prompt": "",
+      "status": "ready"
+    },
+    "inline": {
+      "modes": {
+        "file": "assets/media/connect-slack-to-munder-difflin/modes.png",
+        "alt": "How Slack reaches the office: Check for messages, Stay connected and Let Slack call the office, with Check every and Channel ID",
+        "prompt": "",
+        "status": "ready"
+      },
+      "steps": {
+        "file": "assets/media/connect-slack-to-munder-difflin/steps.png",
+        "alt": "The in app connect steps for Check for messages",
+        "prompt": "",
+        "status": "ready"
+      },
+      "who": {
+        "file": "assets/media/connect-slack-to-munder-difflin/who.png",
+        "alt": "The Who answers inbound messages list with Michael recommended",
+        "prompt": "",
+        "status": "ready"
+      },
+      "stay": {
+        "file": "assets/media/connect-slack-to-munder-difflin/stay.png",
+        "alt": "The Slack card set to Stay connected, with Bot token and App token fields and Catch up every",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
   }
 }

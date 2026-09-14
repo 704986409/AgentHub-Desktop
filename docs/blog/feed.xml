@@ -40,6 +40,14 @@
     <summary>There is no Codex Max plan. What ChatGPT Pro 5x and 20x give you in Codex, how the weekly limit works, and how to stretch it.</summary>
   </entry>
   <entry>
+    <title>How to Connect Slack to Munder Difflin 0.5.2</title>
+    <link href="https://munderdiffl.in/blog/connect-slack-to-munder-difflin/" />
+    <id>https://munderdiffl.in/blog/connect-slack-to-munder-difflin/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
+    <summary>Connect Slack to Munder Difflin 0.5.2: create the Slack app, add the bot scopes, pick one of three connection modes, and get answers in the thread.</summary>
+  </entry>
+  <entry>
     <title>Grok Bot Alternatives: Six Picks, Grouped by What You Want</title>
     <link href="https://munderdiffl.in/blog/grok-bot-alternatives/" />
     <id>https://munderdiffl.in/blog/grok-bot-alternatives/</id>
@@ -416,12 +424,12 @@
     <summary>Harness engineering is the discipline of building everything around the model — PTY plumbing, lifecycle hooks, mailboxes, memory, budgets, human gates, observability — because that&#39;s where agent reliability actually comes from. A definition, and four case studies from inside Munder Difflin.</summary>
   </entry>
   <entry>
-    <title>Your First Hour With Munder Difflin</title>
+    <title>Your First Hour With Munder Difflin: Onboarding to a Pro Office</title>
     <link href="https://munderdiffl.in/blog/your-first-hour-with-munder-difflin/" />
     <id>https://munderdiffl.in/blog/your-first-hour-with-munder-difflin/</id>
     <published>2026-07-03T00:00:00.000Z</published>
-    <updated>2026-09-10T00:00:00.000Z</updated><category term="Guides" />
-    <summary>A minute by minute walkthrough of your first hour with Munder Difflin 0.5.2: install, setup, your first job for Michael, watching the floor, answering an ASK ME card, reading a diff, and leaving a schedule running.</summary>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
+    <summary>Munder Difflin 0.5.2 from download to a working Pro office: install Claude Code, Codex or OpenCode, sign in, go Pro, then automate reviews, Slack and email.</summary>
   </entry>
   <entry>
     <title>Launching Munder Difflin v0.3.2: Talk to Michael, a Realtime Voice Orchestrator</title>
@@ -478,13 +486,5 @@
     <published>2026-06-15T00:00:00.000Z</published>
     <updated>2026-06-15T00:00:00.000Z</updated><category term="Concepts" />
     <summary>Why agent roles should be portable: what a hire manifest encodes, how one-click hiring stays safe, and how The Hiring Fair turns tacit setup into a shareable artifact.</summary>
-  </entry>
-  <entry>
-    <title>Deploy a Blog Writer Agent: The One That Wrote This Post</title>
-    <link href="https://munderdiffl.in/blog/deploy-a-blog-writer-agent/" />
-    <id>https://munderdiffl.in/blog/deploy-a-blog-writer-agent/</id>
-    <published>2026-06-10T00:00:00.000Z</published>
-    <updated>2026-09-10T00:00:00.000Z</updated><category term="Use Cases" />
-    <summary>How the Munder Difflin blog is written by agents in our own office: a brief, a house style, a draft in its own worktree, drawings made in code, a pull request, and one human merge. The pipeline, and how to build your own.</summary>
   </entry>
 </feed>
