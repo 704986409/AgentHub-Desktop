@@ -6,8 +6,6 @@ updated: 2026-09-10
 category: concepts
 categoryLabel: Concepts
 type: Non-technical
-pinned: true
-pinOrder: 6
 primaryKeyword: "claude code multi-agent"
 secondaryKeywords: ["multi-agent harness", "what is an agent harness", "multi-agent ai framework", "ai agent harness", "claude code agent teams vs harness"]
 tags: ["Concepts", "Multi-Agent", "Claude Code"]

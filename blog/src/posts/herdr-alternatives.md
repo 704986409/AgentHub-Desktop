@@ -5,6 +5,8 @@ date: 2026-09-14
 category: comparisons
 categoryLabel: Comparisons
 type: Technical
+pinned: true
+pinOrder: 5
 primaryKeyword: "herdr alternatives"
 secondaryKeywords: ["herdr tmux alternative", "herdr alternatives for windows", "herdr vs tmux", "herdr vs zellij", "is herdr open source"]
 tags: ["Comparisons", "Multi-Agent", "Claude Code", "Tools", "Open Source"]

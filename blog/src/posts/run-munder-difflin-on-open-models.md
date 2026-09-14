@@ -6,8 +6,6 @@ updated: 2026-09-10
 category: guides
 categoryLabel: Guides
 type: Technical
-pinned: true
-pinOrder: 3
 primaryKeyword: "run ai agents on open source models"
 secondaryKeywords: ["local llm coding agent", "ollama coding agent", "openrouter coding agent", "gpt-oss", "byok open models", "opencode crush pi", "pi models.json ollama"]
 tags: ["Guides", "Local-First", "Open Source", "CLI Agents", "Tutorial"]

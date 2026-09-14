@@ -6,8 +6,6 @@ updated: 2026-09-10
 category: comparisons
 categoryLabel: Comparisons
 type: Non-technical
-pinned: true
-pinOrder: 5
 primaryKeyword: "best claude code multi-agent tools"
 secondaryKeywords: ["claude code multi-agent tool", "best tools to run multiple claude code agents", "claude code agent teams", "crystal nimbalyst", "emdash coding agents", "conductor claude code"]
 tags: ["Comparisons", "Multi-Agent", "Claude Code", "Tools"]
