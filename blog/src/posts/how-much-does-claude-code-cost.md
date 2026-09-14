@@ -33,7 +33,7 @@ No. Anthropic's free Claude plan covers chat, web search, memory, file creation,
 
 ## How much does Claude Code cost with a Claude subscription?
 
-Claude Pro is $20 a month billed monthly, or $17 a month on the annual plan billed up front, and Claude Code comes included at no extra charge (Anthropic, claude.com/pricing, checked 10 Sep 2026). Claude Max sits above it at $100 a month for a five times usage tier and $200 a month for a twenty times tier, with both figures set against Pro's own usage, and both plans meter Claude Code and Claude chat together rather than as two separate allowances ([support.claude.com](https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan), checked 10 Sep 2026).
+Claude Pro is $20 a month billed monthly, or $17 a month on the annual plan billed up front, and Claude Code comes included at no extra charge (Anthropic, claude.com/pricing, checked 10 Sep 2026). Claude Max sits above it at $100 a month for a five times usage tier and $200 a month for a twenty times tier, with both figures set against Pro's own usage, and both plans meter Claude Code and Claude chat together rather than as two separate allowances ([support.claude.com](https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan), checked 10 Sep 2026). Already on Max? Our guide on [how to get the most out of your Claude Code Max plan](/blog/claude-code-max-plan-tips/) covers stretching that allowance.
 
 {% img "note-1" %}
 
