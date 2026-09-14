@@ -30,6 +30,7 @@ const SPEC = {
   "how-much-does-claude-code-cost": { a: "ledger", blue: "pro · max · api", orange: "what the bill really says" },
   "how-to-use-claude-code-plan-mode": { a: "guard", amber: "risky edits", blue: "permission mode: plan", orange: "read first, edit after yes" },
   "what-is-an-mcp-server": { a: "routing", amber: "requests", blue: "mcp", orange: "one plug, many tools" },
+  "omniagent-alternatives": { a: "fleet", amber: "shared sessions", blue: "claude code, codex, cursor", orange: "one harness, many agents" },
   "compressing-agent-memory": { a: "memory", blue: "compress, keep the original", orange: "smaller memory, no loss" },
   "conductor-claude-code-alternative": { a: "versus", blue: "conductor", blue2: "munder difflin", orange: "a conductor alternative" },
   "context-engineering-for-ai-agents": { a: "ledger", blue: "the context window is a budget", orange: "spend it deliberately" },

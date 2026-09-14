@@ -425,6 +425,31 @@
     },
     "youtube": []
   },
+  "claude-code-max-plan-tips": {
+    "title": "How to Get the Most Out of Your Claude Code Max Plan",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/claude-code-max-plan-tips/hero.png",
+      "alt": "A yellow cartoon character at a desk with an hourglass, stacked terminal windows, a wall calendar with ticks and a nearly full gauge",
+      "prompt": "Generated with Antigravity (gemini-3.1-flash-image) by jim-mu106131, 14 Sep 2026, house style: ink line art, yellow bean, no red, no text.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/claude-code-max-plan-tips/note-1.png",
+        "alt": "An hourglass beside a seven day strip with some days filled in",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/claude-code-max-plan-tips/note-2.png",
+        "alt": "A yellow cartoon character conducting three terminal windows, each with a small bean typing inside",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
   "claude-code-multi-agent-setup-tutorial": {
     "title": "Set Up a Claude Code Multi-Agent Workflow in 10 Minutes",
     "category": "guides",
@@ -619,6 +644,31 @@
       "note-2": {
         "file": "assets/media/codex-cli-vs-claude-code/note-2.png",
         "alt": "Hand-drawn sketch from “Codex CLI vs Claude Code”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "codex-max-plan-tips": {
+    "title": "How to Make the Most of Your Codex Max Plan",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/codex-max-plan-tips/hero.png",
+      "alt": "A yellow cartoon character turning a big dial all the way up at a workbench while paper planes fly from a laptop to a cloud",
+      "prompt": "Generated with Antigravity (gemini-3.1-flash-image) by jim-mu106131, 14 Sep 2026, house style: ink line art, yellow bean, no red, no text.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/codex-max-plan-tips/note-1.png",
+        "alt": "Parcels travelling between a laptop and a cloud along a dotted path, past a small meter",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/codex-max-plan-tips/note-2.png",
+        "alt": "A yellow cartoon character reaching for a small screwdriver on a pegboard that also holds a wrench and a sledgehammer",
         "prompt": "",
         "status": "ready"
       }
@@ -1069,6 +1119,56 @@
       "note-2": {
         "file": "assets/media/give-claude-code-long-term-memory/note-2.png",
         "alt": "Hand-drawn sketch from “How to Give Claude Code Long-Term Memory”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "grok-bot-alternatives": {
+    "title": "Grok Bot Alternatives: Six Picks, Grouped by What You Want",
+    "category": "comparisons",
+    "hero": {
+      "file": "assets/media/grok-bot-alternatives/hero.png",
+      "alt": "A yellow cartoon character with a clipboard at a signpost, choosing between a cloud kiosk, a phone, a laptop desk and a small home server",
+      "prompt": "Generated with Antigravity (gemini-3.1-flash-image) by jim-mu106131, 14 Sep 2026, house style: ink line art, yellow bean, no red, no text.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/grok-bot-alternatives/note-1.png",
+        "alt": "Papers locked in a drawer inside a faraway cloud, next to the same papers on a desk beside a laptop",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/grok-bot-alternatives/note-2.png",
+        "alt": "A yellow cartoon character hands a ring of keys to a small robot helper while keeping one key back, with an open notebook between them",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "herdr-alternatives": {
+    "title": "Herdr Alternatives: What to Pick and Who Each One Fits",
+    "category": "comparisons",
+    "hero": {
+      "file": "assets/media/herdr-alternatives/hero.png",
+      "alt": "A yellow cartoon character as a shepherd with a crook, herding small terminal windows with legs across a hill",
+      "prompt": "Generated with Antigravity (gemini-3.1-flash-image) by jim-mu106131, 14 Sep 2026, house style: ink line art, yellow bean, no red, no text.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/herdr-alternatives/note-1.png",
+        "alt": "A monitor split into terminal panes next to a small office floor with a bean at each desk",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/herdr-alternatives/note-2.png",
+        "alt": "Four terminal windows showing an hourglass, a spinning gear, a check mark and a sleeping cloud",
         "prompt": "",
         "status": "ready"
       }
@@ -2209,6 +2309,31 @@
       "note-2": {
         "file": "assets/media/observability-for-agent-fleets/note-2.png",
         "alt": "Hand-drawn sketch from “Observability for Agent Fleets: Seeing What Your Agents Do”",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
+  "omniagent-alternatives": {
+    "title": "OmniAgent Alternatives: What to Use Instead of Databricks Omnigent",
+    "category": "comparisons",
+    "hero": {
+      "file": "assets/media/omniagent-alternatives/hero.png",
+      "alt": "Hand drawn sketch: two agents at their desks and a yellow character handing work to a todo, doing, done board, labelled one harness, many agents",
+      "prompt": "Code drawn (media-src spec.js, fleet archetype), founder choice 14 Sep 2026.",
+      "status": "ready"
+    },
+    "inline": {
+      "note-1": {
+        "file": "assets/media/omniagent-alternatives/note-1.png",
+        "alt": "Hand drawn sketch: two agents working at their own desks",
+        "prompt": "",
+        "status": "ready"
+      },
+      "note-2": {
+        "file": "assets/media/omniagent-alternatives/note-2.png",
+        "alt": "Hand drawn sketch: a todo, doing, done board with task cards",
         "prompt": "",
         "status": "ready"
       }

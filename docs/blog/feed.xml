@@ -4,9 +4,49 @@
   <subtitle>Guides, deep dives, and comparisons on running multi-agent Claude Code: orchestration, agent memory, automation, and the tooling landscape.</subtitle>
   <link href="https://munderdiffl.in/blog/feed.xml" rel="self" />
   <link href="https://munderdiffl.in/blog/" />
-  <updated>2026-09-11T00:00:00.000Z</updated>
+  <updated>2026-09-14T00:00:00.000Z</updated>
   <id>https://munderdiffl.in/blog/</id>
   <author><name>Chaitanya Giri</name><uri>https://munderdiffl.in</uri></author>
+  <entry>
+    <title>How to Get the Most Out of Your Claude Code Max Plan</title>
+    <link href="https://munderdiffl.in/blog/claude-code-max-plan-tips/" />
+    <id>https://munderdiffl.in/blog/claude-code-max-plan-tips/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
+    <summary>Stretch a Claude Code Max plan: model choice, context hygiene, prompt caching, subagents and unattended runs, checked against Anthropic&#39;s own pages.</summary>
+  </entry>
+  <entry>
+    <title>How to Make the Most of Your Codex Max Plan</title>
+    <link href="https://munderdiffl.in/blog/codex-max-plan-tips/" />
+    <id>https://munderdiffl.in/blog/codex-max-plan-tips/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Guides" />
+    <summary>There is no Codex Max plan. What ChatGPT Pro 5x and 20x give you in Codex, how the weekly limit works, and how to stretch it.</summary>
+  </entry>
+  <entry>
+    <title>Grok Bot Alternatives: Six Picks, Grouped by What You Want</title>
+    <link href="https://munderdiffl.in/blog/grok-bot-alternatives/" />
+    <id>https://munderdiffl.in/blog/grok-bot-alternatives/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Comparisons" />
+    <summary>Grok Bot runs every Bot on one shared cloud computer. Six alternatives checked on 14 Sep 2026, grouped by hosting, privacy and model choice.</summary>
+  </entry>
+  <entry>
+    <title>Herdr Alternatives: What to Pick and Who Each One Fits</title>
+    <link href="https://munderdiffl.in/blog/herdr-alternatives/" />
+    <id>https://munderdiffl.in/blog/herdr-alternatives/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Comparisons" />
+    <summary>Herdr alternatives checked on 14 Sep 2026: tmux, Munder Difflin, Claude Squad, cmux, Orca, Conductor, Superset and Emdash, and who each fits.</summary>
+  </entry>
+  <entry>
+    <title>OmniAgent Alternatives: What to Use Instead of Databricks Omnigent</title>
+    <link href="https://munderdiffl.in/blog/omniagent-alternatives/" />
+    <id>https://munderdiffl.in/blog/omniagent-alternatives/</id>
+    <published>2026-09-14T00:00:00.000Z</published>
+    <updated>2026-09-14T00:00:00.000Z</updated><category term="Comparisons" />
+    <summary>OmniAgent is really Omnigent, the open source meta harness from Databricks. Alternatives checked on 14 Sep 2026, and who each one fits.</summary>
+  </entry>
   <entry>
     <title>How to Use Claude Code Plan Mode</title>
     <link href="https://munderdiffl.in/blog/how-to-use-claude-code-plan-mode/" />
@@ -446,45 +486,5 @@
     <published>2026-06-07T00:00:00.000Z</published>
     <updated>2026-06-07T00:00:00.000Z</updated><category term="Story" />
     <summary>Munder Difflin v0.2.0 is here: a Command Center overhaul, per-agent token budgets, live OpenTelemetry observability, a circuit breaker, durable SQLite persistence, and a big round of community fixes.</summary>
-  </entry>
-  <entry>
-    <title>One Prompt, Five PR Reviews, and an Hourly Automation — A Dogfooding Story</title>
-    <link href="https://munderdiffl.in/blog/one-prompt-automated-pr-review/" />
-    <id>https://munderdiffl.in/blog/one-prompt-automated-pr-review/</id>
-    <published>2026-06-07T00:00:00.000Z</published>
-    <updated>2026-06-07T00:00:00.000Z</updated><category term="Story" />
-    <summary>How a single prompt to the Munder Difflin god agent reviewed all open PRs and set up a recurring hourly PR reviewer — while the repo was blowing up with 400+ stars.</summary>
-  </entry>
-  <entry>
-    <title>Does the June 2026 Agent SDK Change Affect Munder Difflin?</title>
-    <link href="https://munderdiffl.in/blog/does-the-june-2026-agent-sdk-change-affect-munder-difflin/" />
-    <id>https://munderdiffl.in/blog/does-the-june-2026-agent-sdk-change-affect-munder-difflin/</id>
-    <published>2026-06-06T00:00:00.000Z</published>
-    <updated>2026-06-06T00:00:00.000Z</updated><category term="Guides" />
-    <summary>From June 15, 2026 the Claude Agent SDK gets a separate credit. Munder Difflin drives the native Claude Code CLI, so your hive runs on your plan as before.</summary>
-  </entry>
-  <entry>
-    <title>The Best AI Coding Agents in 2026: A Field Guide</title>
-    <link href="https://munderdiffl.in/blog/best-ai-coding-agents/" />
-    <id>https://munderdiffl.in/blog/best-ai-coding-agents/</id>
-    <published>2026-06-05T00:00:00.000Z</published>
-    <updated>2026-06-05T00:00:00.000Z</updated><category term="Comparisons" />
-    <summary>A fair 2026 field guide to the best AI coding agents — Cursor, Aider, Cline, Devin, Copilot — by category, plus where a local multi-agent hive fits.</summary>
-  </entry>
-  <entry>
-    <title>Cline vs Munder Difflin: In-Editor Agent or Local Hive?</title>
-    <link href="https://munderdiffl.in/blog/cline-vs-munder-difflin/" />
-    <id>https://munderdiffl.in/blog/cline-vs-munder-difflin/</id>
-    <published>2026-06-05T00:00:00.000Z</published>
-    <updated>2026-06-05T00:00:00.000Z</updated><category term="Comparisons" />
-    <summary>A fair comparison of Cline and Munder Difflin — an in-editor BYOK coding agent vs a local multi-agent orchestration hive — and when to pick which.</summary>
-  </entry>
-  <entry>
-    <title>Compressing Agent Memory Without Losing the Original</title>
-    <link href="https://munderdiffl.in/blog/compressing-agent-memory/" />
-    <id>https://munderdiffl.in/blog/compressing-agent-memory/</id>
-    <published>2026-06-05T00:00:00.000Z</published>
-    <updated>2026-06-05T00:00:00.000Z</updated><category term="Internals" />
-    <summary>How and why to compress an agent&#39;s long-term memory: the toolbox, the lossy trap, and keeping a lossless original beside a compact copy.</summary>
   </entry>
 </feed>

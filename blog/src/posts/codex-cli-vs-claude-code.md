@@ -43,7 +43,7 @@ The two overlap heavily in practice: coding standards, architecture notes, a rev
 
 ## Is Codex CLI free to use?
 
-There's a real free tier, but it's capped. OpenAI's Codex pricing page lists a Free plan at $0 a month for exploring Codex "on quick coding tasks," a Go plan at $8 a month, and a Plus plan at $20 a month that adds cloud-based runs and the GPT-5.6 model family ([developers.openai.com/codex/pricing](https://developers.openai.com/codex/pricing), checked 10 Sep 2026). Claude Code has no equivalent free tier of its own: it authenticates against a paid Claude subscription or an Anthropic API key from the first session.
+There's a real free tier, but it's capped. OpenAI's Codex pricing page lists a Free plan at $0 a month for exploring Codex "on quick coding tasks," a Go plan at $8 a month, and a Plus plan at $20 a month that adds cloud-based runs and the GPT-5.6 model family ([developers.openai.com/codex/pricing](https://developers.openai.com/codex/pricing), checked 10 Sep 2026). Claude Code has no equivalent free tier of its own: it authenticates against a paid Claude subscription or an Anthropic API key from the first session. If you already pay for ChatGPT Pro, see [how to make the most of your Codex Max plan](/blog/codex-max-plan-tips/).
 
 ## Where does Codex CLI actually win?
 
