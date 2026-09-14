@@ -25,6 +25,8 @@ To get the most out of Claude Max in Claude Code, spend the plan on work, not on
 
 Prices are in our post on [what Claude Code costs](/blog/how-much-does-claude-code-cost/), so this one sticks to using the plan well. If you already run more than one terminal, read [how to manage multiple Claude Code sessions](/blog/manage-multiple-claude-code-sessions/) too, because every extra session draws from the same allowance.
 
+You can do all of this by hand, or use [Munder Difflin](https://munderdiffl.in/), a free and open source desktop app that runs your Claude Code agents on the login you already have. Give each agent its own model and token cap, schedule long jobs for when you are away, and watch every session from one screen. One tip first: in 0.5.2 the default agent model is Fable 5, which on Max can use at most half your weekly limit, so pick another default under Settings > Agents & Models.
+
 ## How do Claude Max usage limits work in Claude Code?
 
 Two meters run at once: a session limit that resets every five hours, and a weekly limit. The weekly one covers all models and resets at a fixed time assigned to your account ([Anthropic, What is the Max plan](https://support.claude.com/en/articles/11049741-what-is-the-max-plan), checked 14 Sep 2026). Max 5x and Max 20x multiply Pro's usage per session, and chat, Claude Code and the IDE extensions share one pool. Because both meters are shared across models, switching with `/model` does not bring back a spent session or week. The separate Opus and Sonnet family limits are different: switch outside that family and you keep working (Claude Code errors reference). Run `/usage` to see both bars and their reset times.
@@ -69,8 +71,6 @@ Yes, within limits. Since version 2.1.234, an interactive session signed in with
 Background sessions and `/loop` tasks draw on the same subscription, and each scheduled fire resends the full context. Claude Code's agent view docs put it plainly: ten agents in parallel use quota roughly ten times as fast as one.
 
 {% img "note-2" %}
-
-If you run several agents anyway, Munder Difflin, which we build, runs them from one desktop app. Each Claude Code agent is the real CLI in its own terminal on the login you already use, and you can give every agent its own model and token cap and put prompts on a schedule. One warning for Max users: in 0.5.2 the default agent model is Fable 5, so change it under Settings > Agents & Models if your weekly limit matters. It does not raise Anthropic's limits either.
 
 ## Can you share a Max plan or use it in other apps?
 

@@ -2320,22 +2320,22 @@
     "category": "comparisons",
     "hero": {
       "file": "assets/media/omniagent-alternatives/hero.png",
-      "alt": "A yellow cartoon character in a control tower with binoculars, guiding differently shaped robot agents towards one building",
-      "prompt": "Generated with Antigravity (gemini-3.1-flash-image) by jim-mu106131, 14 Sep 2026, house style: ink line art, yellow bean, no red, no text.",
-      "status": "placeholder"
+      "alt": "Hand drawn sketch: two agents at their desks and a yellow character handing work to a todo, doing, done board, labelled one harness, many agents",
+      "prompt": "Code drawn (media-src spec.js, fleet archetype), founder choice 14 Sep 2026.",
+      "status": "ready"
     },
     "inline": {
       "note-1": {
         "file": "assets/media/omniagent-alternatives/note-1.png",
-        "alt": "A power strip with four different plugs, each cable leading to a different small robot",
+        "alt": "Hand drawn sketch: two agents working at their own desks",
         "prompt": "",
-        "status": "placeholder"
+        "status": "ready"
       },
       "note-2": {
         "file": "assets/media/omniagent-alternatives/note-2.png",
-        "alt": "A yellow cartoon character with a clipboard beside a rope gate while a robot waits and a long receipt unrolls on the floor",
+        "alt": "Hand drawn sketch: a todo, doing, done board with task cards",
         "prompt": "",
-        "status": "placeholder"
+        "status": "ready"
       }
     },
     "youtube": []

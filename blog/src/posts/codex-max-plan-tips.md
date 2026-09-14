@@ -25,6 +25,8 @@ OpenAI has no plan called Codex Max. The plan people mean is ChatGPT Pro, which 
 
 Three things muddy the name: Anthropic's Claude Max plan, OpenAI's older GPT-5.1-Codex-Max model, and Codex's **Max** reasoning setting, which gives a model more time on one task ([OpenAI, Models](https://learn.chatgpt.com/docs/models)). None is a Codex plan. Still choosing between tools? Our [Codex CLI vs Claude Code comparison](/blog/codex-cli-vs-claude-code/) covers that. The habits in [managing several Claude Code sessions](/blog/manage-multiple-claude-code-sessions/), like one scope per session, carry straight over to Codex.
 
+You can apply every tip below by hand, or use [Munder Difflin](https://munderdiffl.in/), a free and open source desktop app that runs Codex agents next to Claude Code and other CLIs. Each Codex agent signs in with your own Codex login, and you pick its model per agent, from Luna for routine edits to Astra for the hard bug. Our [mixed engine office guide](/blog/run-a-mixed-engine-office/) shows a layout.
+
 ## Is there a Codex max plan?
 
 No, but ChatGPT Pro is the closest thing, and its bigger tier just got harder to buy. OpenAI split Pro in two on 9 Apr 2026, adding a $100 tier with 5x the Codex usage of Plus and a launch boost to up to 10x that ran through 31 May 2026 ([OpenAI on X](https://x.com/OpenAI/status/2042295688323875316)), so that boost is over.
@@ -83,6 +85,4 @@ Cut what every turn has to carry. Your prompt, files, chat history and tool resu
 
 ## Can I run several Codex agents at once?
 
-Yes, and that is where a Pro allowance goes fastest. Worktrees, cloud chats and subagents all run in parallel from the same pool, and OpenAI's docs say subagent runs use more tokens than a single agent. Go parallel only when tasks touch separate files and a cheaper model suffices.
-
-If you run Codex beside other CLIs, Munder Difflin runs them together in one desktop app. In 0.5.2 each Codex agent signs in with your own Codex login, so they all spend your Pro allowance, and you pick each agent's model: Astra, Sol, Terra or Luna. One honest limit: its per agent token caps read Claude Code's usage data, so they do not meter Codex agents. For those, `/status` and OpenAI's dashboard stay the meter. The [mixed engine office guide](/blog/run-a-mixed-engine-office/) shows a layout, and the [multi-agent cost playbook](/blog/the-multi-agent-cost-playbook/) covers model tiering across a fleet.
+Yes, and that is where a Pro allowance goes fastest. Worktrees, cloud chats and subagents all run in parallel from the same pool, and OpenAI's docs say subagent runs use more tokens than a single agent. Go parallel only when tasks touch separate files and a cheaper model suffices. The [multi-agent cost playbook](/blog/the-multi-agent-cost-playbook/) covers model tiering across a fleet.
