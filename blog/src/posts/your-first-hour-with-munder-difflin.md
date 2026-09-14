@@ -6,8 +6,6 @@ updated: 2026-09-10
 category: guides
 categoryLabel: Guides
 type: Non-technical
-pinned: true
-pinOrder: 1
 primaryKeyword: "munder difflin onboarding"
 secondaryKeywords: ["getting started with munder difflin", "munder difflin tutorial", "first hour with a multi-agent harness", "munder difflin setup", "scheduled agent missions", "munder difflin skills"]
 tags: ["Guides", "Onboarding", "Getting Started", "Multi-Agent", "Local-First"]
