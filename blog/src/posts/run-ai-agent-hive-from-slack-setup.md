@@ -20,6 +20,8 @@ faq:
     a: "The public Request URL comes from a local tunnel that is ephemeral — it rotates every time you stop and start the app. If triggers go quiet, restart Munder Difflin, copy the new tunnel URL, and re-paste it into Slack's Event Subscriptions → Request URL. Slack re-verifies and triggers resume."
 ---
 
+**On Munder Difflin 0.5.2 or later?** Slack now connects without a public URL, and the fields have moved. Follow [How to Connect Slack to Munder Difflin 0.5.2](/blog/connect-slack-to-munder-difflin/) for the current setup.
+
 <div class="callout tldr"><span class="ic">TL;DR</span><p>This is the full, working setup for driving your
 <strong>Munder Difflin</strong> hive from Slack. Create a Slack app, add three bot scopes
 (<code>chat:write</code>, <code>channels:history</code>, <code>groups:history</code>), paste the
