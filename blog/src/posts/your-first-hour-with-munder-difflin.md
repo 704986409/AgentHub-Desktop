@@ -6,6 +6,8 @@ updated: 2026-09-14
 category: guides
 categoryLabel: Guides
 type: Non-technical
+pinned: true
+pinOrder: 2
 primaryKeyword: "munder difflin onboarding"
 secondaryKeywords: ["getting started with munder difflin", "munder difflin tutorial", "munder difflin pro", "munder difflin setup", "scheduled agent automations", "munder difflin stapler"]
 tags: ["Guides", "Onboarding", "Getting Started", "Multi-Agent", "Local-First"]
