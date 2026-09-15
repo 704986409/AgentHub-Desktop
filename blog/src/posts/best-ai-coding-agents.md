@@ -76,7 +76,7 @@ if you want a Cursor-like agent inside VS Code without a subscription. (We compa
 [Cline vs Munder Difflin](/blog/cline-vs-munder-difflin/).)
 
 **Aider** — the open-source, git-native **CLI** agent: free, you pay only model API costs, auto-commits
-as it works. Best for terminal-centric, version-control-disciplined workflows.
+as it works. Best for terminal-centric, version-control-disciplined workflows. Check its pulse first, though: its last release shipped in February 2026, and [Aider vs Claude Code](/blog/aider-vs-claude-code/) has the details.
 
 **Devin** (Cognition) — the most **autonomous** option: give it a task and it plans, codes, tests, and
 opens a PR in its own cloud workspace. [Its price dropped from $500 to ~$20/mo](https://www.mgsoftware.nl/en/vergelijking/devin-vs-github-copilot-workspace)

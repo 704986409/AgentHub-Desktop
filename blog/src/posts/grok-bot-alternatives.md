@@ -6,7 +6,7 @@ category: comparisons
 categoryLabel: Comparisons
 type: Non-technical
 pinned: true
-pinOrder: 4
+pinOrder: 5
 primaryKeyword: "grok bot alternatives"
 secondaryKeywords: ["grok bot alternative", "grok bot vs openclaw", "grok bot vs hermes agent", "grok bot vs claude cowork", "is grok bot free", "does grok bot work on linux"]
 tags: ["Comparisons", "Local-First", "Security", "Open Source", "Memory"]
