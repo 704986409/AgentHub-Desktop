@@ -4033,6 +4033,85 @@
     },
     "youtube": []
   },
+  "build-your-personal-agi-on-your-computer": {
+    "title": "Build Your Personal AGI on Your Computer Using Claude Code and Munder Difflin",
+    "category": "guides",
+    "hero": {
+      "file": "assets/media/build-your-personal-agi-on-your-computer/hero.png",
+      "alt": "The Munder Difflin 0.5.2 Agents screen: Michael the orchestrator with spend, circuit breaker, tasks and one question waiting, above Jim, Dwight, Angela and Oscar",
+      "prompt": "",
+      "status": "ready"
+    },
+    "inline": {
+      "add-agent": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/d3-add-agent.png",
+        "alt": "Add an agent: the Provider list, Model set to Sonnet 5, the exact command, and Token cap choices with 800k selected",
+        "prompt": "",
+        "status": "ready"
+      },
+      "dispatch": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/dispatch.png",
+        "alt": "Michael's terminal after dispatching the acme-notes job: four tasks for Dwight, Angela, Oscar and Jim, and the failing test he found first",
+        "prompt": "",
+        "status": "ready"
+      },
+      "summary": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/summary.png",
+        "alt": "Michael's final report: all four acme-notes tasks done, tasks 2 and 3 moved to Dwight, every review PASS, and two judgment calls he made without asking",
+        "prompt": "",
+        "status": "ready"
+      },
+      "connectors": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/e7-connectors.png",
+        "alt": "The /mcp list in a Claude Code agent's terminal showing claude.ai Gmail and Google Calendar connected",
+        "prompt": "",
+        "status": "ready"
+      },
+      "morning-brief": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/e2-morning-brief.png",
+        "alt": "A weekly automation named Morning brief, weekdays at 08:30, sent to Dwight with a message to summarise unread email and today's meetings",
+        "prompt": "",
+        "status": "ready"
+      },
+      "pr-sweep": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/e1-pr-sweep.png",
+        "alt": "An automation named PR review sweep, every 30 minutes, sent to Jim with a message to review new pull requests",
+        "prompt": "",
+        "status": "ready"
+      },
+      "tasks": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/f1-tasks.png",
+        "alt": "The Tasks board with Publish acme-notes to npm in Blocked, marked asks you",
+        "prompt": "",
+        "status": "ready"
+      },
+      "memory": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/f4-memory.png",
+        "alt": "Memory search results grouped as Tickets, Agents and Memories, with Dwight's notes about the reassigned tasks",
+        "prompt": "",
+        "status": "ready"
+      },
+      "voice": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/f8-voice.png",
+        "alt": "Settings, Voice: Free Flow dictation with a Groq API key field, and Realtime Michael with an OpenAI API key field",
+        "prompt": "",
+        "status": "ready"
+      },
+      "slack-who": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/slack-who.png",
+        "alt": "The Who answers inbound messages list with Michael recommended",
+        "prompt": "",
+        "status": "ready"
+      },
+      "slack-modes": {
+        "file": "assets/media/build-your-personal-agi-on-your-computer/slack-modes.png",
+        "alt": "How Slack reaches the office: Check for messages, Stay connected and Let Slack call the office",
+        "prompt": "",
+        "status": "ready"
+      }
+    },
+    "youtube": []
+  },
   "how-to-install-gemini-cli": {
     "title": "How to Install Gemini CLI, and Who Can Still Use It in 2026",
     "category": "guides",
