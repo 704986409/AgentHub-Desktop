@@ -139,8 +139,8 @@ export class AgentHubTaskSubmission {
       );
 
       // POST proves AgentHub accepted the task. Connection owns snapshot commit ordering.
-      const snapshot = await this.#connection.syncAuthoritativeState(controller.signal);
-      if (snapshot !== null) {
+      const sync = await this.#connection.syncAuthoritativeState(controller.signal);
+      if (sync.disposition === 'committed' || sync.disposition === 'superseded-by-committed') {
         return {
           status: 'created',
           task: createdTask,

@@ -1034,9 +1034,129 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
       assert.equal(connection.getState().snapshot?.tasks[0]?.taskId, 'task-state-new');
 
       holdAResolve?.();
-      const delayedSnapshot = await delayed;
-      assert.equal(delayedSnapshot?.tasks.some((t) => t.taskId === 'task-state-new'), true);
+      const delayedResult = await delayed;
+      assert.ok(delayedResult.disposition === 'committed' || delayedResult.disposition === 'superseded-by-committed');
+      assert.equal(delayedResult.snapshot?.tasks.some((t) => t.taskId === 'task-state-new'), true);
       assert.equal(connection.getState().snapshot?.tasks.some((t) => t.taskId === 'task-state-old'), false);
+      assert.equal(connection.getState().snapshot?.tasks[0]?.taskId, 'task-state-new');
+    } finally {
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
+
+  test('newer pending /state blocks an older successful response from committing', { timeout: 8000 }, async () => {
+    const oldTask = {
+      taskId: 'task-state-old',
+      projectId: 'p-1',
+      title: 'Old',
+      description: null,
+      requiredCapabilities: [],
+      requiredSpecialties: [],
+      acceptanceCriteria: [],
+      complexity: 'SIMPLE',
+      risk: 'LOW',
+      status: 'pending',
+      assignedAgentId: null,
+      assignmentId: null,
+      createdAt: '2026',
+      updatedAt: '2026'
+    };
+    const newTask = { ...oldTask, taskId: 'task-state-new', title: 'New' };
+
+    let armed = false;
+    let stateN = 0;
+    let holdAResolve: (() => void) | null = null;
+    const holdA = new Promise<void>((r) => {
+      holdAResolve = r;
+    });
+    let holdBResolve: (() => void) | null = null;
+    const holdB = new Promise<void>((r) => {
+      holdBResolve = r;
+    });
+    let aStarted!: () => void;
+    const aStart = new Promise<void>((r) => {
+      aStarted = r;
+    });
+    let bStarted!: () => void;
+    const bStart = new Promise<void>((r) => {
+      bStarted = r;
+    });
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h1', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+      if (req.url === '/api/v1/state') {
+        if (!armed) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            requestId: 's0',
+            data: { projects: [], agents: [], tasks: [], assignments: [] }
+          }));
+          return;
+        }
+        stateN++;
+        const n = stateN;
+        const hold = n === 1 ? holdA : holdB;
+        const tasks = n === 1 ? [oldTask] : [newTask];
+        if (n === 1) aStarted();
+        if (n === 2) bStarted();
+        void (async () => {
+          await hold;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            requestId: `s-${n}`,
+            data: { projects: [], agents: [], tasks, assignments: [] }
+          }));
+        })();
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      ws.send(JSON.stringify({ type: 'hello', version: 1, apiVersion: 'v1' }));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      await connection.start();
+      const startWait = Date.now();
+      while (Date.now() - startWait < 2000) {
+        if (connection.getState().connection === 'connected') break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.equal(connection.getState().connection, 'connected');
+      await new Promise((r) => setTimeout(r, 120));
+      assert.equal(connection.getState().snapshot?.tasks.length, 0);
+
+      armed = true;
+      const pendingA = connection.syncAuthoritativeState();
+      await aStart;
+      const pendingB = connection.syncAuthoritativeState();
+      await bStart;
+
+      holdAResolve?.();
+      const resultA = await pendingA;
+      assert.equal(resultA.disposition, 'superseded-uncommitted');
+      assert.equal(connection.getState().snapshot?.tasks.length, 0);
+      assert.equal(connection.getState().snapshot?.tasks.some((t) => t.taskId === 'task-state-old'), false);
+
+      holdBResolve?.();
+      const resultB = await pendingB;
+      assert.equal(resultB.disposition, 'committed');
       assert.equal(connection.getState().snapshot?.tasks[0]?.taskId, 'task-state-new');
     } finally {
       connection.stop();

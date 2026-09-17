@@ -14,6 +14,8 @@ This report documents **AgentHub Desktop V0.8.2A**. V0.8.2 remained the only all
 
 Historical tag `V0.8.2` is not moved or rewritten.
 
+Historical CI addendum (this `main` copy only; tag `V0.8.2A` blob is not rewritten): GitHub Actions run `35273174907` later completed with Typecheck PASS, AgentHub focused tests PASS, and Build PASS. Tag `V0.8.2A` and `main` both pointed at `b70056d4ac6249fbacd6317c39530fa194705848`.
+
 ---
 
 ## 2. Provenance

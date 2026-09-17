@@ -6,6 +6,11 @@ import type { AgentHubDesktopState, AgentHubStateSnapshot } from './AgentHubType
 const BACKOFF_DELAYS_MS = [1000, 2000, 5000, 10000];
 const RESYNC_DEBOUNCE_MS = 50;
 
+export type StateCommitResult =
+  | { readonly disposition: 'committed'; readonly snapshot: AgentHubStateSnapshot }
+  | { readonly disposition: 'superseded-by-committed'; readonly snapshot: AgentHubStateSnapshot }
+  | { readonly disposition: 'superseded-uncommitted'; readonly snapshot: null };
+
 export interface AgentHubConnectionOptions {
   readonly baseUrl?: string;
   readonly helloTimeoutMs?: number;
@@ -119,12 +124,12 @@ export class AgentHubConnection {
   /**
    * Mutation follow-up authoritative /state sync.
    * Connection is the sole production owner of snapshot commits.
-   * Older in-flight /state responses cannot overwrite a newer committed snapshot.
+   * An older /state response cannot commit after a newer request has been issued.
    * Not exposed to Renderer/Preload.
    */
-  public async syncAuthoritativeState(signal?: AbortSignal): Promise<AgentHubStateSnapshot | null> {
+  public async syncAuthoritativeState(signal?: AbortSignal): Promise<StateCommitResult> {
     if (this.#isLifecycleStopped()) {
-      return null;
+      return { disposition: 'superseded-uncommitted', snapshot: null };
     }
 
     const sequence = ++this.#stateRequestSequence;
@@ -133,13 +138,16 @@ export class AgentHubConnection {
       return this.#commitSnapshotIfCurrent(sequence, snapshot);
     } catch (err) {
       if (this.#isLifecycleStopped()) {
-        return null;
+        return { disposition: 'superseded-uncommitted', snapshot: null };
       }
       if (this.#latestCommittedSequence > sequence) {
-        return this.#cache.getState().snapshot;
+        const snapshot = this.#cache.getState().snapshot;
+        if (snapshot) {
+          return { disposition: 'superseded-by-committed', snapshot };
+        }
       }
       this.#markAuthoritativeSyncFailure(err);
-      return null;
+      return { disposition: 'superseded-uncommitted', snapshot: null };
     }
   }
 
@@ -147,16 +155,30 @@ export class AgentHubConnection {
     return !this.#isStarted && this.#generation > 0;
   }
 
-  #commitSnapshotIfCurrent(sequence: number, snapshot: AgentHubStateSnapshot): AgentHubStateSnapshot | null {
+  #commitSnapshotIfCurrent(sequence: number, snapshot: AgentHubStateSnapshot): StateCommitResult {
     if (this.#isLifecycleStopped()) {
-      return null;
+      return { disposition: 'superseded-uncommitted', snapshot: null };
     }
+
+    // Case A: a newer request already committed a safer snapshot.
     if (sequence < this.#latestCommittedSequence) {
-      return this.#cache.getState().snapshot;
+      const current = this.#cache.getState().snapshot;
+      if (current) {
+        return { disposition: 'superseded-by-committed', snapshot: current };
+      }
+      return { disposition: 'superseded-uncommitted', snapshot: null };
     }
+
+    // Case B: a newer request was issued but has not committed.
+    // The older result is invalidated and must not heal cache or status.
+    if (sequence < this.#stateRequestSequence) {
+      return { disposition: 'superseded-uncommitted', snapshot: null };
+    }
+
+    // Case C: this is the current newest issued request.
     this.#cache.updateSnapshot(snapshot);
     this.#latestCommittedSequence = sequence;
-    return snapshot;
+    return { disposition: 'committed', snapshot };
   }
 
   #markAuthoritativeSyncFailure(err: unknown): void {
@@ -364,8 +386,14 @@ export class AgentHubConnection {
 
       if (!this.#isStarted || gen !== this.#generation) return null;
 
+      const commit = this.#commitSnapshotIfCurrent(sequence, snapshot);
+      if (commit.disposition !== 'committed') {
+        return commit.disposition === 'superseded-by-committed'
+          ? commit.snapshot
+          : this.#cache.getState().snapshot;
+      }
+
       this.#cache.setHealth(health);
-      const committed = this.#commitSnapshotIfCurrent(sequence, snapshot);
 
       // connected requires BOTH valid REST snapshot AND valid open WS hello
       if (this.#realtimeClient.isConnected) {
@@ -376,7 +404,7 @@ export class AgentHubConnection {
           message: 'REST snapshot succeeded but realtime connection is disconnected'
         });
       }
-      return committed;
+      return commit.snapshot;
     } catch (err) {
       if (!this.#isStarted || gen !== this.#generation) return null;
 

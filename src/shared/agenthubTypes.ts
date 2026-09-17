@@ -494,6 +494,12 @@ function getUtf8Bytes(str: string): number {
   return new TextEncoder().encode(str).length;
 }
 
+function rejectIfContainsNul(value: string, fieldName: string): void {
+  if (value.includes('\0')) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must not contain NUL`);
+  }
+}
+
 export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
   if (!isRecord(raw)) {
     throw new AgentHubValidationError('MALFORMED_INPUT', 'Task creation input must be an object');
@@ -510,6 +516,7 @@ export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
   if (!('projectId' in raw) || typeof raw.projectId !== 'string' || !raw.projectId.trim()) {
     throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'projectId' must be a non-blank string");
   }
+  rejectIfContainsNul(raw.projectId, 'projectId');
   if (getUtf8Bytes(raw.projectId) > 256) {
     throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'projectId' exceeds maximum length (256 bytes)");
   }
@@ -518,6 +525,7 @@ export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
   if (!('title' in raw) || typeof raw.title !== 'string' || !raw.title.trim()) {
     throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'title' must be a non-blank string");
   }
+  rejectIfContainsNul(raw.title, 'title');
   if (getUtf8Bytes(raw.title) > 16384) {
     throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'title' exceeds maximum length (16 KiB)");
   }
@@ -529,8 +537,11 @@ export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
   if (raw.description !== null && typeof raw.description !== 'string') {
     throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'description' must be a string or null");
   }
-  if (typeof raw.description === 'string' && getUtf8Bytes(raw.description) > 131072) {
-    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'description' exceeds maximum length (128 KiB)");
+  if (typeof raw.description === 'string') {
+    rejectIfContainsNul(raw.description, 'description');
+    if (getUtf8Bytes(raw.description) > 131072) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'description' exceeds maximum length (128 KiB)");
+    }
   }
 
   // requiredCapabilities: array <= 256 items, each nonblank, <= 512 bytes
@@ -544,6 +555,7 @@ export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
     if (typeof item !== 'string' || !item.trim()) {
       throw new AgentHubValidationError('MALFORMED_INPUT', "Elements in 'requiredCapabilities' must be non-blank strings");
     }
+    rejectIfContainsNul(item, 'requiredCapabilities');
     if (getUtf8Bytes(item) > 512) {
       throw new AgentHubValidationError('MALFORMED_INPUT', "Element in 'requiredCapabilities' exceeds maximum length (512 bytes)");
     }
@@ -560,6 +572,7 @@ export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
     if (typeof item !== 'string' || !item.trim()) {
       throw new AgentHubValidationError('MALFORMED_INPUT', "Elements in 'requiredSpecialties' must be non-blank strings");
     }
+    rejectIfContainsNul(item, 'requiredSpecialties');
     if (getUtf8Bytes(item) > 512) {
       throw new AgentHubValidationError('MALFORMED_INPUT', "Element in 'requiredSpecialties' exceeds maximum length (512 bytes)");
     }
@@ -576,6 +589,7 @@ export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
     if (typeof item !== 'string' || !item.trim()) {
       throw new AgentHubValidationError('MALFORMED_INPUT', "Elements in 'acceptanceCriteria' must be non-blank strings");
     }
+    rejectIfContainsNul(item, 'acceptanceCriteria');
     if (getUtf8Bytes(item) > 8192) {
       throw new AgentHubValidationError('MALFORMED_INPUT', "Element in 'acceptanceCriteria' exceeds maximum length (8192 bytes)");
     }

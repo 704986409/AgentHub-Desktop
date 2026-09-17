@@ -144,6 +144,33 @@ describe('AgentHub Runtime Create Task Input Validation', () => {
       (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
     );
   });
+
+  test('NUL bytes are rejected in all bounded CreateTask strings', { timeout: 5000 }, () => {
+    assert.throws(
+      () => snapshotCreateTaskInput({ ...validBase, projectId: 'p-1\0x' }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+    assert.throws(
+      () => snapshotCreateTaskInput({ ...validBase, title: 'Title\0' }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+    assert.throws(
+      () => snapshotCreateTaskInput({ ...validBase, description: 'Desc\0more' }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+    assert.throws(
+      () => snapshotCreateTaskInput({ ...validBase, requiredCapabilities: ['ok', 'cap\0'] }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+    assert.throws(
+      () => snapshotCreateTaskInput({ ...validBase, requiredSpecialties: ['sp\0ec'] }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+    assert.throws(
+      () => snapshotCreateTaskInput({ ...validBase, acceptanceCriteria: ['pass\0'] }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+  });
 });
 
 describe('AgentHubTaskSubmission Idempotency and Authority', () => {
@@ -879,6 +906,142 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
       server.close();
     }
   });
+
+  test('newer mutation /state failure blocks older pre-mutation /state from committing and healing degraded', { timeout: 8000 }, async () => {
+    const preMutationTask: TaskDto = {
+      taskId: 'task-pre-mutation',
+      projectId: 'p-1',
+      title: 'Stale',
+      description: null,
+      requiredCapabilities: ['node'],
+      requiredSpecialties: ['backend'],
+      acceptanceCriteria: ['Tests pass'],
+      complexity: 'MEDIUM',
+      risk: 'LOW',
+      status: 'pending',
+      assignedAgentId: null,
+      assignmentId: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+    const createdTask: TaskDto = { ...preMutationTask, taskId: 'task-from-post', title: 'Implement Task Creation' };
+
+    let armed = false;
+    let stateN = 0;
+    let holdAResolve: (() => void) | null = null;
+    const holdA = new Promise<void>((r) => {
+      holdAResolve = r;
+    });
+    let aStarted!: () => void;
+    const aStart = new Promise<void>((r) => {
+      aStarted = r;
+    });
+    let postHit = false;
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+      if (req.url === '/api/v1/state') {
+        if (!armed) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            requestId: 's0',
+            data: { projects: [], agents: [], tasks: [], assignments: [] }
+          }));
+          return;
+        }
+        stateN++;
+        const n = stateN;
+        if (n === 1) {
+          aStarted();
+          void (async () => {
+            await holdA;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: true,
+              requestId: 's-pre',
+              data: { projects: [], agents: [], tasks: [preMutationTask], assignments: [] }
+            }));
+          })();
+          return;
+        }
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: false,
+          requestId: 's-fail',
+          error: { code: 'SERVER_ERROR', message: 'mutation follow-up failed' }
+        }));
+        return;
+      }
+      if (req.url === '/api/v1/tasks' && req.method === 'POST') {
+        postHit = true;
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'c', data: createdTask }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      ws.send(JSON.stringify({ type: 'hello', version: 1, apiVersion: 'v1' }));
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    const submissionService = new AgentHubTaskSubmission(connection);
+
+    try {
+      await connection.start();
+      const startWait = Date.now();
+      while (Date.now() - startWait < 2000) {
+        if (connection.getState().connection === 'connected') break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.equal(connection.getState().connection, 'connected');
+      await new Promise((r) => setTimeout(r, 120));
+      assert.equal(connection.getState().snapshot?.tasks.length, 0);
+      const s0SyncAt = connection.getState().lastSyncAt;
+
+      armed = true;
+      const pendingA = connection.refresh();
+      await aStart;
+
+      const created = await submissionService.submitTask({
+        submissionId: 'sub-stale-barrier',
+        input: validBase
+      });
+      assert.equal(postHit, true);
+      assert.equal(created.status, 'created');
+      if (created.status === 'created') {
+        assert.equal(created.stateSynchronized, false);
+        assert.equal(created.task.taskId, 'task-from-post');
+      }
+      assert.equal(connection.getState().connection, 'degraded');
+
+      holdAResolve?.();
+      await pendingA;
+      await new Promise((r) => setTimeout(r, 20));
+
+      const tasks = connection.getState().snapshot?.tasks ?? [];
+      assert.equal(tasks.some((t) => t.taskId === 'task-pre-mutation'), false);
+      assert.equal(tasks.length, 0);
+      assert.equal(connection.getState().connection, 'degraded');
+      assert.equal(connection.getState().lastSyncAt, s0SyncAt);
+    } finally {
+      submissionService.stop();
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
 });
 
 describe('AgentHub V0.8.2 mutation surface allowlist', () => {
@@ -995,6 +1158,34 @@ describe('AgentHub CreateTask IPC request envelope', () => {
       const empty = await submissionService.submitTask(null);
       assert.equal(empty.status, 'failed');
       assert.equal(hit, false);
+    } finally {
+      submissionService.stop();
+      connection.stop();
+      server.close();
+    }
+  });
+
+  test('NUL-invalid input is rejected locally and never POSTs /api/v1/tasks', { timeout: 5000 }, async () => {
+    let postHit = false;
+    const server = http.createServer((req, res) => {
+      if (req.method === 'POST') postHit = true;
+      res.writeHead(500);
+      res.end();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    const submissionService = new AgentHubTaskSubmission(connection);
+    try {
+      const res = await submissionService.submitTask({
+        submissionId: 'sub-nul',
+        input: { ...validBase, title: 'Bad\0Title' }
+      });
+      assert.equal(res.status, 'failed');
+      if (res.status === 'failed') {
+        assert.equal(res.error.code, 'MALFORMED_INPUT');
+      }
+      assert.equal(postHit, false);
     } finally {
       submissionService.stop();
       connection.stop();
