@@ -1,3 +1,10 @@
+> [!NOTE]
+> **AgentHub Desktop Fork Baseline (V0.8.0)**
+> This repository is the official desktop visualization and interaction shell for **AgentHub** (`704986409/AgentHub`), forked from [`chaitanyagiri/munder-difflin`](https://github.com/chaitanyagiri/munder-difflin) at commit `77d0ec83416bd21c8dd499c2de2715da32b73892`.
+> Detailed audits and provenance:
+> - Baseline details: [`docs/UPSTREAM_MUNDER_BASELINE.md`](./docs/UPSTREAM_MUNDER_BASELINE.md)
+> - Architectural audit & failure matrix: [`docs/AGENTHUB_DESKTOP_BASELINE_AUDIT.md`](./docs/AGENTHUB_DESKTOP_BASELINE_AUDIT.md)
+
 <div align="center">
 
 <img src="./docs/logo.png" alt="Munder Difflin — agent harness to run an office of your clones" width="180">
