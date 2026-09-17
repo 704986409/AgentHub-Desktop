@@ -763,15 +763,17 @@ const GIT_OID_RE = /^[a-f0-9]{40}$|^[a-f0-9]{64}$/;
 const PROMPT_MAX_BYTES = 1024 * 1024;
 const BASE_REF_MAX_BYTES = 1024;
 const EXECUTE_ID_MAX_BYTES = 256;
-const WORKER_SUMMARY_MAX_BYTES = 16 * 1024;
-const WORKER_ITEM_MAX_BYTES = 8192;
-const WORKER_LIST_MAX_ITEMS = 256;
-const CHANGED_PATH_MAX_BYTES = 4096;
-const CHANGED_PATHS_MAX_ITEMS = 1024;
+const WORKER_SUMMARY_MAX_CHARS = 8192;
+const WORKER_ITEM_MAX_CHARS = 4096;
+const WORKER_BLOCKERS_MAX_ITEMS = 64;
+const WORKER_QUESTIONS_MAX_ITEMS = 64;
+const WORKER_RISKS_MAX_ITEMS = 64;
+const WORKER_NOTES_MAX_ITEMS = 128;
+const CHANGED_PATHS_MAX_ITEMS = 4096;
 const COMMANDS_MAX_ITEMS = 256;
 const COMMAND_ID_MAX_BYTES = 256;
-const COMMAND_PREVIEW_MAX_BYTES = 64 * 1024;
-const BRANCH_NAME_MAX_BYTES = 256;
+const COMMAND_PREVIEW_MAX_BYTES = 1024 * 1024;
+const BRANCH_NAME_MAX_BYTES = 4096;
 const REVIEW_HANDLE_MAX_BYTES = 256;
 
 function rejectUnexpectedKeys(
@@ -807,11 +809,31 @@ function snapshotBoundedText(
   return value;
 }
 
-function snapshotBoundedStringArray(
+function snapshotBoundedChars(
+  value: unknown,
+  fieldName: string,
+  maxChars: number,
+  code: string,
+  nonBlank: boolean
+): string {
+  if (typeof value !== 'string') {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a string`);
+  }
+  rejectIfContainsNul(value, fieldName, code);
+  if (nonBlank && value.trim().length === 0) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a non-blank string`);
+  }
+  if (value.length > maxChars) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' exceeds maximum length (${maxChars} characters)`);
+  }
+  return value;
+}
+
+function snapshotBoundedCharStringArray(
   value: unknown,
   fieldName: string,
   maxItems: number,
-  maxItemBytes: number,
+  maxItemChars: number,
   code: string
 ): readonly string[] {
   if (!Array.isArray(value)) {
@@ -826,9 +848,32 @@ function snapshotBoundedStringArray(
       throw new AgentHubValidationError(code, `Elements in '${fieldName}' must be strings`);
     }
     rejectIfContainsNul(item, fieldName, code);
-    if (getUtf8Bytes(item) > maxItemBytes) {
-      throw new AgentHubValidationError(code, `Element in '${fieldName}' exceeds maximum length (${maxItemBytes} bytes)`);
+    if (item.length > maxItemChars) {
+      throw new AgentHubValidationError(code, `Element in '${fieldName}' exceeds maximum length (${maxItemChars} characters)`);
     }
+    items.push(item);
+  }
+  return Object.freeze(items);
+}
+
+function snapshotPathArray(
+  value: unknown,
+  fieldName: string,
+  maxItems: number,
+  code: string
+): readonly string[] {
+  if (!Array.isArray(value)) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be an array`);
+  }
+  if (value.length > maxItems) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' exceeds maximum length (${maxItems} items)`);
+  }
+  const items: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new AgentHubValidationError(code, `Elements in '${fieldName}' must be strings`);
+    }
+    rejectIfContainsNul(item, fieldName, code);
     items.push(item);
   }
   return Object.freeze(items);
@@ -943,11 +988,11 @@ function snapshotExecuteWorkerResult(raw: unknown): ExecuteWorkerResultDto {
   }
   rejectUnexpectedKeys(raw, ALLOWED_WORKER_RESULT_KEYS, 'MALFORMED_EXECUTE_RESULT', 'workerResult');
   return Object.freeze({
-    summary: snapshotBoundedText(raw.summary, 'workerResult.summary', WORKER_SUMMARY_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false),
-    blockers: snapshotBoundedStringArray(raw.blockers, 'workerResult.blockers', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT'),
-    questions: snapshotBoundedStringArray(raw.questions, 'workerResult.questions', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT'),
-    risks: snapshotBoundedStringArray(raw.risks, 'workerResult.risks', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT'),
-    notes: snapshotBoundedStringArray(raw.notes, 'workerResult.notes', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT')
+    summary: snapshotBoundedChars(raw.summary, 'workerResult.summary', WORKER_SUMMARY_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
+    blockers: snapshotBoundedCharStringArray(raw.blockers, 'workerResult.blockers', WORKER_BLOCKERS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT'),
+    questions: snapshotBoundedCharStringArray(raw.questions, 'workerResult.questions', WORKER_QUESTIONS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT'),
+    risks: snapshotBoundedCharStringArray(raw.risks, 'workerResult.risks', WORKER_RISKS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT'),
+    notes: snapshotBoundedCharStringArray(raw.notes, 'workerResult.notes', WORKER_NOTES_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT')
   });
 }
 
@@ -967,11 +1012,10 @@ function snapshotExecuteSource(raw: unknown): ExecuteSourceDto {
     branchName: snapshotBoundedText(raw.branchName, 'source.branchName', BRANCH_NAME_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
     baseCommit: snapshotGitOid(raw.baseCommit, 'source.baseCommit', 'MALFORMED_EXECUTE_RESULT'),
     headCommit: snapshotGitOid(raw.headCommit, 'source.headCommit', 'MALFORMED_EXECUTE_RESULT'),
-    changedPaths: snapshotBoundedStringArray(
+    changedPaths: snapshotPathArray(
       raw.changedPaths,
       'source.changedPaths',
       CHANGED_PATHS_MAX_ITEMS,
-      CHANGED_PATH_MAX_BYTES,
       'MALFORMED_EXECUTE_RESULT'
     ),
     changeSetSha256: snapshotSha256(raw.changeSetSha256, 'source.changeSetSha256', 'MALFORMED_EXECUTE_RESULT')

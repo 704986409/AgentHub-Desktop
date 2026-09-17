@@ -1177,7 +1177,8 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () =>
       try {
         await assert.rejects(
           () => client.executeTask('task-1', sampleInput, 'key-bad'),
-          (err: AgentHubContractError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+          (err: AgentHubContractError) =>
+            err.code === 'MALFORMED_EXECUTE_RESULT' && err.requestDispatched === true && err.phase === 'response-contract'
         );
       } finally {
         server.close();
@@ -1216,7 +1217,8 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () =>
     try {
       await assert.rejects(
         () => clientErr.executeTask('task-1', sampleInput, 'key-err'),
-        (err: AgentHubContractError) => err.code === 'AGENTHUB_API_CONFLICT'
+        (err: AgentHubContractError) =>
+          err.code === 'AGENTHUB_API_CONFLICT' && err.phase === 'backend' && err.requestDispatched === true
       );
     } finally {
       serverErr.close();
@@ -1237,7 +1239,8 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () =>
     try {
       await assert.rejects(
         () => client.executeTask('task-1', { baseRef: 'main', prompt }, 'key-overflow'),
-        (err: AgentHubContractError) => err.code === 'BODY_OVERFLOW'
+        (err: AgentHubContractError) =>
+          err.code === 'BODY_OVERFLOW' && err.requestDispatched === false && err.phase === 'preflight'
       );
       assert.equal(hit, false);
     } finally {
@@ -1294,7 +1297,8 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () =>
     try {
       await assert.rejects(
         () => client.executeTask('task-1', sampleInput, 'key-overflow-resp'),
-        (err: AgentHubContractError) => err.code === 'BODY_OVERFLOW'
+        (err: AgentHubContractError) =>
+          err.code === 'BODY_OVERFLOW' && err.requestDispatched === true && err.phase === 'response-contract'
       );
     } finally {
       server.close();

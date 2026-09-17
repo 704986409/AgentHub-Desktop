@@ -86,10 +86,15 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
 
   const handleExecute = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (status === 'executing') return;
+    if (status === 'executing' || status === 'ambiguous') return;
 
     const input: ExecuteTaskInputDto = { baseRef, prompt };
-    const id = lifecycleRef.current.beginExecute();
+    let id: string;
+    try {
+      id = lifecycleRef.current.beginExecute();
+    } catch {
+      return;
+    }
     setExecutionId(id);
     setStatus('executing');
     setErrorMessage(null);
@@ -129,7 +134,12 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
   const handleRetry = async () => {
     if (status !== 'ambiguous' || !lastExecutedInput) return;
 
-    const id = lifecycleRef.current.beginRetry();
+    let id: string;
+    try {
+      id = lifecycleRef.current.beginRetry();
+    } catch {
+      return;
+    }
     setExecutionId(id);
     setStatus('executing');
     setErrorMessage(null);
@@ -165,7 +175,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
   };
 
   const INK = 'var(--cth-ink-900, #0f172a)';
-  const canSubmit = connection !== 'disconnected' && tasks.length > 0 && status !== 'executing';
+  const canSubmit = connection !== 'disconnected' && tasks.length > 0 && status !== 'executing' && status !== 'ambiguous';
 
   return (
     <div

@@ -156,17 +156,17 @@ export class AgentHubTaskExecution {
       }
 
       if (err instanceof AgentHubContractError) {
-        if (err.code === 'TIMEOUT' || err.code === 'NETWORK_ERROR' || err.code === 'ABORTED') {
-          return ambiguous(err.code, err.message);
+        if (err.phase === 'backend' || !err.requestDispatched) {
+          return failed(err.code, err.message);
         }
-        return failed(err.code, err.message);
+        return ambiguous(err.code, err.message);
       }
 
       if (err instanceof AgentHubValidationError) {
         return failed(err.code, err.message);
       }
 
-      return failed('UNEXPECTED_ERROR', (err as Error).message || 'Unexpected task execution failure');
+      return ambiguous('UNEXPECTED_ERROR', (err as Error).message || 'Unexpected task execution failure');
     } finally {
       this.#activeControllers.delete(controller);
     }

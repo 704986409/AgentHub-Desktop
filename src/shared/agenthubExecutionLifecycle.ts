@@ -1,5 +1,12 @@
 export type TaskExecutionFormPhase = 'idle' | 'executing' | 'executed' | 'ambiguous' | 'failed';
 
+export class InvalidExecutionTransitionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidExecutionTransitionError';
+  }
+}
+
 /**
  * Renderer-owned logical execution ID lifecycle.
  * Main still derives the backend Idempotency-Key; this only decides which ID the UI sends.
@@ -23,11 +30,24 @@ export class TaskExecutionIdLifecycle {
   }
 
   beginExecute(): string {
+    if (this.#phase === 'ambiguous') {
+      throw new InvalidExecutionTransitionError(
+        'Normal Execute is not allowed while the previous execution outcome is ambiguous'
+      );
+    }
+    if (this.#phase === 'executing') {
+      throw new InvalidExecutionTransitionError('Execute is already in flight');
+    }
     this.#phase = 'executing';
     return this.#id;
   }
 
   beginRetry(): string {
+    if (this.#phase !== 'ambiguous') {
+      throw new InvalidExecutionTransitionError(
+        'Retry Same Execution is only allowed while the previous execution outcome is ambiguous'
+      );
+    }
     this.#phase = 'executing';
     return this.#id;
   }

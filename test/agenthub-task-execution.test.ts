@@ -16,7 +16,7 @@ import {
   AgentHubValidationError,
   type ExecuteTaskInputDto
 } from '../src/shared/agenthubTypes';
-import { TaskExecutionIdLifecycle } from '../src/shared/agenthubExecutionLifecycle';
+import { TaskExecutionIdLifecycle, InvalidExecutionTransitionError } from '../src/shared/agenthubExecutionLifecycle';
 
 const HEX64 = 'a'.repeat(64);
 const OID40 = 'b'.repeat(40);
@@ -339,6 +339,52 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
       ...validTerminal('blocked'),
       lifecycleSha256: 'nope'
     }), (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT');
+  });
+
+  test('changedPaths 4096 accepted exactly; 4097 rejected', { timeout: 5000 }, () => {
+    const paths4096 = Array.from({ length: 4096 }, (_, i) => `src/f${i}.ts`);
+    const accepted = snapshotExecuteReviewReadyDto(validReviewReady({
+      source: {
+        branchName: 'agent/task-1',
+        baseCommit: OID40,
+        headCommit: HEX64,
+        changedPaths: paths4096,
+        changeSetSha256: HEX64
+      }
+    }));
+    assert.equal(accepted.source.changedPaths.length, 4096);
+    assert.equal(accepted.source.changedPaths[0], 'src/f0.ts');
+    assert.equal(accepted.source.changedPaths[4095], 'src/f4095.ts');
+
+    assert.throws(() => snapshotExecuteReviewReadyDto(validReviewReady({
+      source: {
+        branchName: 'agent/task-1',
+        baseCommit: OID40,
+        headCommit: HEX64,
+        changedPaths: [...paths4096, 'src/extra.ts'],
+        changeSetSha256: HEX64
+      }
+    })), (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT');
+  });
+
+  test('worker Unicode character limits and exact item counts are accepted', { timeout: 5000 }, () => {
+    const summary = '项'.repeat(8192);
+    const item = '危'.repeat(4096);
+    const accepted = snapshotExecuteReviewReadyDto(validReviewReady({
+      workerResult: {
+        summary,
+        blockers: Array.from({ length: 64 }, () => item),
+        questions: Array.from({ length: 64 }, () => item),
+        risks: Array.from({ length: 64 }, () => item),
+        notes: Array.from({ length: 128 }, () => item)
+      }
+    }));
+    assert.equal(accepted.workerResult.summary.length, 8192);
+    assert.equal(accepted.workerResult.blockers.length, 64);
+    assert.equal(accepted.workerResult.questions.length, 64);
+    assert.equal(accepted.workerResult.risks.length, 64);
+    assert.equal(accepted.workerResult.notes.length, 128);
+    assert.equal(accepted.workerResult.blockers[0], item);
   });
 });
 
@@ -711,6 +757,173 @@ describe('AgentHub Task Execution service', () => {
       server.close();
     }
   });
+
+  test('HTTP 200 malformed execute DTO is ambiguous and retry reuses the same key', { timeout: 5000 }, async () => {
+    const keys: string[] = [];
+    let n = 0;
+    const server = http.createServer((req, res) => {
+      if (req.method !== 'POST') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      keys.push(String(req.headers['idempotency-key'] || ''));
+      n++;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      if (n === 1) {
+        res.end(JSON.stringify({ ok: true, requestId: 'r', data: { outcome: 'blocked', taskId: 'task-1' } }));
+        return;
+      }
+      res.end(envelope(validTerminal('blocked')));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const { connection } = stubConnection(`http://127.0.0.1:${addr.port}`);
+    const execution = new AgentHubTaskExecution(connection);
+    const req = { executionId: 'exec-malformed-dto', taskId: 'task-1', input: validInput };
+    try {
+      const first = await execution.executeTask(req);
+      assert.equal(first.status, 'ambiguous');
+      if (first.status === 'ambiguous') assert.equal(first.retryable, true);
+      const retry = await execution.executeTask(req);
+      assert.equal(retry.status, 'executed');
+      assert.deepEqual(keys, ['desktop-execute:exec-malformed-dto', 'desktop-execute:exec-malformed-dto']);
+    } finally {
+      execution.stop();
+      server.close();
+    }
+  });
+
+  test('HTTP 200 malformed JSON/envelope and response overflow after POST are ambiguous', { timeout: 5000 }, async () => {
+    const cases: Array<{ name: string; write: (res: http.ServerResponse) => void }> = [
+      {
+        name: 'json',
+        write: (res) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{not-json');
+        }
+      },
+      {
+        name: 'envelope',
+        write: (res) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, extra: true, requestId: 'r', data: validTerminal('blocked') }));
+        }
+      },
+      {
+        name: 'overflow',
+        write: (res) => {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '9437184' });
+          res.end('{"ok":true}');
+        }
+      }
+    ];
+
+    for (const item of cases) {
+      let posts = 0;
+      const server = http.createServer((req, res) => {
+        if (req.method === 'POST') {
+          posts++;
+          item.write(res);
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      });
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+      const addr = server.address() as { port: number };
+      const { connection } = stubConnection(`http://127.0.0.1:${addr.port}`);
+      const execution = new AgentHubTaskExecution(connection);
+      try {
+        const res = await execution.executeTask({
+          executionId: `exec-${item.name}`,
+          taskId: 'task-1',
+          input: validInput
+        });
+        assert.equal(res.status, 'ambiguous', item.name);
+        if (res.status === 'ambiguous') assert.equal(res.retryable, true);
+        assert.equal(posts, 1, item.name);
+      } finally {
+        execution.stop();
+        server.close();
+      }
+    }
+  });
+
+  test('local request-body overflow is definitive failed with zero HTTP', { timeout: 5000 }, async () => {
+    let hit = false;
+    const server = http.createServer((_req, res) => {
+      hit = true;
+      res.writeHead(200);
+      res.end();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const { connection } = stubConnection(`http://127.0.0.1:${addr.port}`);
+    const execution = new AgentHubTaskExecution(connection);
+    try {
+      const res = await execution.executeTask({
+        executionId: 'exec-local-overflow',
+        taskId: 'task-1',
+        input: { baseRef: 'main', prompt: 'x'.repeat(1024 * 1024 - 1) }
+      });
+      assert.equal(res.status, 'failed');
+      if (res.status === 'failed') {
+        assert.equal(res.retryable, false);
+        assert.equal(res.error.code, 'BODY_OVERFLOW');
+      }
+      assert.equal(hit, false);
+    } finally {
+      execution.stop();
+      server.close();
+    }
+  });
+
+  test('valid backend-sized review-ready that V0.8.3 rejected is now executed', { timeout: 5000 }, async () => {
+    const paths = Array.from({ length: 4096 }, (_, i) => `src/f${i}.ts`);
+    const payload = validReviewReady({
+      workerResult: {
+        summary: '项'.repeat(8192),
+        blockers: ['危'.repeat(4096)],
+        questions: [],
+        risks: [],
+        notes: []
+      },
+      source: {
+        branchName: 'agent/task-1',
+        baseCommit: OID40,
+        headCommit: HEX64,
+        changedPaths: paths,
+        changeSetSha256: HEX64
+      }
+    });
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(envelope(payload));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const { connection } = stubConnection(`http://127.0.0.1:${addr.port}`);
+    const execution = new AgentHubTaskExecution(connection);
+    try {
+      const res = await execution.executeTask({
+        executionId: 'exec-backend-parity',
+        taskId: 'task-1',
+        input: validInput
+      });
+      assert.equal(res.status, 'executed');
+      if (res.status === 'executed') {
+        assert.equal(res.result.outcome, 'review-ready');
+        if (res.result.outcome === 'review-ready') {
+          assert.equal(res.result.source.changedPaths.length, 4096);
+          assert.equal(res.result.workerResult.summary.length, 8192);
+        }
+      }
+    } finally {
+      execution.stop();
+      server.close();
+    }
+  });
 });
 
 describe('AgentHub Task Execution ID lifecycle', () => {
@@ -720,21 +933,20 @@ describe('AgentHub Task Execution ID lifecycle', () => {
     assert.equal(life.id, 'id-1');
     assert.equal(life.beginExecute(), 'id-1');
     assert.equal(life.onResult('ambiguous'), 'id-1');
+    assert.throws(() => life.beginExecute(), InvalidExecutionTransitionError);
     assert.equal(life.beginRetry(), 'id-1');
     assert.equal(life.onResult('executed'), 'id-2');
     assert.equal(life.beginExecute(), 'id-2');
     assert.equal(life.onResult('failed'), 'id-3');
+    assert.equal(life.beginExecute(), 'id-3');
 
     const life2 = new TaskExecutionIdLifecycle(() => `id-${++n}`);
     life2.beginExecute();
     life2.onResult('ambiguous');
-    const afterTaskEdit = life2.onEdit();
-    assert.equal(afterTaskEdit, 'id-5');
-
-    const life3 = new TaskExecutionIdLifecycle(() => `id-${++n}`);
-    life3.beginExecute();
-    life3.onResult('ambiguous');
-    assert.notEqual(life3.onEdit(), 'id-6');
+    const afterEdit = life2.onEdit();
+    assert.equal(afterEdit, 'id-5');
+    assert.equal(life2.phase, 'idle');
+    assert.equal(life2.beginExecute(), 'id-5');
   });
 });
 
@@ -754,10 +966,12 @@ describe('AgentHub Task Execution ownership and UI allowlist', () => {
     assert.equal(restSrc.includes('/merge'), false);
   });
 
-  test('execute UI has no review mutation actions', { timeout: 5000 }, () => {
+  test('execute UI has no review mutation actions and blocks normal Execute while ambiguous', { timeout: 5000 }, () => {
     const ui = fs.readFileSync(path.join(process.cwd(), 'src/renderer/src/components/AgentHubExecuteModal.tsx'), 'utf8');
     assert.match(ui, /Execute/);
     assert.match(ui, /Retry Same Execution/);
+    assert.match(ui, /status !== 'ambiguous'/);
+    assert.match(ui, /status === 'executing' \|\| status === 'ambiguous'/);
     assert.equal(ui.includes('Accept'), false);
     assert.equal(ui.includes('Request Revision'), false);
     assert.equal(ui.includes('Approve'), false);

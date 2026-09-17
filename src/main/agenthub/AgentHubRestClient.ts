@@ -23,12 +23,22 @@ export const DEFAULT_AGENTHUB_BASE_URL = 'http://127.0.0.1:3210';
 const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8 MiB
 
+export type AgentHubContractPhase = 'preflight' | 'transport' | 'response-contract' | 'backend';
+
 export class AgentHubContractError extends Error {
   public readonly code: string;
-  constructor(code: string, message: string) {
+  public readonly phase: AgentHubContractPhase;
+  public readonly requestDispatched: boolean;
+  constructor(
+    code: string,
+    message: string,
+    options: { readonly phase?: AgentHubContractPhase; readonly requestDispatched?: boolean } = {}
+  ) {
     super(message);
     this.name = 'AgentHubContractError';
     this.code = code;
+    this.phase = options.phase ?? 'preflight';
+    this.requestDispatched = options.requestDispatched ?? false;
   }
 }
 
@@ -207,7 +217,10 @@ export class AgentHubRestClient {
     try {
       return snapshotExecuteTaskResult(data);
     } catch (err) {
-      throw new AgentHubContractError('MALFORMED_EXECUTE_RESULT', (err as Error).message);
+      throw new AgentHubContractError('MALFORMED_EXECUTE_RESULT', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
     }
   }
 
@@ -249,12 +262,25 @@ export class AgentHubRestClient {
     expectedStatus?: 200 | 201
   ): Promise<T> {
     if (externalSignal?.aborted) {
-      throw new AgentHubContractError('ABORTED', 'Request aborted by caller');
+      throw new AgentHubContractError('ABORTED', 'Request aborted by caller', {
+        phase: 'preflight',
+        requestDispatched: false
+      });
     }
 
     const url = `${this.#baseUrl}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+    let requestDispatched = false;
+
+    function fail(
+      code: string,
+      message: string,
+      phase: AgentHubContractPhase,
+      dispatched = requestDispatched
+    ): never {
+      throw new AgentHubContractError(code, message, { phase, requestDispatched: dispatched });
+    }
 
     const onExternalAbort = (): void => {
       controller.abort();
@@ -265,6 +291,7 @@ export class AgentHubRestClient {
     }
 
     try {
+      requestDispatched = true;
       const response = await fetch(url, {
         method,
         headers,
@@ -272,17 +299,19 @@ export class AgentHubRestClient {
         signal: controller.signal
       });
 
-      // 1. Fail-closed Content-Length header check
       const contentLengthHeader = response.headers.get('Content-Length');
       if (contentLengthHeader) {
         const contentLength = parseInt(contentLengthHeader, 10);
         if (!isNaN(contentLength) && contentLength > MAX_BODY_BYTES) {
           controller.abort();
-          throw new AgentHubContractError('BODY_OVERFLOW', `Response Content-Length (${contentLength}) exceeded limit of ${MAX_BODY_BYTES} bytes`);
+          fail(
+            'BODY_OVERFLOW',
+            `Response Content-Length (${contentLength}) exceeded limit of ${MAX_BODY_BYTES} bytes`,
+            'response-contract'
+          );
         }
       }
 
-      // 2. Stream-based body reading to strictly bound memory
       let text = '';
       if (response.body && typeof response.body.getReader === 'function') {
         const reader = response.body.getReader();
@@ -298,7 +327,11 @@ export class AgentHubRestClient {
               if (totalBytes > MAX_BODY_BYTES) {
                 try { await reader.cancel(); } catch { /* ignore */ }
                 controller.abort();
-                throw new AgentHubContractError('BODY_OVERFLOW', `Response body exceeded limit of ${MAX_BODY_BYTES} bytes`);
+                fail(
+                  'BODY_OVERFLOW',
+                  `Response body exceeded limit of ${MAX_BODY_BYTES} bytes`,
+                  'response-contract'
+                );
               }
               chunks.push(value);
             }
@@ -317,7 +350,11 @@ export class AgentHubRestClient {
       } else {
         const arrayBuf = await response.arrayBuffer();
         if (arrayBuf.byteLength > MAX_BODY_BYTES) {
-          throw new AgentHubContractError('BODY_OVERFLOW', `Response body exceeded limit of ${MAX_BODY_BYTES} bytes`);
+          fail(
+            'BODY_OVERFLOW',
+            `Response body exceeded limit of ${MAX_BODY_BYTES} bytes`,
+            'response-contract'
+          );
         }
         text = new TextDecoder('utf-8').decode(arrayBuf);
       }
@@ -326,68 +363,69 @@ export class AgentHubRestClient {
       try {
         parsed = JSON.parse(text);
       } catch (err) {
-        throw new AgentHubContractError('MALFORMED_JSON', `Failed to parse JSON response: ${(err as Error).message}`);
+        fail('MALFORMED_JSON', `Failed to parse JSON response: ${(err as Error).message}`, 'response-contract');
       }
 
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Response must be a JSON object');
+        fail('MALFORMED_ENVELOPE', 'Response must be a JSON object', 'response-contract');
       }
 
       const env = parsed as Record<string, unknown>;
       const keys = Object.keys(env);
 
-      // Validate requestId
       if (typeof env.requestId !== 'string' || !env.requestId.trim()) {
-        throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Envelope must contain a non-blank requestId');
+        fail('MALFORMED_ENVELOPE', 'Envelope must contain a non-blank requestId', 'response-contract');
       }
 
-      // Validate ok flag
       if (typeof env.ok !== 'boolean') {
-        throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Envelope must contain a boolean ok field');
+        fail('MALFORMED_ENVELOPE', 'Envelope must contain a boolean ok field', 'response-contract');
       }
 
       if (env.ok === false) {
         for (const k of keys) {
           if (k !== 'ok' && k !== 'requestId' && k !== 'error') {
-            throw new AgentHubContractError('MALFORMED_ENVELOPE', `Unexpected key '${k}' in error envelope`);
+            fail('MALFORMED_ENVELOPE', `Unexpected key '${k}' in error envelope`, 'response-contract');
           }
         }
         const errObj = env.error as { code?: unknown; message?: unknown } | undefined;
         if (!errObj || typeof errObj !== 'object' || Array.isArray(errObj)) {
-          throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Error envelope must contain an error object');
+          fail('MALFORMED_ENVELOPE', 'Error envelope must contain an error object', 'response-contract');
+        } else {
+          const backendCode = errObj.code;
+          const backendMessage = errObj.message;
+          if (typeof backendCode !== 'string' || !backendCode.trim()) {
+            fail('MALFORMED_ENVELOPE', 'Error object must contain a non-blank code', 'response-contract');
+          }
+          if (typeof backendMessage !== 'string') {
+            fail('MALFORMED_ENVELOPE', 'Error object must contain a string message', 'response-contract');
+          }
+          fail(backendCode, backendMessage, 'backend');
         }
-        if (typeof errObj.code !== 'string' || !errObj.code.trim()) {
-          throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Error object must contain a non-blank code');
-        }
-        if (typeof errObj.message !== 'string') {
-          throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Error object must contain a string message');
-        }
-        throw new AgentHubContractError(errObj.code, errObj.message);
       }
 
       for (const k of keys) {
         if (k !== 'ok' && k !== 'requestId' && k !== 'data') {
-          throw new AgentHubContractError('MALFORMED_ENVELOPE', `Unexpected key '${k}' in success envelope`);
+          fail('MALFORMED_ENVELOPE', `Unexpected key '${k}' in success envelope`, 'response-contract');
         }
       }
 
       if (!response.ok) {
-        throw new AgentHubContractError('HTTP_ERROR', `HTTP ${response.status} ${response.statusText}`);
+        fail('HTTP_ERROR', `HTTP ${response.status} ${response.statusText}`, 'response-contract');
       }
 
       if (method === 'POST') {
         const expected = expectedStatus ?? 201;
         if (response.status !== expected) {
-          throw new AgentHubContractError(
+          fail(
             'HTTP_ERROR',
-            `Expected HTTP ${expected} for mutation, got ${response.status}`
+            `Expected HTTP ${expected} for mutation, got ${response.status}`,
+            'response-contract'
           );
         }
       }
 
-      // ok: true must have data
       if (env.data === undefined) {
-        throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Success envelope must contain data');
+        fail('MALFORMED_ENVELOPE', 'Success envelope must contain data', 'response-contract');
       }
 
       return env.data as T;
@@ -395,16 +433,20 @@ export class AgentHubRestClient {
       if (err instanceof AgentHubContractError) throw err;
       if ((err as { name?: string }).name === 'AbortError') {
         if (externalSignal?.aborted) {
-          throw new AgentHubContractError('ABORTED', 'Request aborted by caller');
+          fail('ABORTED', 'Request aborted by caller', 'transport');
         }
-        throw new AgentHubContractError('TIMEOUT', `Request timed out after ${this.#timeoutMs}ms`);
+        fail('TIMEOUT', `Request timed out after ${this.#timeoutMs}ms`, 'transport');
       }
-      throw new AgentHubContractError('NETWORK_ERROR', (err as Error).message || 'Network request failed');
+      fail('NETWORK_ERROR', (err as Error).message || 'Network request failed', 'transport');
     } finally {
       clearTimeout(timer);
       if (externalSignal) {
         externalSignal.removeEventListener('abort', onExternalAbort);
       }
     }
+    throw new AgentHubContractError('NETWORK_ERROR', 'Request terminated without a result', {
+      phase: 'transport',
+      requestDispatched
+    });
   }
 }
