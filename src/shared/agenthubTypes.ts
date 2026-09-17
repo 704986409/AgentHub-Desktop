@@ -140,6 +140,73 @@ export interface AgentHubDesktopState {
   } | null;
 }
 
+export type TaskComplexity = 'TRIVIAL' | 'SIMPLE' | 'MEDIUM' | 'COMPLEX' | 'CRITICAL';
+export type TaskRisk = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export const TASK_COMPLEXITIES: readonly TaskComplexity[] = Object.freeze([
+  'TRIVIAL',
+  'SIMPLE',
+  'MEDIUM',
+  'COMPLEX',
+  'CRITICAL'
+]);
+
+export const TASK_RISKS: readonly TaskRisk[] = Object.freeze([
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+  'CRITICAL'
+]);
+
+export interface CreateTaskInputDto {
+  readonly projectId: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly requiredCapabilities: readonly string[];
+  readonly requiredSpecialties: readonly string[];
+  readonly acceptanceCriteria: readonly string[];
+  readonly complexity: TaskComplexity;
+  readonly risk: TaskRisk;
+}
+
+export interface CreateTaskRequestDto {
+  readonly submissionId: string;
+  readonly input: CreateTaskInputDto;
+}
+
+export type TaskSubmissionResult =
+  | {
+      readonly status: 'created';
+      readonly task: TaskDto;
+      readonly stateSynchronized: true;
+    }
+  | {
+      readonly status: 'created';
+      readonly task: TaskDto;
+      readonly stateSynchronized: false;
+      readonly warning: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'ambiguous';
+      readonly retryable: true;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'failed';
+      readonly retryable: false;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    };
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Runtime Fail-Closed Validation & Whitelist Snapshotting
 // ─────────────────────────────────────────────────────────────────────────────
@@ -409,5 +476,129 @@ export function snapshotState(raw: unknown): AgentHubStateSnapshot {
     agents: Object.freeze(agents),
     tasks: Object.freeze(tasks),
     assignments: Object.freeze(assignments)
+  });
+}
+
+const ALLOWED_CREATE_TASK_KEYS = new Set([
+  'projectId',
+  'title',
+  'description',
+  'requiredCapabilities',
+  'requiredSpecialties',
+  'acceptanceCriteria',
+  'complexity',
+  'risk'
+]);
+
+function getUtf8Bytes(str: string): number {
+  return new TextEncoder().encode(str).length;
+}
+
+export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', 'Task creation input must be an object');
+  }
+
+  // Reject unexpected top-level keys
+  for (const key of Object.keys(raw)) {
+    if (!ALLOWED_CREATE_TASK_KEYS.has(key)) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', `Unexpected key in task creation input: '${key}'`);
+    }
+  }
+
+  // projectId: nonblank string, UTF-8 <= 256 bytes
+  if (!('projectId' in raw) || typeof raw.projectId !== 'string' || !raw.projectId.trim()) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'projectId' must be a non-blank string");
+  }
+  if (getUtf8Bytes(raw.projectId) > 256) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'projectId' exceeds maximum length (256 bytes)");
+  }
+
+  // title: nonblank string, UTF-8 <= 16 KiB (16384 bytes)
+  if (!('title' in raw) || typeof raw.title !== 'string' || !raw.title.trim()) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'title' must be a non-blank string");
+  }
+  if (getUtf8Bytes(raw.title) > 16384) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'title' exceeds maximum length (16 KiB)");
+  }
+
+  // description: string | null, UTF-8 <= 128 KiB (131072 bytes) when string
+  if (!('description' in raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'description' is required (can be null)");
+  }
+  if (raw.description !== null && typeof raw.description !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'description' must be a string or null");
+  }
+  if (typeof raw.description === 'string' && getUtf8Bytes(raw.description) > 131072) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'description' exceeds maximum length (128 KiB)");
+  }
+
+  // requiredCapabilities: array <= 256 items, each nonblank, <= 512 bytes
+  if (!('requiredCapabilities' in raw) || !Array.isArray(raw.requiredCapabilities)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'requiredCapabilities' must be an array");
+  }
+  if (raw.requiredCapabilities.length > 256) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'requiredCapabilities' exceeds maximum length (256 items)");
+  }
+  for (const item of raw.requiredCapabilities) {
+    if (typeof item !== 'string' || !item.trim()) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', "Elements in 'requiredCapabilities' must be non-blank strings");
+    }
+    if (getUtf8Bytes(item) > 512) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', "Element in 'requiredCapabilities' exceeds maximum length (512 bytes)");
+    }
+  }
+
+  // requiredSpecialties: array <= 256 items, each nonblank, <= 512 bytes
+  if (!('requiredSpecialties' in raw) || !Array.isArray(raw.requiredSpecialties)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'requiredSpecialties' must be an array");
+  }
+  if (raw.requiredSpecialties.length > 256) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'requiredSpecialties' exceeds maximum length (256 items)");
+  }
+  for (const item of raw.requiredSpecialties) {
+    if (typeof item !== 'string' || !item.trim()) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', "Elements in 'requiredSpecialties' must be non-blank strings");
+    }
+    if (getUtf8Bytes(item) > 512) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', "Element in 'requiredSpecialties' exceeds maximum length (512 bytes)");
+    }
+  }
+
+  // acceptanceCriteria: array <= 256 items, each nonblank, <= 8192 bytes
+  if (!('acceptanceCriteria' in raw) || !Array.isArray(raw.acceptanceCriteria)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'acceptanceCriteria' must be an array");
+  }
+  if (raw.acceptanceCriteria.length > 256) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'acceptanceCriteria' exceeds maximum length (256 items)");
+  }
+  for (const item of raw.acceptanceCriteria) {
+    if (typeof item !== 'string' || !item.trim()) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', "Elements in 'acceptanceCriteria' must be non-blank strings");
+    }
+    if (getUtf8Bytes(item) > 8192) {
+      throw new AgentHubValidationError('MALFORMED_INPUT', "Element in 'acceptanceCriteria' exceeds maximum length (8192 bytes)");
+    }
+  }
+
+  // complexity: exactly one backend enum value
+  if (!('complexity' in raw) || typeof raw.complexity !== 'string' || !TASK_COMPLEXITIES.includes(raw.complexity as TaskComplexity)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field 'complexity' must be one of: ${TASK_COMPLEXITIES.join(', ')}`);
+  }
+
+  // risk: exactly one backend enum value
+  if (!('risk' in raw) || typeof raw.risk !== 'string' || !TASK_RISKS.includes(raw.risk as TaskRisk)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field 'risk' must be one of: ${TASK_RISKS.join(', ')}`);
+  }
+
+  return Object.freeze({
+    projectId: raw.projectId,
+    title: raw.title,
+    description: raw.description,
+    requiredCapabilities: Object.freeze([...raw.requiredCapabilities]),
+    requiredSpecialties: Object.freeze([...raw.requiredSpecialties]),
+    acceptanceCriteria: Object.freeze([...raw.acceptanceCriteria]),
+    complexity: raw.complexity as TaskComplexity,
+    risk: raw.risk as TaskRisk
   });
 }

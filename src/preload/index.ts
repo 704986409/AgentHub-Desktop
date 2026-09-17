@@ -22,8 +22,20 @@ import type {
 export type {
   ContextRule, ContextTriggerConfig, OrgTriggerConfig, TriggerHistoryEntry, WebhookTrigger
 } from '../shared/triggers';
-import type { AgentHubDesktopState, AgentHubStateSnapshot } from '../shared/agenthubTypes';
-export type { AgentHubDesktopState, AgentHubStateSnapshot } from '../shared/agenthubTypes';
+import type {
+  AgentHubDesktopState,
+  AgentHubStateSnapshot,
+  CreateTaskInputDto,
+  CreateTaskRequestDto,
+  TaskSubmissionResult
+} from '../shared/agenthubTypes';
+export type {
+  AgentHubDesktopState,
+  AgentHubStateSnapshot,
+  CreateTaskInputDto,
+  CreateTaskRequestDto,
+  TaskSubmissionResult
+} from '../shared/agenthubTypes';
 
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
@@ -1433,6 +1445,7 @@ export interface AgentHubPreloadApi {
   getSnapshot: () => Promise<AgentHubStateSnapshot | null>;
   refresh: () => Promise<AgentHubDesktopState>;
   onChanged: (cb: (state: AgentHubDesktopState) => void) => () => void;
+  createTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
 }
 
 const agentHubApi: AgentHubPreloadApi = {
@@ -1444,11 +1457,12 @@ const agentHubApi: AgentHubPreloadApi = {
     const listener = (_e: IpcRendererEvent, state: AgentHubDesktopState) => cb(state);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
-  }
+  },
+  createTask: (request: CreateTaskRequestDto): Promise<TaskSubmissionResult> =>
+    ipcRenderer.invoke('agenthub:createTask', request)
 };
 
 contextBridge.exposeInMainWorld('cth', api);
 contextBridge.exposeInMainWorld('agentHub', agentHubApi);
 
 export type CthApi = typeof api;
-

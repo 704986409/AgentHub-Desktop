@@ -2,11 +2,15 @@ import type {
   AgentHubEnvelope,
   AgentHubHealthDto,
   AgentHubStateSnapshot,
-  AgentHubEventDto
+  AgentHubEventDto,
+  TaskDto,
+  CreateTaskInputDto
 } from './AgentHubTypes';
 import {
   snapshotState,
   snapshotEventDto,
+  snapshotTaskDto,
+  snapshotCreateTaskInput,
   AgentHubValidationError
 } from './AgentHubTypes';
 
@@ -144,10 +148,63 @@ export class AgentHubRestClient {
   }
 
   /**
+   * POST /api/v1/tasks
+   * Strictly bounded task creation endpoint.
+   */
+  public async createTask(
+    input: CreateTaskInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<TaskDto> {
+    const validatedInput = snapshotCreateTaskInput(input);
+    const key = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
+    if (!key) {
+      throw new AgentHubContractError('INVALID_IDEMPOTENCY_KEY', 'Idempotency-Key must be a non-empty string');
+    }
+
+    const bodyString = JSON.stringify(validatedInput);
+    if (new TextEncoder().encode(bodyString).length > 1024 * 1024) {
+      throw new AgentHubContractError('BODY_OVERFLOW', 'Request body exceeds 1 MiB limit');
+    }
+
+    const data = await this.#post<unknown>('/api/v1/tasks', bodyString, key, signal);
+    try {
+      return snapshotTaskDto(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_TASK', (err as Error).message);
+    }
+  }
+
+  /**
    * Internal GET-only helper. Strictly rejects any method other than GET.
    * Enforces streaming byte bounds, timeouts, and exact envelope validation.
    */
   async #get<T>(path: string, externalSignal?: AbortSignal): Promise<T> {
+    return this.#request<T>('GET', path, { 'Accept': 'application/json' }, undefined, externalSignal);
+  }
+
+  /**
+   * Internal POST-only helper. Strictly allows only /api/v1/tasks.
+   */
+  async #post<T>(path: string, body: string, idempotencyKey: string, externalSignal?: AbortSignal): Promise<T> {
+    if (path !== '/api/v1/tasks') {
+      throw new AgentHubContractError('FORBIDDEN_ROUTE', `Only POST /api/v1/tasks is allowed, requested: ${path}`);
+    }
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Idempotency-Key': idempotencyKey
+    };
+    return this.#request<T>('POST', path, headers, body, externalSignal);
+  }
+
+  async #request<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    headers: Record<string, string>,
+    body: string | undefined,
+    externalSignal?: AbortSignal
+  ): Promise<T> {
     if (externalSignal?.aborted) {
       throw new AgentHubContractError('ABORTED', 'Request aborted by caller');
     }
@@ -166,10 +223,9 @@ export class AgentHubRestClient {
 
     try {
       const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        },
+        method,
+        headers,
+        body,
         signal: controller.signal
       });
 
@@ -274,6 +330,10 @@ export class AgentHubRestClient {
 
       if (!response.ok) {
         throw new AgentHubContractError('HTTP_ERROR', `HTTP ${response.status} ${response.statusText}`);
+      }
+
+      if (method === 'POST' && response.status !== 201) {
+        throw new AgentHubContractError('HTTP_ERROR', `Expected HTTP 201 for task creation, got ${response.status}`);
       }
 
       // ok: true must have data

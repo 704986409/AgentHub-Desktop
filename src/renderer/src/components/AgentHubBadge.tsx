@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAgentHubStore } from '../stores/agentHubStore';
+import { AgentHubTaskModal } from './AgentHubTaskModal';
 
 export function AgentHubBadge() {
   const {
@@ -15,6 +16,7 @@ export function AgentHubBadge() {
   } = useAgentHubStore();
 
   const [hover, setHover] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const cleanup = init();
@@ -123,7 +125,7 @@ export function AgentHubBadge() {
           }}
         >
           <div style={{ fontFamily: 'var(--cth-font-mono, monospace)', fontWeight: 700, fontSize: 12.5 }}>
-            AgentHub Read-Only Bridge
+            AgentHub Desktop Bridge
           </div>
           <div style={{ marginTop: 4, color: 'var(--cth-ink-700, #334155)' }}>
             <div><strong>Endpoint:</strong> http://127.0.0.1:3210</div>
@@ -142,12 +144,40 @@ export function AgentHubBadge() {
                 <strong>Error [{lastError.code}]:</strong> {lastError.message}
               </div>
             )}
+            {connection !== 'disconnected' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setHover(false);
+                  setIsModalOpen(true);
+                }}
+                style={{
+                  marginTop: 8,
+                  width: '100%',
+                  padding: '5px 8px',
+                  background: 'var(--cth-mint-light, #d0f0e0)',
+                  border: '1px solid var(--cth-mint-dark, #16a34a)',
+                  color: 'var(--cth-mint-dark, #16a34a)',
+                  fontWeight: 600,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  borderRadius: 2
+                }}
+              >
+                + Submit New Task
+              </button>
+            )}
           </div>
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--cth-ink-500, #64748b)' }}>
             Click badge to refresh snapshot
           </div>
         </div>
       )}
+
+      <AgentHubTaskModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </span>
   );
 }

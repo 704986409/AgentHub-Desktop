@@ -13,7 +13,8 @@ import {
   snapshotProjectDto,
   snapshotEventDto,
   AgentHubValidationError,
-  sanitizeEventPayload
+  sanitizeEventPayload,
+  type CreateTaskInputDto
 } from '../src/shared/agenthubTypes';
 
 describe('validateAgentHubBaseUrl', () => {
@@ -877,5 +878,185 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     assert.equal('cwd' in resObj, false);
     assert.equal('SessionId' in resObj, false);
     assert.equal('sessionid' in resObj, false);
+  });
+});
+
+describe('AgentHubRestClient Mutation POST /api/v1/tasks', () => {
+  const sampleInput: CreateTaskInputDto = {
+    projectId: 'p-mutation',
+    title: 'Test Create Task',
+    description: 'Sample description',
+    requiredCapabilities: ['python'],
+    requiredSpecialties: ['ml'],
+    acceptanceCriteria: ['Valid model'],
+    complexity: 'COMPLEX',
+    risk: 'MEDIUM'
+  };
+
+  test('createTask successfully POSTs to /api/v1/tasks with 201 and validates TaskDto', { timeout: 5000 }, async () => {
+    let capturedMethod = '';
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string | string[] | undefined> = {};
+    let capturedBody = '';
+
+    const expectedTask = {
+      taskId: 't-new-1',
+      projectId: 'p-mutation',
+      title: 'Test Create Task',
+      description: 'Sample description',
+      requiredCapabilities: ['python'],
+      requiredSpecialties: ['ml'],
+      acceptanceCriteria: ['Valid model'],
+      complexity: 'COMPLEX',
+      risk: 'MEDIUM',
+      status: 'pending',
+      assignedAgentId: null,
+      assignmentId: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+
+    const server = http.createServer((req, res) => {
+      capturedMethod = req.method || '';
+      capturedUrl = req.url || '';
+      capturedHeaders = req.headers;
+
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        capturedBody = body;
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: 'req-create-1',
+          data: expectedTask
+        }));
+      });
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      const task = await client.createTask(sampleInput, 'desktop-task:sub-1');
+      assert.equal(capturedMethod, 'POST');
+      assert.equal(capturedUrl, '/api/v1/tasks');
+      assert.equal(capturedHeaders['content-type'], 'application/json');
+      assert.equal(capturedHeaders['accept'], 'application/json');
+      assert.equal(capturedHeaders['idempotency-key'], 'desktop-task:sub-1');
+      assert.deepEqual(JSON.parse(capturedBody), sampleInput);
+
+      assert.equal(task.taskId, 't-new-1');
+      assert.equal(task.status, 'pending');
+    } finally {
+      server.close();
+    }
+  });
+
+  test('createTask rejects non-201 response with HTTP_ERROR', { timeout: 5000 }, async () => {
+    const server = http.createServer((_req, res) => {
+      // Return 200 instead of 201
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'r2', data: {} }));
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      await assert.rejects(
+        () => client.createTask(sampleInput, 'key-200'),
+        (err: AgentHubContractError) => err.code === 'HTTP_ERROR'
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  test('createTask propagates backend error envelopes', { timeout: 5000 }, async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'err-1',
+        error: {
+          code: 'INVALID_TASK_INPUT',
+          message: 'Project does not exist'
+        }
+      }));
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      await assert.rejects(
+        () => client.createTask(sampleInput, 'key-err'),
+        (err: AgentHubContractError) => err.code === 'INVALID_TASK_INPUT' && err.message === 'Project does not exist'
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  test('createTask rejects malformed TaskDto with MALFORMED_TASK', { timeout: 5000 }, async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        requestId: 'r-bad',
+        data: { missingTaskId: true }
+      }));
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      await assert.rejects(
+        () => client.createTask(sampleInput, 'key-bad-dto'),
+        (err: AgentHubContractError) => err.code === 'MALFORMED_TASK'
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  test('mutation allowlist: only createTask exists, no execute/review/merge or generic request', { timeout: 5000 }, () => {
+    const client = new AgentHubRestClient();
+    assert.equal(typeof client.createTask, 'function');
+
+    // Forbidden mutations
+    assert.equal((client as any).executeTask, undefined);
+    assert.equal((client as any).reviewTask, undefined);
+    assert.equal((client as any).mergeTask, undefined);
+    assert.equal((client as any).post, undefined);
+    assert.equal((client as any).request, undefined);
+    assert.equal((client as any).fetch, undefined);
+  });
+
+  test('createTask rejects a blank Idempotency-Key before sending', { timeout: 5000 }, async () => {
+    let hit = false;
+    const server = http.createServer((_req, res) => {
+      hit = true;
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'r', data: {} }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    try {
+      await assert.rejects(
+        () => client.createTask(sampleInput, '   '),
+        (err: AgentHubContractError) => err.code === 'INVALID_IDEMPOTENCY_KEY'
+      );
+      assert.equal(hit, false);
+    } finally {
+      server.close();
+    }
   });
 });

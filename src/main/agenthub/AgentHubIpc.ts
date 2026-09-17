@@ -1,15 +1,27 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import type { AgentHubConnection } from './AgentHubConnection';
-import type { AgentHubDesktopState, AgentHubStateSnapshot } from './AgentHubTypes';
+import type {
+  AgentHubDesktopState,
+  AgentHubStateSnapshot,
+  CreateTaskRequestDto,
+  TaskSubmissionResult
+} from './AgentHubTypes';
+import { AgentHubTaskSubmission } from './AgentHubTaskSubmission';
 
 export const AGENTHUB_IPC_CHANNELS = {
   GET_STATE: 'agenthub:getConnectionState',
   GET_SNAPSHOT: 'agenthub:getSnapshot',
   REFRESH: 'agenthub:refresh',
-  CHANGED: 'agenthub:changed'
+  CHANGED: 'agenthub:changed',
+  CREATE_TASK: 'agenthub:createTask'
 } as const;
 
-export function registerAgentHubIpc(connection: AgentHubConnection): () => void {
+export function registerAgentHubIpc(
+  connection: AgentHubConnection,
+  taskSubmission?: AgentHubTaskSubmission
+): () => void {
+  const submission = taskSubmission ?? new AgentHubTaskSubmission(connection);
+
   // 1. Register IPC handlers
   ipcMain.handle(AGENTHUB_IPC_CHANNELS.GET_STATE, (): AgentHubDesktopState => {
     return connection.getState();
@@ -23,6 +35,13 @@ export function registerAgentHubIpc(connection: AgentHubConnection): () => void 
     await connection.refresh();
     return connection.getState();
   });
+
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.CREATE_TASK,
+    async (_event, request: unknown): Promise<TaskSubmissionResult> => {
+      return submission.submitTask(request as CreateTaskRequestDto);
+    }
+  );
 
   // 2. Broadcast state changes to all active windows
   const handleChange = (state: AgentHubDesktopState): void => {
@@ -41,9 +60,11 @@ export function registerAgentHubIpc(connection: AgentHubConnection): () => void 
 
   // Return unregister cleanup function
   return () => {
+    submission.stop();
     connection.cache.off('change', handleChange);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_STATE);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_SNAPSHOT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.REFRESH);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.CREATE_TASK);
   };
 }
