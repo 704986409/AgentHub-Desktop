@@ -69,7 +69,7 @@ This baseline audit establishes the foundational boundary for **AgentHub Desktop
 │    ├─ Future AgentHubConnection (REST snapshot + Realtime WS)│
 │    └─ StateCache (Read-only normalized projection)          │
 └───────────────────────────┬─────────────────────────────────┘
-                            │ REST (8080/tcp) + WebSocket (/api/v1/realtime)
+                            │ REST (3210/tcp) + WebSocket (/api/v1/realtime)
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ AgentHub Core Authority (Sealed 0.7.0G Baseline)            │
@@ -195,7 +195,7 @@ Version: V0.8.0
 Desktop repository: 704986409/AgentHub-Desktop
 Upstream repository: chaitanyagiri/munder-difflin
 Upstream baseline SHA: 77d0ec83416bd21c8dd499c2de2715da32b73892
-Desktop commit: 77d0ec83416bd21c8dd499c2de2715da32b73892
+Desktop commit: deb0190c3f90bd32c86a9bf2322e9b39fb3a6e8d
 Desktop tag: V0.8.0-baseline
 
 AgentHub backend changed: NO

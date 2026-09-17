@@ -20,6 +20,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test:focused": "node --test test/*.test.cjs",
+    "test:agenthub": "tsx --test test/agenthub-*.test.ts",
     "check:links": "node tools/check-release-links.cjs",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -60,6 +61,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tunnelmole": "^2.4.0",
+    "ws": "^8.21.3",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
@@ -70,10 +72,12 @@
     "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.2",
     "electron": "^32.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.6.3",
     "vite": "^5.4.8"
   },

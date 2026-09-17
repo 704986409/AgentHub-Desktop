@@ -92,6 +92,8 @@ import {
   codexRemoteSocketFits,
   withCodexRemoteArgs
 } from '../shared/codexRemote';
+import { AgentHubConnection } from './agenthub/AgentHubConnection';
+import { registerAgentHubIpc } from './agenthub/AgentHubIpc';
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 
@@ -336,6 +338,10 @@ const reflector = new MemoryReflector(
 // Durable harness state (SQLite, main process). Phase A: window bounds (kv) +
 // net-new command history. Opened in whenReady, closed in the teardown blocks.
 const persist = new PersistStore();
+// AgentHub Desktop read-only bridge (V0.8.1)
+const agentHubConnection = new AgentHubConnection();
+registerAgentHubIpc(agentHubConnection);
+
 /** The PRIMARY window — the one running the hive/god orchestration and the sink
  *  for process-global timer events (missions, breaker, Slack ingestion). It is
  *  the most-recently-focused live window, so global events follow the user.
@@ -3765,6 +3771,7 @@ function teardownAndQuit(): void {
   try { reflector.stop(); } catch (e) { console.error('[quit] reflector.stop:', e); }
   try { persist.close(); } catch (e) { console.error('[quit] persist.close:', e); }
   try { hive.stopAllProxyBridges(); } catch (e) { console.error('[quit] stopAllProxyBridges:', e); }
+  try { agentHubConnection.stop(); } catch (e) { console.error('[quit] agentHubConnection.stop:', e); }
   try { ptyManager.killAll(); } catch (e) { console.error('[quit] killAll:', e); }
   app.quit();
 }
@@ -5344,6 +5351,8 @@ app.whenReady().then(() => {
       else console.log('[webhook] listening', r.url ? `(tunnel: ${r.url})` : '(no tunnel)');
     });
   }
+  // Start read-only AgentHub connection
+  void agentHubConnection.start().catch((e) => console.error('[agenthub] connection start failed:', e));
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

@@ -20,6 +20,7 @@ import { QuitWarningModal, type ClosingTimeState } from '@/components/QuitWarnin
 import { CompletionToast } from '@/realtime/CompletionToast';
 import { UpdateToast } from '@/components/UpdateToast';
 import { UpdateBadge } from '@/components/UpdateBadge';
+import { AgentHubBadge } from '@/components/AgentHubBadge';
 import { useAppTheme, toggleAppTheme } from '@/design/theme';
 import { SettingsModal, type Section as SettingsSection } from '@/components/SettingsModal';
 import { PixelPanel } from '@/components/PixelPanel';
@@ -303,6 +304,7 @@ export function App() {
         {/* v0.3.7: the version is no longer inert text — it doubles as the
             update control (check / download / restart to update). */}
         <UpdateBadge />
+        <AgentHubBadge />
         <span style={{
           fontFamily: 'var(--cth-font-ui)',
           fontSize: 13,

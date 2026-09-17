@@ -22,6 +22,8 @@ import type {
 export type {
   ContextRule, ContextTriggerConfig, OrgTriggerConfig, TriggerHistoryEntry, WebhookTrigger
 } from '../shared/triggers';
+import type { AgentHubDesktopState, AgentHubStateSnapshot } from '../shared/agenthubTypes';
+export type { AgentHubDesktopState, AgentHubStateSnapshot } from '../shared/agenthubTypes';
 
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
@@ -1426,6 +1428,27 @@ const api = {
   }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('update:simulate', opts)
 };
 
+export interface AgentHubPreloadApi {
+  getConnectionState: () => Promise<AgentHubDesktopState>;
+  getSnapshot: () => Promise<AgentHubStateSnapshot | null>;
+  refresh: () => Promise<AgentHubDesktopState>;
+  onChanged: (cb: (state: AgentHubDesktopState) => void) => () => void;
+}
+
+const agentHubApi: AgentHubPreloadApi = {
+  getConnectionState: (): Promise<AgentHubDesktopState> => ipcRenderer.invoke('agenthub:getConnectionState'),
+  getSnapshot: (): Promise<AgentHubStateSnapshot | null> => ipcRenderer.invoke('agenthub:getSnapshot'),
+  refresh: (): Promise<AgentHubDesktopState> => ipcRenderer.invoke('agenthub:refresh'),
+  onChanged: (cb: (state: AgentHubDesktopState) => void): (() => void) => {
+    const channel = 'agenthub:changed';
+    const listener = (_e: IpcRendererEvent, state: AgentHubDesktopState) => cb(state);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  }
+};
+
 contextBridge.exposeInMainWorld('cth', api);
+contextBridge.exposeInMainWorld('agentHub', agentHubApi);
 
 export type CthApi = typeof api;
+
