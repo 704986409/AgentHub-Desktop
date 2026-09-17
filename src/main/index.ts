@@ -94,6 +94,7 @@ import {
 } from '../shared/codexRemote';
 import { AgentHubConnection } from './agenthub/AgentHubConnection';
 import { AgentHubTaskSubmission } from './agenthub/AgentHubTaskSubmission';
+import { AgentHubTaskExecution } from './agenthub/AgentHubTaskExecution';
 import { registerAgentHubIpc } from './agenthub/AgentHubIpc';
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
@@ -339,10 +340,11 @@ const reflector = new MemoryReflector(
 // Durable harness state (SQLite, main process). Phase A: window bounds (kv) +
 // net-new command history. Opened in whenReady, closed in the teardown blocks.
 const persist = new PersistStore();
-// AgentHub Desktop bridge (V0.8.2: read + idempotent task submission)
+// AgentHub Desktop bridge (V0.8.3: read + idempotent task submission + execution)
 const agentHubConnection = new AgentHubConnection();
 const agentHubTaskSubmission = new AgentHubTaskSubmission(agentHubConnection);
-registerAgentHubIpc(agentHubConnection, agentHubTaskSubmission);
+const agentHubTaskExecution = new AgentHubTaskExecution(agentHubConnection);
+registerAgentHubIpc(agentHubConnection, agentHubTaskSubmission, agentHubTaskExecution);
 
 /** The PRIMARY window — the one running the hive/god orchestration and the sink
  *  for process-global timer events (missions, breaker, Slack ingestion). It is
@@ -3773,6 +3775,7 @@ function teardownAndQuit(): void {
   try { reflector.stop(); } catch (e) { console.error('[quit] reflector.stop:', e); }
   try { persist.close(); } catch (e) { console.error('[quit] persist.close:', e); }
   try { hive.stopAllProxyBridges(); } catch (e) { console.error('[quit] stopAllProxyBridges:', e); }
+  try { agentHubTaskExecution.stop(); } catch (e) { console.error('[quit] agentHubTaskExecution.stop:', e); }
   try { agentHubTaskSubmission.stop(); } catch (e) { console.error('[quit] agentHubTaskSubmission.stop:', e); }
   try { agentHubConnection.stop(); } catch (e) { console.error('[quit] agentHubConnection.stop:', e); }
   try { ptyManager.killAll(); } catch (e) { console.error('[quit] killAll:', e); }

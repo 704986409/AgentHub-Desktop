@@ -5,6 +5,8 @@ import type {
   AgentHubHealthDto,
   AgentHubStateSnapshot,
   CreateTaskRequestDto,
+  ExecuteTaskRequestDto,
+  TaskExecutionResult,
   TaskSubmissionResult
 } from '@shared/agenthubTypes';
 
@@ -20,6 +22,7 @@ export interface AgentHubStoreState {
   init: () => () => void;
   refresh: () => Promise<void>;
   submitTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
+  executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
 }
 
 export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
@@ -103,5 +106,16 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
       };
     }
     return window.agentHub.createTask(request);
+  },
+
+  executeTask: async (request: ExecuteTaskRequestDto): Promise<TaskExecutionResult> => {
+    if (typeof window === 'undefined' || !window.agentHub) {
+      return {
+        status: 'failed',
+        retryable: false,
+        error: { code: 'NO_PRELOAD', message: 'AgentHub preload bridge is unavailable' }
+      };
+    }
+    return window.agentHub.executeTask(request);
   }
 }));

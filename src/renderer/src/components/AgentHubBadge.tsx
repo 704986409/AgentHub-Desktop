@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAgentHubStore } from '../stores/agentHubStore';
 import { AgentHubTaskModal } from './AgentHubTaskModal';
+import { AgentHubExecuteModal } from './AgentHubExecuteModal';
 
 export function AgentHubBadge() {
   const {
@@ -17,6 +18,7 @@ export function AgentHubBadge() {
 
   const [hover, setHover] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
 
   useEffect(() => {
     const cleanup = init();
@@ -145,27 +147,50 @@ export function AgentHubBadge() {
               </div>
             )}
             {connection !== 'disconnected' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setHover(false);
-                  setIsModalOpen(true);
-                }}
-                style={{
-                  marginTop: 8,
-                  width: '100%',
-                  padding: '5px 8px',
-                  background: 'var(--cth-mint-light, #d0f0e0)',
-                  border: '1px solid var(--cth-mint-dark, #16a34a)',
-                  color: 'var(--cth-mint-dark, #16a34a)',
-                  fontWeight: 600,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  borderRadius: 2
-                }}
-              >
-                + Submit New Task
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHover(false);
+                    setIsModalOpen(true);
+                  }}
+                  style={{
+                    marginTop: 8,
+                    width: '100%',
+                    padding: '5px 8px',
+                    background: 'var(--cth-mint-light, #d0f0e0)',
+                    border: '1px solid var(--cth-mint-dark, #16a34a)',
+                    color: 'var(--cth-mint-dark, #16a34a)',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    borderRadius: 2
+                  }}
+                >
+                  + Submit New Task
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHover(false);
+                    setIsExecuteModalOpen(true);
+                  }}
+                  style={{
+                    marginTop: 6,
+                    width: '100%',
+                    padding: '5px 8px',
+                    background: 'var(--cth-paper-100, #ffffff)',
+                    border: '1px solid var(--cth-ink-900, #0f172a)',
+                    color: 'var(--cth-ink-900, #0f172a)',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    borderRadius: 2
+                  }}
+                >
+                  Execute Task
+                </button>
+              </>
             )}
           </div>
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--cth-ink-500, #64748b)' }}>
@@ -177,6 +202,10 @@ export function AgentHubBadge() {
       <AgentHubTaskModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+      />
+      <AgentHubExecuteModal
+        isOpen={isExecuteModalOpen}
+        onClose={() => setIsExecuteModalOpen(false)}
       />
     </span>
   );

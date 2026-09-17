@@ -1026,12 +1026,11 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks', () => {
     }
   });
 
-  test('mutation allowlist: only createTask exists, no execute/review/merge or generic request', { timeout: 5000 }, () => {
+  test('mutation allowlist: createTask and executeTask exist; no review/merge or generic request', { timeout: 5000 }, () => {
     const client = new AgentHubRestClient();
     assert.equal(typeof client.createTask, 'function');
+    assert.equal(typeof client.executeTask, 'function');
 
-    // Forbidden mutations
-    assert.equal((client as any).executeTask, undefined);
     assert.equal((client as any).reviewTask, undefined);
     assert.equal((client as any).mergeTask, undefined);
     assert.equal((client as any).post, undefined);
@@ -1054,6 +1053,267 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks', () => {
         () => client.createTask(sampleInput, '   '),
         (err: AgentHubContractError) => err.code === 'INVALID_IDEMPOTENCY_KEY'
       );
+      assert.equal(hit, false);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () => {
+  const HEX64 = 'a'.repeat(64);
+  const OID40 = 'b'.repeat(40);
+  const sampleInput = { baseRef: 'main', prompt: 'Implement the change' };
+
+  const reviewReady = {
+    outcome: 'review-ready',
+    reviewHandle: HEX64,
+    reviewBundleSha256: HEX64,
+    taskId: 'task-1',
+    assignmentId: 'asg-1',
+    agentId: 'agent-1',
+    providerId: 'codex',
+    workerResult: { summary: 'done', blockers: [], questions: [], risks: [], notes: [] },
+    source: {
+      branchName: 'agent/task-1',
+      baseCommit: OID40,
+      headCommit: HEX64,
+      changedPaths: ['src/a.ts'],
+      changeSetSha256: HEX64
+    },
+    buildTest: {
+      build: 'passed',
+      test: 'not-run',
+      outcome: 'passed',
+      commands: [{
+        id: 'cmd-1',
+        phase: 'build',
+        outcome: 'passed',
+        stdoutPreview: '',
+        stderrPreview: ''
+      }]
+    },
+    evidenceSha256: HEX64
+  };
+
+  test('executeTask POSTs encoded path, exact body, and Main-owned Idempotency-Key', { timeout: 5000 }, async () => {
+    let capturedMethod = '';
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string | string[] | undefined> = {};
+    let capturedBody = '';
+
+    const server = http.createServer((req, res) => {
+      capturedMethod = req.method || '';
+      capturedUrl = req.url || '';
+      capturedHeaders = req.headers;
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        capturedBody = body;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'req-exec-1', data: reviewReady }));
+      });
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      const result = await client.executeTask('task/a b', sampleInput, 'desktop-execute:exec-1');
+      assert.equal(capturedMethod, 'POST');
+      assert.equal(capturedUrl, `/api/v1/tasks/${encodeURIComponent('task/a b')}/execute`);
+      assert.equal(capturedHeaders['content-type'], 'application/json');
+      assert.equal(capturedHeaders['accept'], 'application/json');
+      assert.equal(capturedHeaders['idempotency-key'], 'desktop-execute:exec-1');
+      assert.deepEqual(JSON.parse(capturedBody), sampleInput);
+      assert.equal(result.outcome, 'review-ready');
+    } finally {
+      server.close();
+    }
+  });
+
+  test('executeTask parses blocked, waiting-input, and failed lifecycle DTOs', { timeout: 5000 }, async () => {
+    const outcomes = ['blocked', 'waiting-input', 'failed'] as const;
+    for (const outcome of outcomes) {
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: `req-${outcome}`,
+          data: {
+            outcome,
+            taskId: 'task-1',
+            assignmentId: 'asg-1',
+            lifecycleSha256: HEX64
+          }
+        }));
+      });
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+      const addr = server.address() as { port: number };
+      const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+      try {
+        const result = await client.executeTask('task-1', sampleInput, `key-${outcome}`);
+        assert.equal(result.outcome, outcome);
+      } finally {
+        server.close();
+      }
+    }
+  });
+
+  test('executeTask rejects unknown outcome and malformed success DTO', { timeout: 5000 }, async () => {
+    const payloads = [
+      { outcome: 'merge-ready', taskId: 't', assignmentId: 'a', lifecycleSha256: HEX64 },
+      { outcome: 'blocked', taskId: 't' }
+    ];
+    for (const data of payloads) {
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'bad', data }));
+      });
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+      const addr = server.address() as { port: number };
+      const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+      try {
+        await assert.rejects(
+          () => client.executeTask('task-1', sampleInput, 'key-bad'),
+          (err: AgentHubContractError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+        );
+      } finally {
+        server.close();
+      }
+    }
+  });
+
+  test('executeTask rejects non-200 success and propagates non-2xx envelopes', { timeout: 5000 }, async () => {
+    const server201 = http.createServer((_req, res) => {
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'r201', data: reviewReady }));
+    });
+    await new Promise<void>((r) => server201.listen(0, '127.0.0.1', () => r()));
+    const addr201 = server201.address() as { port: number };
+    const client201 = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr201.port}` });
+    try {
+      await assert.rejects(
+        () => client201.executeTask('task-1', sampleInput, 'key-201'),
+        (err: AgentHubContractError) => err.code === 'HTTP_ERROR'
+      );
+    } finally {
+      server201.close();
+    }
+
+    const serverErr = http.createServer((_req, res) => {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'err',
+        error: { code: 'AGENTHUB_API_CONFLICT', message: 'already reserved' }
+      }));
+    });
+    await new Promise<void>((r) => serverErr.listen(0, '127.0.0.1', () => r()));
+    const addrErr = serverErr.address() as { port: number };
+    const clientErr = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addrErr.port}` });
+    try {
+      await assert.rejects(
+        () => clientErr.executeTask('task-1', sampleInput, 'key-err'),
+        (err: AgentHubContractError) => err.code === 'AGENTHUB_API_CONFLICT'
+      );
+    } finally {
+      serverErr.close();
+    }
+  });
+
+  test('prompt under field limit but serialized body over 1 MiB is rejected with zero HTTP', { timeout: 5000 }, async () => {
+    let hit = false;
+    const server = http.createServer((_req, res) => {
+      hit = true;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'r', data: {} }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    const prompt = 'x'.repeat(1024 * 1024 - 1);
+    try {
+      await assert.rejects(
+        () => client.executeTask('task-1', { baseRef: 'main', prompt }, 'key-overflow'),
+        (err: AgentHubContractError) => err.code === 'BODY_OVERFLOW'
+      );
+      assert.equal(hit, false);
+    } finally {
+      server.close();
+    }
+  });
+
+  test('near-limit valid execute body is sent', { timeout: 5000 }, async () => {
+    let capturedBody = '';
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        capturedBody = body;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: 'r',
+          data: {
+            outcome: 'failed',
+            taskId: 'task-1',
+            assignmentId: 'asg-1',
+            lifecycleSha256: HEX64
+          }
+        }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    try {
+      await client.executeTask('task-1', { baseRef: 'main', prompt: 'hi' }, 'key-near');
+      const parsed = JSON.parse(capturedBody);
+      assert.equal(parsed.baseRef, 'main');
+      assert.equal(parsed.prompt, 'hi');
+      assert.equal(Object.keys(parsed).length, 2);
+      assert.ok(Buffer.byteLength(capturedBody, 'utf8') < 1024 * 1024);
+    } finally {
+      server.close();
+    }
+  });
+
+  test('executeTask still enforces 8 MiB response bound', { timeout: 5000 }, async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Content-Length': '9437184'
+      });
+      res.end('{"ok":true}');
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    try {
+      await assert.rejects(
+        () => client.executeTask('task-1', sampleInput, 'key-overflow-resp'),
+        (err: AgentHubContractError) => err.code === 'BODY_OVERFLOW'
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  test('invalid execute input never sends HTTP', { timeout: 5000 }, async () => {
+    let hit = false;
+    const server = http.createServer((_req, res) => {
+      hit = true;
+      res.writeHead(200);
+      res.end();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    try {
+      await assert.rejects(() => client.executeTask('task-1', { baseRef: 'main\n', prompt: 'x' } as any, 'k'));
+      await assert.rejects(() => client.executeTask('task\nid', sampleInput, 'k'));
       assert.equal(hit, false);
     } finally {
       server.close();

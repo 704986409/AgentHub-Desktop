@@ -27,6 +27,8 @@ import type {
   AgentHubStateSnapshot,
   CreateTaskInputDto,
   CreateTaskRequestDto,
+  ExecuteTaskRequestDto,
+  TaskExecutionResult,
   TaskSubmissionResult
 } from '../shared/agenthubTypes';
 export type {
@@ -34,6 +36,8 @@ export type {
   AgentHubStateSnapshot,
   CreateTaskInputDto,
   CreateTaskRequestDto,
+  ExecuteTaskRequestDto,
+  TaskExecutionResult,
   TaskSubmissionResult
 } from '../shared/agenthubTypes';
 
@@ -1446,6 +1450,7 @@ export interface AgentHubPreloadApi {
   refresh: () => Promise<AgentHubDesktopState>;
   onChanged: (cb: (state: AgentHubDesktopState) => void) => () => void;
   createTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
+  executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
 }
 
 const agentHubApi: AgentHubPreloadApi = {
@@ -1459,7 +1464,9 @@ const agentHubApi: AgentHubPreloadApi = {
     return () => ipcRenderer.removeListener(channel, listener);
   },
   createTask: (request: CreateTaskRequestDto): Promise<TaskSubmissionResult> =>
-    ipcRenderer.invoke('agenthub:createTask', request)
+    ipcRenderer.invoke('agenthub:createTask', request),
+  executeTask: (request: ExecuteTaskRequestDto): Promise<TaskExecutionResult> =>
+    ipcRenderer.invoke('agenthub:executeTask', request)
 };
 
 contextBridge.exposeInMainWorld('cth', api);

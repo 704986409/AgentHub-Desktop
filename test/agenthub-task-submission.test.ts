@@ -1044,16 +1044,16 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
   });
 });
 
-describe('AgentHub V0.8.2 mutation surface allowlist', () => {
-  test('IPC exposes only the narrow createTask channel and no execute/review/merge transport', { timeout: 5000 }, () => {
+describe('AgentHub V0.8.3 mutation surface allowlist', () => {
+  test('IPC exposes createTask and executeTask and no review/merge transport', { timeout: 5000 }, () => {
     const ipcPath = path.join(process.cwd(), 'src/main/agenthub/AgentHubIpc.ts');
     const source = fs.readFileSync(ipcPath, 'utf8');
     assert.match(source, /CREATE_TASK:\s*'agenthub:createTask'/);
+    assert.match(source, /EXECUTE_TASK:\s*'agenthub:executeTask'/);
     assert.match(source, /GET_STATE:\s*'agenthub:getConnectionState'/);
     assert.match(source, /GET_SNAPSHOT:\s*'agenthub:getSnapshot'/);
     assert.match(source, /REFRESH:\s*'agenthub:refresh'/);
     assert.match(source, /CHANGED:\s*'agenthub:changed'/);
-    assert.equal(source.includes('agenthub:execute'), false);
     assert.equal(source.includes('agenthub:review'), false);
     assert.equal(source.includes('agenthub:merge'), false);
     assert.equal(source.includes('Idempotency-Key'), false);
@@ -1063,8 +1063,10 @@ describe('AgentHub V0.8.2 mutation surface allowlist', () => {
     const preloadPath = path.join(process.cwd(), 'src/preload/index.ts');
     const source = fs.readFileSync(preloadPath, 'utf8');
     assert.match(source, /createTask:\s*\(request: CreateTaskRequestDto\)/);
+    assert.match(source, /executeTask:\s*\(request: ExecuteTaskRequestDto\)/);
     assert.match(source, /ipcRenderer\.invoke\('agenthub:createTask', request\)/);
-    assert.equal(source.includes("invoke('agenthub:execute"), false);
+    assert.match(source, /ipcRenderer\.invoke\('agenthub:executeTask', request\)/);
+    assert.equal(source.includes("invoke('agenthub:review"), false);
     assert.equal(source.includes('Idempotency-Key'), false);
     assert.equal(/exposeInMainWorld\('agentHub'[\s\S]*fetch\s*:/.test(source), false);
 
@@ -1074,7 +1076,7 @@ describe('AgentHub V0.8.2 mutation surface allowlist', () => {
     assert.match(apiBlock, /refresh:/);
     assert.match(apiBlock, /onChanged:/);
     assert.match(apiBlock, /createTask:/);
-    assert.equal(apiBlock.includes('execute'), false);
+    assert.match(apiBlock, /executeTask:/);
     assert.equal(apiBlock.includes('review'), false);
     assert.equal(apiBlock.includes('merge'), false);
   });

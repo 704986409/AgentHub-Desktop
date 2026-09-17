@@ -4,13 +4,18 @@ import type {
   AgentHubStateSnapshot,
   AgentHubEventDto,
   TaskDto,
-  CreateTaskInputDto
+  CreateTaskInputDto,
+  ExecuteTaskInputDto,
+  ExecuteTaskResultDto
 } from './AgentHubTypes';
 import {
   snapshotState,
   snapshotEventDto,
   snapshotTaskDto,
   snapshotCreateTaskInput,
+  snapshotExecuteTaskInput,
+  snapshotExecuteTaskId,
+  snapshotExecuteTaskResult,
   AgentHubValidationError
 } from './AgentHubTypes';
 
@@ -167,11 +172,42 @@ export class AgentHubRestClient {
       throw new AgentHubContractError('BODY_OVERFLOW', 'Request body exceeds 1 MiB limit');
     }
 
-    const data = await this.#post<unknown>('/api/v1/tasks', bodyString, key, signal);
+    const data = await this.#post<unknown>('/api/v1/tasks', bodyString, key, 201, signal);
     try {
       return snapshotTaskDto(data);
     } catch (err) {
       throw new AgentHubContractError('MALFORMED_TASK', (err as Error).message);
+    }
+  }
+
+  /**
+   * POST /api/v1/tasks/:taskId/execute
+   * Strictly bounded task execution endpoint.
+   */
+  public async executeTask(
+    taskId: string,
+    input: ExecuteTaskInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<ExecuteTaskResultDto> {
+    const validatedTaskId = snapshotExecuteTaskId(taskId);
+    const validatedInput = snapshotExecuteTaskInput(input);
+    const key = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
+    if (!key) {
+      throw new AgentHubContractError('INVALID_IDEMPOTENCY_KEY', 'Idempotency-Key must be a non-empty string');
+    }
+
+    const bodyString = JSON.stringify(validatedInput);
+    if (new TextEncoder().encode(bodyString).length > 1024 * 1024) {
+      throw new AgentHubContractError('BODY_OVERFLOW', 'Request body exceeds 1 MiB limit');
+    }
+
+    const path = `/api/v1/tasks/${encodeURIComponent(validatedTaskId)}/execute`;
+    const data = await this.#post<unknown>(path, bodyString, key, 200, signal);
+    try {
+      return snapshotExecuteTaskResult(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_EXECUTE_RESULT', (err as Error).message);
     }
   }
 
@@ -184,18 +220,24 @@ export class AgentHubRestClient {
   }
 
   /**
-   * Internal POST-only helper. Strictly allows only /api/v1/tasks.
+   * Internal POST-only helper. Allowlist: /api/v1/tasks and /api/v1/tasks/:id/execute.
    */
-  async #post<T>(path: string, body: string, idempotencyKey: string, externalSignal?: AbortSignal): Promise<T> {
-    if (path !== '/api/v1/tasks') {
-      throw new AgentHubContractError('FORBIDDEN_ROUTE', `Only POST /api/v1/tasks is allowed, requested: ${path}`);
+  async #post<T>(
+    path: string,
+    body: string,
+    idempotencyKey: string,
+    expectedStatus: 200 | 201,
+    externalSignal?: AbortSignal
+  ): Promise<T> {
+    if (path !== '/api/v1/tasks' && !/^\/api\/v1\/tasks\/[^/]+\/execute$/.test(path)) {
+      throw new AgentHubContractError('FORBIDDEN_ROUTE', `POST path is not in the mutation allowlist: ${path}`);
     }
     const headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Idempotency-Key': idempotencyKey
     };
-    return this.#request<T>('POST', path, headers, body, externalSignal);
+    return this.#request<T>('POST', path, headers, body, externalSignal, expectedStatus);
   }
 
   async #request<T>(
@@ -203,7 +245,8 @@ export class AgentHubRestClient {
     path: string,
     headers: Record<string, string>,
     body: string | undefined,
-    externalSignal?: AbortSignal
+    externalSignal?: AbortSignal,
+    expectedStatus?: 200 | 201
   ): Promise<T> {
     if (externalSignal?.aborted) {
       throw new AgentHubContractError('ABORTED', 'Request aborted by caller');
@@ -332,8 +375,14 @@ export class AgentHubRestClient {
         throw new AgentHubContractError('HTTP_ERROR', `HTTP ${response.status} ${response.statusText}`);
       }
 
-      if (method === 'POST' && response.status !== 201) {
-        throw new AgentHubContractError('HTTP_ERROR', `Expected HTTP 201 for task creation, got ${response.status}`);
+      if (method === 'POST') {
+        const expected = expectedStatus ?? 201;
+        if (response.status !== expected) {
+          throw new AgentHubContractError(
+            'HTTP_ERROR',
+            `Expected HTTP ${expected} for mutation, got ${response.status}`
+          );
+        }
       }
 
       // ok: true must have data

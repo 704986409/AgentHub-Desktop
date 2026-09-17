@@ -206,6 +206,118 @@ export type TaskSubmissionResult =
       };
     };
 
+export interface ExecuteTaskInputDto {
+  readonly baseRef: string;
+  readonly prompt: string;
+}
+
+export interface ExecuteTaskRequestDto {
+  readonly executionId: string;
+  readonly taskId: string;
+  readonly input: ExecuteTaskInputDto;
+}
+
+export interface ExecuteWorkerResultDto {
+  readonly summary: string;
+  readonly blockers: readonly string[];
+  readonly questions: readonly string[];
+  readonly risks: readonly string[];
+  readonly notes: readonly string[];
+}
+
+export interface ExecuteSourceDto {
+  readonly branchName: string;
+  readonly baseCommit: string;
+  readonly headCommit: string;
+  readonly changedPaths: readonly string[];
+  readonly changeSetSha256: string;
+  readonly committedPatch?: string;
+}
+
+export type ExecuteBuildTestStatus = 'passed' | 'failed' | 'infrastructure-failed' | 'not-run';
+export type ExecuteEvidenceOutcome = 'passed' | 'failed' | 'workspace-mutated' | 'infrastructure-failed';
+export type ExecuteCommandPhase = 'build' | 'test';
+export type ExecuteCommandOutcome = 'passed' | 'failed' | 'timed-out' | 'output-limit' | 'spawn-failed';
+
+export interface ExecuteBuildTestCommandDto {
+  readonly id: string;
+  readonly phase: ExecuteCommandPhase;
+  readonly outcome: ExecuteCommandOutcome;
+  readonly exitCode?: number;
+  readonly stdoutPreview: string;
+  readonly stderrPreview: string;
+}
+
+export interface ExecuteBuildTestDto {
+  readonly build: ExecuteBuildTestStatus;
+  readonly test: ExecuteBuildTestStatus;
+  readonly outcome: ExecuteEvidenceOutcome;
+  readonly commands: readonly ExecuteBuildTestCommandDto[];
+}
+
+export interface ExecuteReviewReadyDto {
+  readonly outcome: 'review-ready';
+  readonly reviewHandle: string;
+  readonly reviewBundleSha256: string;
+  readonly taskId: string;
+  readonly assignmentId: string;
+  readonly agentId: string;
+  readonly providerId: string;
+  readonly workerResult: ExecuteWorkerResultDto;
+  readonly source: ExecuteSourceDto;
+  readonly buildTest: ExecuteBuildTestDto;
+  readonly evidenceSha256: string;
+}
+
+export interface ExecuteTerminalLifecycleDto {
+  readonly outcome: 'blocked' | 'waiting-input' | 'failed';
+  readonly taskId: string;
+  readonly assignmentId: string;
+  readonly lifecycleSha256: string;
+  readonly reviewEvidenceSha256?: string;
+  readonly merge?: AgentHubPublicValue;
+  readonly mergeGate?: AgentHubPublicValue;
+}
+
+export type ExecuteTaskResultDto = ExecuteReviewReadyDto | ExecuteTerminalLifecycleDto;
+
+export type TaskExecutionResult =
+  | {
+      readonly status: 'executed';
+      readonly result: ExecuteTaskResultDto;
+      readonly stateSynchronized: true;
+    }
+  | {
+      readonly status: 'executed';
+      readonly result: ExecuteTaskResultDto;
+      readonly stateSynchronized: false;
+      readonly warning: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'ambiguous';
+      readonly retryable: true;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'failed';
+      readonly retryable: false;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    };
+
+const EXECUTE_BUILD_STATUSES = ['passed', 'failed', 'infrastructure-failed', 'not-run'] as const;
+const EXECUTE_EVIDENCE_OUTCOMES = ['passed', 'failed', 'workspace-mutated', 'infrastructure-failed'] as const;
+const EXECUTE_COMMAND_PHASES = ['build', 'test'] as const;
+const EXECUTE_COMMAND_OUTCOMES = ['passed', 'failed', 'timed-out', 'output-limit', 'spawn-failed'] as const;
+const EXECUTE_TERMINAL_OUTCOMES = ['blocked', 'waiting-input', 'failed'] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Runtime Fail-Closed Validation & Whitelist Snapshotting
@@ -494,9 +606,9 @@ function getUtf8Bytes(str: string): number {
   return new TextEncoder().encode(str).length;
 }
 
-function rejectIfContainsNul(value: string, fieldName: string): void {
+function rejectIfContainsNul(value: string, fieldName: string, code = 'MALFORMED_INPUT'): void {
   if (value.includes('\0')) {
-    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must not contain NUL`);
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must not contain NUL`);
   }
 }
 
@@ -644,4 +756,364 @@ export function snapshotCreateTaskRequest(raw: unknown): CreateTaskRequestDto {
     submissionId: raw.submissionId,
     input: snapshotCreateTaskInput(raw.input)
   });
+}
+
+const SHA256_RE = /^[a-f0-9]{64}$/;
+const GIT_OID_RE = /^[a-f0-9]{40}$|^[a-f0-9]{64}$/;
+const PROMPT_MAX_BYTES = 1024 * 1024;
+const BASE_REF_MAX_BYTES = 1024;
+const EXECUTE_ID_MAX_BYTES = 256;
+const WORKER_SUMMARY_MAX_BYTES = 16 * 1024;
+const WORKER_ITEM_MAX_BYTES = 8192;
+const WORKER_LIST_MAX_ITEMS = 256;
+const CHANGED_PATH_MAX_BYTES = 4096;
+const CHANGED_PATHS_MAX_ITEMS = 1024;
+const COMMANDS_MAX_ITEMS = 256;
+const COMMAND_ID_MAX_BYTES = 256;
+const COMMAND_PREVIEW_MAX_BYTES = 64 * 1024;
+const BRANCH_NAME_MAX_BYTES = 256;
+const REVIEW_HANDLE_MAX_BYTES = 256;
+
+function rejectUnexpectedKeys(
+  raw: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+  code: string,
+  context: string
+): void {
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      throw new AgentHubValidationError(code, `Unexpected key in ${context}: '${key}'`);
+    }
+  }
+}
+
+function snapshotBoundedText(
+  value: unknown,
+  fieldName: string,
+  maxBytes: number,
+  code: string,
+  nonBlank: boolean
+): string {
+  if (typeof value !== 'string') {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a string`);
+  }
+  rejectIfContainsNul(value, fieldName, code);
+  if (nonBlank && value.trim().length === 0) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a non-blank string`);
+  }
+  if (getUtf8Bytes(value) > maxBytes) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' exceeds maximum length (${maxBytes} bytes)`);
+  }
+  return value;
+}
+
+function snapshotBoundedStringArray(
+  value: unknown,
+  fieldName: string,
+  maxItems: number,
+  maxItemBytes: number,
+  code: string
+): readonly string[] {
+  if (!Array.isArray(value)) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be an array`);
+  }
+  if (value.length > maxItems) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' exceeds maximum length (${maxItems} items)`);
+  }
+  const items: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new AgentHubValidationError(code, `Elements in '${fieldName}' must be strings`);
+    }
+    rejectIfContainsNul(item, fieldName, code);
+    if (getUtf8Bytes(item) > maxItemBytes) {
+      throw new AgentHubValidationError(code, `Element in '${fieldName}' exceeds maximum length (${maxItemBytes} bytes)`);
+    }
+    items.push(item);
+  }
+  return Object.freeze(items);
+}
+
+function snapshotSha256(value: unknown, fieldName: string, code: string): string {
+  if (typeof value !== 'string' || !SHA256_RE.test(value)) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be 64 lowercase hex characters`);
+  }
+  return value;
+}
+
+function snapshotGitOid(value: unknown, fieldName: string, code: string): string {
+  if (typeof value !== 'string' || !GIT_OID_RE.test(value)) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a 40- or 64-character lowercase hex Git OID`);
+  }
+  return value;
+}
+
+const ALLOWED_EXECUTE_TASK_INPUT_KEYS = new Set(['baseRef', 'prompt']);
+
+export function snapshotExecuteTaskInput(raw: unknown): ExecuteTaskInputDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', 'Execute task input must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_EXECUTE_TASK_INPUT_KEYS, 'MALFORMED_INPUT', 'execute task input');
+  if (!('baseRef' in raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'baseRef' is required");
+  }
+  if (!('prompt' in raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'prompt' is required");
+  }
+
+  const baseRef = snapshotBoundedText(raw.baseRef, 'baseRef', BASE_REF_MAX_BYTES, 'MALFORMED_INPUT', true);
+  if (/[\r\n]/u.test(baseRef)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'baseRef' must not contain CR or LF");
+  }
+  const prompt = snapshotBoundedText(raw.prompt, 'prompt', PROMPT_MAX_BYTES, 'MALFORMED_INPUT', true);
+
+  return Object.freeze({ baseRef, prompt });
+}
+
+export function snapshotExecuteTaskId(raw: unknown): string {
+  const taskId = snapshotBoundedText(raw, 'taskId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_REQUEST', true);
+  if (/[\r\n]/u.test(taskId)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'taskId' must not contain CR or LF");
+  }
+  return taskId;
+}
+
+const ALLOWED_EXECUTE_TASK_REQUEST_KEYS = new Set(['executionId', 'taskId', 'input']);
+
+export function snapshotExecuteTaskRequest(raw: unknown): ExecuteTaskRequestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', 'Task execution request must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_EXECUTE_TASK_REQUEST_KEYS, 'MALFORMED_REQUEST', 'task execution request');
+  if (!('executionId' in raw) || typeof raw.executionId !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'executionId' must be a string");
+  }
+  if (!('taskId' in raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'taskId' is required");
+  }
+  if (!('input' in raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'input' is required");
+  }
+
+  return Object.freeze({
+    executionId: raw.executionId,
+    taskId: snapshotExecuteTaskId(raw.taskId),
+    input: snapshotExecuteTaskInput(raw.input)
+  });
+}
+
+const ALLOWED_WORKER_RESULT_KEYS = new Set(['summary', 'blockers', 'questions', 'risks', 'notes']);
+const ALLOWED_SOURCE_KEYS = new Set([
+  'branchName',
+  'baseCommit',
+  'headCommit',
+  'changedPaths',
+  'changeSetSha256',
+  'committedPatch'
+]);
+const ALLOWED_BUILD_TEST_KEYS = new Set(['build', 'test', 'outcome', 'commands']);
+const ALLOWED_COMMAND_KEYS = new Set(['id', 'phase', 'outcome', 'exitCode', 'stdoutPreview', 'stderrPreview']);
+const ALLOWED_REVIEW_READY_KEYS = new Set([
+  'outcome',
+  'reviewHandle',
+  'reviewBundleSha256',
+  'taskId',
+  'assignmentId',
+  'agentId',
+  'providerId',
+  'workerResult',
+  'source',
+  'buildTest',
+  'evidenceSha256'
+]);
+const ALLOWED_TERMINAL_KEYS = new Set([
+  'outcome',
+  'taskId',
+  'assignmentId',
+  'lifecycleSha256',
+  'reviewEvidenceSha256',
+  'merge',
+  'mergeGate'
+]);
+
+function snapshotExecuteWorkerResult(raw: unknown): ExecuteWorkerResultDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', 'workerResult must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_WORKER_RESULT_KEYS, 'MALFORMED_EXECUTE_RESULT', 'workerResult');
+  return Object.freeze({
+    summary: snapshotBoundedText(raw.summary, 'workerResult.summary', WORKER_SUMMARY_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false),
+    blockers: snapshotBoundedStringArray(raw.blockers, 'workerResult.blockers', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT'),
+    questions: snapshotBoundedStringArray(raw.questions, 'workerResult.questions', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT'),
+    risks: snapshotBoundedStringArray(raw.risks, 'workerResult.risks', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT'),
+    notes: snapshotBoundedStringArray(raw.notes, 'workerResult.notes', WORKER_LIST_MAX_ITEMS, WORKER_ITEM_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT')
+  });
+}
+
+function snapshotExecuteSource(raw: unknown): ExecuteSourceDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', 'source must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_SOURCE_KEYS, 'MALFORMED_EXECUTE_RESULT', 'source');
+  const source: {
+    branchName: string;
+    baseCommit: string;
+    headCommit: string;
+    changedPaths: readonly string[];
+    changeSetSha256: string;
+    committedPatch?: string;
+  } = {
+    branchName: snapshotBoundedText(raw.branchName, 'source.branchName', BRANCH_NAME_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    baseCommit: snapshotGitOid(raw.baseCommit, 'source.baseCommit', 'MALFORMED_EXECUTE_RESULT'),
+    headCommit: snapshotGitOid(raw.headCommit, 'source.headCommit', 'MALFORMED_EXECUTE_RESULT'),
+    changedPaths: snapshotBoundedStringArray(
+      raw.changedPaths,
+      'source.changedPaths',
+      CHANGED_PATHS_MAX_ITEMS,
+      CHANGED_PATH_MAX_BYTES,
+      'MALFORMED_EXECUTE_RESULT'
+    ),
+    changeSetSha256: snapshotSha256(raw.changeSetSha256, 'source.changeSetSha256', 'MALFORMED_EXECUTE_RESULT')
+  };
+  if ('committedPatch' in raw) {
+    if (typeof raw.committedPatch !== 'string') {
+      throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'source.committedPatch' must be a string when present");
+    }
+    rejectIfContainsNul(raw.committedPatch, 'source.committedPatch', 'MALFORMED_EXECUTE_RESULT');
+    source.committedPatch = raw.committedPatch;
+  }
+  return Object.freeze(source);
+}
+
+function snapshotExecuteCommand(raw: unknown): ExecuteBuildTestCommandDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', 'buildTest.commands item must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_COMMAND_KEYS, 'MALFORMED_EXECUTE_RESULT', 'buildTest.commands item');
+  if (typeof raw.phase !== 'string' || !EXECUTE_COMMAND_PHASES.includes(raw.phase as ExecuteCommandPhase)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'command.phase' is invalid");
+  }
+  if (typeof raw.outcome !== 'string' || !EXECUTE_COMMAND_OUTCOMES.includes(raw.outcome as ExecuteCommandOutcome)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'command.outcome' is invalid");
+  }
+  const command: {
+    id: string;
+    phase: ExecuteCommandPhase;
+    outcome: ExecuteCommandOutcome;
+    stdoutPreview: string;
+    stderrPreview: string;
+    exitCode?: number;
+  } = {
+    id: snapshotBoundedText(raw.id, 'command.id', COMMAND_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    phase: raw.phase as ExecuteCommandPhase,
+    outcome: raw.outcome as ExecuteCommandOutcome,
+    stdoutPreview: snapshotBoundedText(raw.stdoutPreview, 'command.stdoutPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false),
+    stderrPreview: snapshotBoundedText(raw.stderrPreview, 'command.stderrPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false)
+  };
+  if ('exitCode' in raw) {
+    if (typeof raw.exitCode !== 'number' || !Number.isSafeInteger(raw.exitCode)) {
+      throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'command.exitCode' must be a finite safe integer when present");
+    }
+    command.exitCode = raw.exitCode;
+  }
+  return Object.freeze(command);
+}
+
+function snapshotExecuteBuildTest(raw: unknown): ExecuteBuildTestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', 'buildTest must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_BUILD_TEST_KEYS, 'MALFORMED_EXECUTE_RESULT', 'buildTest');
+  if (typeof raw.build !== 'string' || !EXECUTE_BUILD_STATUSES.includes(raw.build as ExecuteBuildTestStatus)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'buildTest.build' is invalid");
+  }
+  if (typeof raw.test !== 'string' || !EXECUTE_BUILD_STATUSES.includes(raw.test as ExecuteBuildTestStatus)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'buildTest.test' is invalid");
+  }
+  if (typeof raw.outcome !== 'string' || !EXECUTE_EVIDENCE_OUTCOMES.includes(raw.outcome as ExecuteEvidenceOutcome)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'buildTest.outcome' is invalid");
+  }
+  if (!Array.isArray(raw.commands)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'buildTest.commands' must be an array");
+  }
+  if (raw.commands.length > COMMANDS_MAX_ITEMS) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', `Field 'buildTest.commands' exceeds maximum length (${COMMANDS_MAX_ITEMS} items)`);
+  }
+  return Object.freeze({
+    build: raw.build as ExecuteBuildTestStatus,
+    test: raw.test as ExecuteBuildTestStatus,
+    outcome: raw.outcome as ExecuteEvidenceOutcome,
+    commands: Object.freeze(raw.commands.map(snapshotExecuteCommand))
+  });
+}
+
+export function snapshotExecuteReviewReadyDto(raw: unknown): ExecuteReviewReadyDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', 'review-ready result must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_REVIEW_READY_KEYS, 'MALFORMED_EXECUTE_RESULT', 'review-ready result');
+  if (raw.outcome !== 'review-ready') {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'outcome' must be 'review-ready'");
+  }
+  return Object.freeze({
+    outcome: 'review-ready' as const,
+    reviewHandle: snapshotBoundedText(raw.reviewHandle, 'reviewHandle', REVIEW_HANDLE_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    reviewBundleSha256: snapshotSha256(raw.reviewBundleSha256, 'reviewBundleSha256', 'MALFORMED_EXECUTE_RESULT'),
+    taskId: snapshotBoundedText(raw.taskId, 'taskId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    assignmentId: snapshotBoundedText(raw.assignmentId, 'assignmentId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    agentId: snapshotBoundedText(raw.agentId, 'agentId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    providerId: snapshotBoundedText(raw.providerId, 'providerId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    workerResult: snapshotExecuteWorkerResult(raw.workerResult),
+    source: snapshotExecuteSource(raw.source),
+    buildTest: snapshotExecuteBuildTest(raw.buildTest),
+    evidenceSha256: snapshotSha256(raw.evidenceSha256, 'evidenceSha256', 'MALFORMED_EXECUTE_RESULT')
+  });
+}
+
+export function snapshotExecuteTerminalLifecycleDto(raw: unknown): ExecuteTerminalLifecycleDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', 'terminal lifecycle result must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_TERMINAL_KEYS, 'MALFORMED_EXECUTE_RESULT', 'terminal lifecycle result');
+  if (typeof raw.outcome !== 'string' || !EXECUTE_TERMINAL_OUTCOMES.includes(raw.outcome as ExecuteTerminalLifecycleDto['outcome'])) {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'outcome' must be blocked, waiting-input, or failed");
+  }
+  const dto: {
+    outcome: ExecuteTerminalLifecycleDto['outcome'];
+    taskId: string;
+    assignmentId: string;
+    lifecycleSha256: string;
+    reviewEvidenceSha256?: string;
+    merge?: AgentHubPublicValue;
+    mergeGate?: AgentHubPublicValue;
+  } = {
+    outcome: raw.outcome as ExecuteTerminalLifecycleDto['outcome'],
+    taskId: snapshotBoundedText(raw.taskId, 'taskId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    assignmentId: snapshotBoundedText(raw.assignmentId, 'assignmentId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    lifecycleSha256: snapshotSha256(raw.lifecycleSha256, 'lifecycleSha256', 'MALFORMED_EXECUTE_RESULT')
+  };
+  if ('reviewEvidenceSha256' in raw) {
+    dto.reviewEvidenceSha256 = snapshotSha256(raw.reviewEvidenceSha256, 'reviewEvidenceSha256', 'MALFORMED_EXECUTE_RESULT');
+  }
+  if ('merge' in raw) {
+    dto.merge = sanitizeEventPayload(raw.merge);
+  }
+  if ('mergeGate' in raw) {
+    dto.mergeGate = sanitizeEventPayload(raw.mergeGate);
+  }
+  return Object.freeze(dto);
+}
+
+export function snapshotExecuteTaskResult(raw: unknown): ExecuteTaskResultDto {
+  if (!isRecord(raw) || typeof raw.outcome !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', 'Execute result must be an object with an outcome discriminator');
+  }
+  if (raw.outcome === 'review-ready') {
+    return snapshotExecuteReviewReadyDto(raw);
+  }
+  if (EXECUTE_TERMINAL_OUTCOMES.includes(raw.outcome as ExecuteTerminalLifecycleDto['outcome'])) {
+    return snapshotExecuteTerminalLifecycleDto(raw);
+  }
+  throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', `Unknown execute outcome '${raw.outcome}'`);
 }
