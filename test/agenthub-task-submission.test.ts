@@ -1042,6 +1042,121 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
       server.close();
     }
   });
+
+  test('malformed TaskDto after POST is ambiguous and retry reuses desktop-task key', { timeout: 5000 }, async () => {
+    const mockTask: TaskDto = {
+      taskId: 'task-replay',
+      projectId: 'p-1',
+      title: 'Implement Task Creation',
+      description: 'Unit test task',
+      requiredCapabilities: ['node'],
+      requiredSpecialties: ['backend'],
+      acceptanceCriteria: ['Tests pass'],
+      complexity: 'MEDIUM',
+      risk: 'LOW',
+      status: 'pending',
+      assignedAgentId: null,
+      assignmentId: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+    const keys: string[] = [];
+    let n = 0;
+    const server = http.createServer((req, res) => {
+      if (req.method !== 'POST' || req.url !== '/api/v1/tasks') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      keys.push(String(req.headers['idempotency-key'] || ''));
+      n++;
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      if (n === 1) {
+        res.end(JSON.stringify({ ok: true, requestId: 'r1', data: { missingTaskId: true } }));
+        return;
+      }
+      res.end(JSON.stringify({ ok: true, requestId: 'r2', data: mockTask }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const connection = {
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
+      syncAuthoritativeState: async () => ({
+        disposition: 'committed',
+        snapshot: { projects: [], agents: [], tasks: [mockTask], assignments: [] }
+      })
+    } as unknown as AgentHubConnection;
+    const submissionService = new AgentHubTaskSubmission(connection);
+    const request = { submissionId: 'sub-malformed-dto', input: validBase };
+    try {
+      const first = await submissionService.submitTask(request);
+      assert.equal(first.status, 'ambiguous');
+      if (first.status === 'ambiguous') assert.equal(first.retryable, true);
+      const retry = await submissionService.submitTask(request);
+      assert.equal(retry.status, 'created');
+      assert.deepEqual(keys, ['desktop-task:sub-malformed-dto', 'desktop-task:sub-malformed-dto']);
+    } finally {
+      submissionService.stop();
+      server.close();
+    }
+  });
+
+  test('malformed JSON/envelope and response overflow after create POST are ambiguous', { timeout: 5000 }, async () => {
+    const cases: Array<{ name: string; write: (res: http.ServerResponse) => void }> = [
+      {
+        name: 'json',
+        write: (res) => {
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end('{not-json');
+        }
+      },
+      {
+        name: 'envelope',
+        write: (res) => {
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, extra: true, requestId: 'r', data: {} }));
+        }
+      },
+      {
+        name: 'overflow',
+        write: (res) => {
+          res.writeHead(201, { 'Content-Type': 'application/json', 'Content-Length': '9437184' });
+          res.end('{"ok":true}');
+        }
+      }
+    ];
+    for (const item of cases) {
+      let posts = 0;
+      const server = http.createServer((req, res) => {
+        if (req.method === 'POST' && req.url === '/api/v1/tasks') {
+          posts++;
+          item.write(res);
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      });
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+      const addr = server.address() as { port: number };
+      const connection = {
+        restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
+        syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+      } as unknown as AgentHubConnection;
+      const submissionService = new AgentHubTaskSubmission(connection);
+      try {
+        const res = await submissionService.submitTask({
+          submissionId: `sub-${item.name}`,
+          input: validBase
+        });
+        assert.equal(res.status, 'ambiguous', item.name);
+        if (res.status === 'ambiguous') assert.equal(res.retryable, true);
+        assert.equal(posts, 1, item.name);
+      } finally {
+        submissionService.stop();
+        server.close();
+      }
+    }
+  });
 });
 
 describe('AgentHub V0.8.3 mutation surface allowlist', () => {

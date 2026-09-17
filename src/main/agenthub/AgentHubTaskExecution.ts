@@ -9,7 +9,7 @@ import {
   snapshotExecuteTaskRequest,
   AgentHubValidationError
 } from './AgentHubTypes';
-import { AgentHubContractError } from './AgentHubRestClient';
+import { AgentHubContractError, isDefinitiveMutationFailure } from './AgentHubRestClient';
 
 interface ExecutionRecord {
   readonly fingerprint: string;
@@ -156,7 +156,7 @@ export class AgentHubTaskExecution {
       }
 
       if (err instanceof AgentHubContractError) {
-        if (err.phase === 'backend' || !err.requestDispatched) {
+        if (isDefinitiveMutationFailure(err)) {
           return failed(err.code, err.message);
         }
         return ambiguous(err.code, err.message);

@@ -9,7 +9,7 @@ import {
   snapshotCreateTaskRequest,
   AgentHubValidationError
 } from './AgentHubTypes';
-import { AgentHubContractError } from './AgentHubRestClient';
+import { AgentHubContractError, isDefinitiveMutationFailure } from './AgentHubRestClient';
 
 interface SubmissionRecord {
   readonly fingerprint: string;
@@ -161,17 +161,17 @@ export class AgentHubTaskSubmission {
       }
 
       if (err instanceof AgentHubContractError) {
-        if (err.code === 'TIMEOUT' || err.code === 'NETWORK_ERROR' || err.code === 'ABORTED') {
-          return ambiguous(err.code, err.message);
+        if (isDefinitiveMutationFailure(err)) {
+          return failed(err.code, err.message);
         }
-        return failed(err.code, err.message);
+        return ambiguous(err.code, err.message);
       }
 
       if (err instanceof AgentHubValidationError) {
         return failed(err.code, err.message);
       }
 
-      return failed('UNEXPECTED_ERROR', (err as Error).message || 'Unexpected task submission failure');
+      return ambiguous('UNEXPECTED_ERROR', (err as Error).message || 'Unexpected task submission failure');
     } finally {
       this.#activeControllers.delete(controller);
     }

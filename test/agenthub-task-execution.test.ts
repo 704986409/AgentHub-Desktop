@@ -386,6 +386,36 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
     assert.equal(accepted.workerResult.notes.length, 128);
     assert.equal(accepted.workerResult.blockers[0], item);
   });
+
+  test('backend-valid worker NUL is preserved exactly and oversize remains rejected', { timeout: 5000 }, () => {
+    const withNul = snapshotExecuteReviewReadyDto(validReviewReady({
+      workerResult: {
+        summary: 'done\0with marker',
+        blockers: ['block\0er'],
+        questions: ['ask\0me'],
+        risks: ['risk\0y'],
+        notes: ['note\0x']
+      }
+    }));
+    assert.equal(withNul.workerResult.summary, 'done\0with marker');
+    assert.equal(withNul.workerResult.blockers[0], 'block\0er');
+    assert.equal(withNul.workerResult.questions[0], 'ask\0me');
+    assert.equal(withNul.workerResult.risks[0], 'risk\0y');
+    assert.equal(withNul.workerResult.notes[0], 'note\0x');
+
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'x'.repeat(8193), blockers: [], questions: [], risks: [], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'ok', blockers: ['y'.repeat(4097)], questions: [], risks: [], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+  });
 });
 
 describe('AgentHub Task Execution service', () => {
@@ -918,6 +948,40 @@ describe('AgentHub Task Execution service', () => {
           assert.equal(res.result.source.changedPaths.length, 4096);
           assert.equal(res.result.workerResult.summary.length, 8192);
         }
+      }
+    } finally {
+      execution.stop();
+      server.close();
+    }
+  });
+
+  test('HTTP 200 review-ready with backend-valid worker NUL is executed', { timeout: 5000 }, async () => {
+    const payload = validReviewReady({
+      workerResult: {
+        summary: 'done\0with marker',
+        blockers: [],
+        questions: [],
+        risks: [],
+        notes: []
+      }
+    });
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(envelope(payload));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const { connection } = stubConnection(`http://127.0.0.1:${addr.port}`);
+    const execution = new AgentHubTaskExecution(connection);
+    try {
+      const res = await execution.executeTask({
+        executionId: 'exec-worker-nul',
+        taskId: 'task-1',
+        input: validInput
+      });
+      assert.equal(res.status, 'executed');
+      if (res.status === 'executed' && res.result.outcome === 'review-ready') {
+        assert.equal(res.result.workerResult.summary, 'done\0with marker');
       }
     } finally {
       execution.stop();

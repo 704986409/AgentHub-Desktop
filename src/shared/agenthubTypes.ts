@@ -814,12 +814,15 @@ function snapshotBoundedChars(
   fieldName: string,
   maxChars: number,
   code: string,
-  nonBlank: boolean
+  nonBlank: boolean,
+  forbidNul = true
 ): string {
   if (typeof value !== 'string') {
     throw new AgentHubValidationError(code, `Field '${fieldName}' must be a string`);
   }
-  rejectIfContainsNul(value, fieldName, code);
+  if (forbidNul) {
+    rejectIfContainsNul(value, fieldName, code);
+  }
   if (nonBlank && value.trim().length === 0) {
     throw new AgentHubValidationError(code, `Field '${fieldName}' must be a non-blank string`);
   }
@@ -834,7 +837,8 @@ function snapshotBoundedCharStringArray(
   fieldName: string,
   maxItems: number,
   maxItemChars: number,
-  code: string
+  code: string,
+  forbidNul = true
 ): readonly string[] {
   if (!Array.isArray(value)) {
     throw new AgentHubValidationError(code, `Field '${fieldName}' must be an array`);
@@ -847,7 +851,9 @@ function snapshotBoundedCharStringArray(
     if (typeof item !== 'string') {
       throw new AgentHubValidationError(code, `Elements in '${fieldName}' must be strings`);
     }
-    rejectIfContainsNul(item, fieldName, code);
+    if (forbidNul) {
+      rejectIfContainsNul(item, fieldName, code);
+    }
     if (item.length > maxItemChars) {
       throw new AgentHubValidationError(code, `Element in '${fieldName}' exceeds maximum length (${maxItemChars} characters)`);
     }
@@ -988,11 +994,11 @@ function snapshotExecuteWorkerResult(raw: unknown): ExecuteWorkerResultDto {
   }
   rejectUnexpectedKeys(raw, ALLOWED_WORKER_RESULT_KEYS, 'MALFORMED_EXECUTE_RESULT', 'workerResult');
   return Object.freeze({
-    summary: snapshotBoundedChars(raw.summary, 'workerResult.summary', WORKER_SUMMARY_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
-    blockers: snapshotBoundedCharStringArray(raw.blockers, 'workerResult.blockers', WORKER_BLOCKERS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT'),
-    questions: snapshotBoundedCharStringArray(raw.questions, 'workerResult.questions', WORKER_QUESTIONS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT'),
-    risks: snapshotBoundedCharStringArray(raw.risks, 'workerResult.risks', WORKER_RISKS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT'),
-    notes: snapshotBoundedCharStringArray(raw.notes, 'workerResult.notes', WORKER_NOTES_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT')
+    summary: snapshotBoundedChars(raw.summary, 'workerResult.summary', WORKER_SUMMARY_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false, false),
+    blockers: snapshotBoundedCharStringArray(raw.blockers, 'workerResult.blockers', WORKER_BLOCKERS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
+    questions: snapshotBoundedCharStringArray(raw.questions, 'workerResult.questions', WORKER_QUESTIONS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
+    risks: snapshotBoundedCharStringArray(raw.risks, 'workerResult.risks', WORKER_RISKS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
+    notes: snapshotBoundedCharStringArray(raw.notes, 'workerResult.notes', WORKER_NOTES_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false)
   });
 }
 

@@ -42,6 +42,10 @@ export class AgentHubContractError extends Error {
   }
 }
 
+export function isDefinitiveMutationFailure(error: AgentHubContractError): boolean {
+  return error.phase === 'backend' || !error.requestDispatched;
+}
+
 /**
  * Validates that an AgentHub base URL is strictly loopback HTTP.
  * Rejects localhost, LAN IPs, 0.0.0.0, HTTPS, credentials, paths, queries, and fragments.
@@ -186,7 +190,10 @@ export class AgentHubRestClient {
     try {
       return snapshotTaskDto(data);
     } catch (err) {
-      throw new AgentHubContractError('MALFORMED_TASK', (err as Error).message);
+      throw new AgentHubContractError('MALFORMED_TASK', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
     }
   }
 

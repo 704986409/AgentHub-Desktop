@@ -1019,7 +1019,8 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks', () => {
     try {
       await assert.rejects(
         () => client.createTask(sampleInput, 'key-bad-dto'),
-        (err: AgentHubContractError) => err.code === 'MALFORMED_TASK'
+        (err: AgentHubContractError) =>
+          err.code === 'MALFORMED_TASK' && err.requestDispatched === true && err.phase === 'response-contract'
       );
     } finally {
       server.close();
