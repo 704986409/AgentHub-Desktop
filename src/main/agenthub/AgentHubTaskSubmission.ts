@@ -2,12 +2,11 @@ import crypto from 'node:crypto';
 import type { AgentHubConnection } from './AgentHubConnection';
 import type {
   CreateTaskInputDto,
-  CreateTaskRequestDto,
   TaskDto,
   TaskSubmissionResult
 } from './AgentHubTypes';
 import {
-  snapshotCreateTaskInput,
+  snapshotCreateTaskRequest,
   AgentHubValidationError
 } from './AgentHubTypes';
 import { AgentHubContractError } from './AgentHubRestClient';
@@ -70,31 +69,29 @@ export class AgentHubTaskSubmission {
   /**
    * Submit a task creation request to AgentHub with strict idempotency and authority guarantees.
    */
-  public async submitTask(request: CreateTaskRequestDto): Promise<TaskSubmissionResult> {
+  public async submitTask(request: unknown): Promise<TaskSubmissionResult> {
     if (this.#stopped) {
       return failed('STOPPED', 'Task submission is unavailable because Desktop is shutting down');
     }
 
-    if (!request || typeof request !== 'object') {
-      return failed('MALFORMED_REQUEST', 'Task submission request must be an object');
+    let submissionId: string;
+    let input: CreateTaskInputDto;
+    try {
+      const validated = snapshotCreateTaskRequest(request);
+      submissionId = validated.submissionId;
+      input = validated.input;
+    } catch (err: unknown) {
+      if (err instanceof AgentHubValidationError) {
+        return failed(err.code, err.message);
+      }
+      return failed('MALFORMED_REQUEST', (err as Error).message || 'Invalid task submission request');
     }
 
-    const { submissionId, input: rawInput } = request;
     if (!isValidSubmissionId(submissionId)) {
       return failed(
         'INVALID_SUBMISSION_ID',
         'Invalid submissionId: must be a non-blank alphanumeric/hyphen string <= 128 chars'
       );
-    }
-
-    let input: CreateTaskInputDto;
-    try {
-      input = snapshotCreateTaskInput(rawInput);
-    } catch (err: unknown) {
-      if (err instanceof AgentHubValidationError) {
-        return failed(err.code, err.message);
-      }
-      return failed('MALFORMED_INPUT', (err as Error).message || 'Invalid task creation input');
     }
 
     const fingerprint = computeInputFingerprint(input);
@@ -141,28 +138,23 @@ export class AgentHubTaskSubmission {
         controller.signal
       );
 
-      // POST proves AgentHub accepted the task. REST /state remains the cache authority.
-      // Never insert the POST TaskDto into the Desktop cache.
-      let snapshot;
-      try {
-        snapshot = await this.#connection.restClient.state(controller.signal);
-      } catch (syncErr: unknown) {
-        return this.#createdWithoutSync(createdTask, syncErr);
+      // POST proves AgentHub accepted the task. Connection owns snapshot commit ordering.
+      const snapshot = await this.#connection.syncAuthoritativeState(controller.signal);
+      if (snapshot !== null) {
+        return {
+          status: 'created',
+          task: createdTask,
+          stateSynchronized: true
+        };
       }
 
-      if (this.#stopped) {
-        return this.#createdWithoutSync(
-          createdTask,
-          new AgentHubContractError('ABORTED', 'Desktop stopped after the task was accepted')
-        );
-      }
-
-      this.#connection.cache.updateSnapshot(snapshot);
-      return {
-        status: 'created',
-        task: createdTask,
-        stateSynchronized: true
-      };
+      return this.#createdWithoutSync(
+        createdTask,
+        new AgentHubContractError(
+          'SYNC_FAILED',
+          'Task was created on AgentHub, but state resync failed'
+        )
+      );
     } catch (err: unknown) {
       if (createdTask) {
         return this.#createdWithoutSync(createdTask, err);
@@ -194,17 +186,6 @@ export class AgentHubTaskSubmission {
       err instanceof Error
         ? err.message
         : 'Task was created on AgentHub, but state resync failed';
-
-    if (!this.#stopped) {
-      const hasSnapshot = this.#connection.getState().snapshot !== null;
-      const current = this.#connection.getState().connection;
-      if (current !== 'disconnected') {
-        this.#connection.cache.setConnectionStatus(hasSnapshot ? 'degraded' : 'connecting', {
-          code,
-          message
-        });
-      }
-    }
 
     return {
       status: 'created',

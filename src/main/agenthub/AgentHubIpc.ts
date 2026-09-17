@@ -3,7 +3,6 @@ import type { AgentHubConnection } from './AgentHubConnection';
 import type {
   AgentHubDesktopState,
   AgentHubStateSnapshot,
-  CreateTaskRequestDto,
   TaskSubmissionResult
 } from './AgentHubTypes';
 import { AgentHubTaskSubmission } from './AgentHubTaskSubmission';
@@ -39,7 +38,7 @@ export function registerAgentHubIpc(
   ipcMain.handle(
     AGENTHUB_IPC_CHANNELS.CREATE_TASK,
     async (_event, request: unknown): Promise<TaskSubmissionResult> => {
-      return submission.submitTask(request as CreateTaskRequestDto);
+      return submission.submitTask(request);
     }
   );
 

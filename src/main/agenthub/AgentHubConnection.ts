@@ -30,6 +30,8 @@ export class AgentHubConnection {
   #syncGeneration: number | null = null;
   #pendingSyncGeneration: number | null = null;
   #pendingReconnectGeneration: number | null = null;
+  #stateRequestSequence = 0;
+  #latestCommittedSequence = 0;
 
   constructor(options: AgentHubConnectionOptions = {}) {
     this.#cache = options.cache ?? new AgentHubStateCache();
@@ -112,6 +114,62 @@ export class AgentHubConnection {
       return null;
     }
     return this.#doSync(this.#generation);
+  }
+
+  /**
+   * Mutation follow-up authoritative /state sync.
+   * Connection is the sole production owner of snapshot commits.
+   * Older in-flight /state responses cannot overwrite a newer committed snapshot.
+   * Not exposed to Renderer/Preload.
+   */
+  public async syncAuthoritativeState(signal?: AbortSignal): Promise<AgentHubStateSnapshot | null> {
+    if (this.#isLifecycleStopped()) {
+      return null;
+    }
+
+    const sequence = ++this.#stateRequestSequence;
+    try {
+      const snapshot = await this.#restClient.state(signal);
+      return this.#commitSnapshotIfCurrent(sequence, snapshot);
+    } catch (err) {
+      if (this.#isLifecycleStopped()) {
+        return null;
+      }
+      if (this.#latestCommittedSequence > sequence) {
+        return this.#cache.getState().snapshot;
+      }
+      this.#markAuthoritativeSyncFailure(err);
+      return null;
+    }
+  }
+
+  #isLifecycleStopped(): boolean {
+    return !this.#isStarted && this.#generation > 0;
+  }
+
+  #commitSnapshotIfCurrent(sequence: number, snapshot: AgentHubStateSnapshot): AgentHubStateSnapshot | null {
+    if (this.#isLifecycleStopped()) {
+      return null;
+    }
+    if (sequence < this.#latestCommittedSequence) {
+      return this.#cache.getState().snapshot;
+    }
+    this.#cache.updateSnapshot(snapshot);
+    this.#latestCommittedSequence = sequence;
+    return snapshot;
+  }
+
+  #markAuthoritativeSyncFailure(err: unknown): void {
+    if (!this.#isStarted || this.#isLifecycleStopped()) {
+      return;
+    }
+    const code = err instanceof AgentHubContractError ? err.code : 'SYNC_FAILED';
+    const msg = (err as Error).message;
+    const hasSnapshot = this.#cache.getState().snapshot !== null;
+    this.#cache.setConnectionStatus(hasSnapshot ? 'degraded' : 'connecting', {
+      code,
+      message: msg
+    });
   }
 
   #setupRealtimeListeners(): void {
@@ -212,10 +270,11 @@ export class AgentHubConnection {
       if (!this.#isStarted || gen !== this.#generation) return;
       this.#cache.setHealth(health);
 
-      // 2. Initial state snapshot sync
+      // 2. Initial state snapshot sync (Connection-owned sequenced commit)
+      const sequence = ++this.#stateRequestSequence;
       const snapshot = await this.#restClient.state(signal);
       if (!this.#isStarted || gen !== this.#generation) return;
-      this.#cache.updateSnapshot(snapshot);
+      this.#commitSnapshotIfCurrent(sequence, snapshot);
 
       // 3. Initiate WS connection
       // Status remains 'connecting' until WS hello is confirmed
@@ -295,6 +354,7 @@ export class AgentHubConnection {
 
     this.#syncGeneration = gen;
     const signal = this.#activeAbortController?.signal;
+    const sequence = ++this.#stateRequestSequence;
 
     try {
       const [health, snapshot] = await Promise.all([
@@ -305,7 +365,7 @@ export class AgentHubConnection {
       if (!this.#isStarted || gen !== this.#generation) return null;
 
       this.#cache.setHealth(health);
-      this.#cache.updateSnapshot(snapshot);
+      const committed = this.#commitSnapshotIfCurrent(sequence, snapshot);
 
       // connected requires BOTH valid REST snapshot AND valid open WS hello
       if (this.#realtimeClient.isConnected) {
@@ -316,7 +376,7 @@ export class AgentHubConnection {
           message: 'REST snapshot succeeded but realtime connection is disconnected'
         });
       }
-      return snapshot;
+      return committed;
     } catch (err) {
       if (!this.#isStarted || gen !== this.#generation) return null;
 

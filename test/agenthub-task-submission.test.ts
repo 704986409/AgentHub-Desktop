@@ -9,10 +9,12 @@ import { AgentHubRestClient } from '../src/main/agenthub/AgentHubRestClient';
 import { AgentHubTaskSubmission } from '../src/main/agenthub/AgentHubTaskSubmission';
 import {
   snapshotCreateTaskInput,
+  snapshotCreateTaskRequest,
   AgentHubValidationError,
   type CreateTaskInputDto,
   type TaskDto
 } from '../src/shared/agenthubTypes';
+import { TaskSubmissionIdLifecycle } from '../src/shared/agenthubSubmissionLifecycle';
 
 describe('AgentHub Runtime Create Task Input Validation', () => {
   const validBase: CreateTaskInputDto = {
@@ -734,6 +736,149 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
       server.close();
     }
   });
+
+  test('POST + WS invalidation: delayed older mutation /state cannot roll back newer committed snapshot', { timeout: 8000 }, async () => {
+    const oldTask: TaskDto = {
+      taskId: 'task-state-old',
+      projectId: 'p-1',
+      title: 'Implement Task Creation',
+      description: 'Unit test task',
+      requiredCapabilities: ['node'],
+      requiredSpecialties: ['backend'],
+      acceptanceCriteria: ['Tests pass'],
+      complexity: 'MEDIUM',
+      risk: 'LOW',
+      status: 'pending',
+      assignedAgentId: null,
+      assignmentId: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+    const newTask: TaskDto = { ...oldTask, taskId: 'task-state-new', status: 'ASSIGNED' };
+    const postTask: TaskDto = { ...oldTask, taskId: 'task-from-post', status: 'CREATED' };
+
+    let holdAResolve: (() => void) | null = null;
+    const holdA = new Promise<void>((r) => {
+      holdAResolve = r;
+    });
+    let payload: 'initial' | 'old' | 'new' = 'initial';
+    let postSeen = false;
+    let postStateStarts = 0;
+    let firstPostStateStarted!: () => void;
+    const firstPostState = new Promise<void>((r) => {
+      firstPostStateStarted = r;
+    });
+    let wsClient: import('ws').WebSocket | null = null;
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+      if (req.url === '/api/v1/state') {
+        const capturedHold = postSeen && payload === 'old' ? holdA : null;
+        const capturedPayload = payload;
+        if (postSeen) {
+          postStateStarts++;
+          if (postStateStarts === 1) firstPostStateStarted();
+        }
+        void (async () => {
+          if (capturedHold) await capturedHold;
+          const tasks =
+            capturedPayload === 'old' ? [oldTask] : capturedPayload === 'new' ? [newTask] : [];
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            requestId: `s-${capturedPayload}`,
+            data: { projects: [], agents: [], tasks, assignments: [] }
+          }));
+        })();
+        return;
+      }
+      if (req.url === '/api/v1/tasks' && req.method === 'POST') {
+        postSeen = true;
+        payload = 'old';
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'c', data: postTask }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      wsClient = ws;
+      ws.send(JSON.stringify({ type: 'hello', version: 1, apiVersion: 'v1' }));
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    const submissionService = new AgentHubTaskSubmission(connection);
+
+    try {
+      await connection.start();
+      const startWait = Date.now();
+      while (Date.now() - startWait < 2000) {
+        if (connection.getState().connection === 'connected') break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.equal(connection.getState().connection, 'connected');
+      await new Promise((r) => setTimeout(r, 80));
+
+      const pending = submissionService.submitTask({
+        submissionId: 'sub-ws-race',
+        input: validBase
+      });
+
+      await firstPostState;
+      payload = 'new';
+      wsClient?.send(JSON.stringify({
+        type: 'event',
+        version: 1,
+        event: {
+          eventId: 'evt-task-created',
+          eventType: 'task.created',
+          timestamp: '2026-01-01T00:00:10Z',
+          projectId: 'p-1',
+          agentId: null,
+          taskId: 'task-state-new',
+          assignmentId: null,
+          actor: null,
+          oldStatus: null,
+          newStatus: 'ASSIGNED',
+          payload: {}
+        }
+      }));
+
+      const newWait = Date.now();
+      while (Date.now() - newWait < 2000) {
+        if (connection.getState().snapshot?.tasks.some((t) => t.taskId === 'task-state-new')) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.equal(connection.getState().snapshot?.tasks[0]?.taskId, 'task-state-new');
+
+      holdAResolve?.();
+      const res = await pending;
+      assert.equal(res.status, 'created');
+      if (res.status === 'created') {
+        assert.equal(res.task.taskId, 'task-from-post');
+        assert.equal(res.stateSynchronized, true);
+      }
+      const tasks = connection.getState().snapshot?.tasks ?? [];
+      assert.equal(tasks.some((t) => t.taskId === 'task-state-new'), true);
+      assert.equal(tasks.some((t) => t.taskId === 'task-state-old'), false);
+      assert.equal(connection.getState().connection, 'connected');
+    } finally {
+      submissionService.stop();
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
 });
 
 describe('AgentHub V0.8.2 mutation surface allowlist', () => {
@@ -769,5 +914,128 @@ describe('AgentHub V0.8.2 mutation surface allowlist', () => {
     assert.equal(apiBlock.includes('execute'), false);
     assert.equal(apiBlock.includes('review'), false);
     assert.equal(apiBlock.includes('merge'), false);
+  });
+
+  test('TaskSubmission does not own snapshot fetch/commit; Connection is the only production owner', { timeout: 5000 }, () => {
+    const submissionSrc = fs.readFileSync(path.join(process.cwd(), 'src/main/agenthub/AgentHubTaskSubmission.ts'), 'utf8');
+    const connectionSrc = fs.readFileSync(path.join(process.cwd(), 'src/main/agenthub/AgentHubConnection.ts'), 'utf8');
+    assert.equal(submissionSrc.includes('cache.updateSnapshot'), false);
+    assert.equal(submissionSrc.includes('restClient.state'), false);
+    assert.match(submissionSrc, /syncAuthoritativeState/);
+    assert.match(connectionSrc, /syncAuthoritativeState\(/);
+    assert.match(connectionSrc, /#commitSnapshotIfCurrent/);
+    assert.match(connectionSrc, /#latestCommittedSequence/);
+  });
+});
+
+describe('AgentHub CreateTask IPC request envelope', () => {
+  const validBase: CreateTaskInputDto = {
+    projectId: 'p-1',
+    title: 'Valid Task Title',
+    description: 'A valid description',
+    requiredCapabilities: ['cap-1', 'cap-2'],
+    requiredSpecialties: ['spec-1'],
+    acceptanceCriteria: ['Must pass tests', 'Must be fast'],
+    complexity: 'MEDIUM',
+    risk: 'LOW'
+  };
+
+  test('valid { submissionId, input } accepted; extra/header/path/idempotency keys rejected before HTTP', { timeout: 5000 }, () => {
+    const valid = snapshotCreateTaskRequest({
+      submissionId: 'sub-envelope-1',
+      input: validBase
+    });
+    assert.equal(valid.submissionId, 'sub-envelope-1');
+    assert.equal(valid.input.title, validBase.title);
+    assert.ok(Object.isFrozen(valid));
+
+    const extraCases = [
+      { submissionId: 's1', input: validBase, idempotencyKey: 'desktop-task:s1' },
+      { submissionId: 's1', input: validBase, path: '/api/v1/tasks' },
+      { submissionId: 's1', input: validBase, headers: { 'Idempotency-Key': 'x' } },
+      { submissionId: 's1', input: validBase, url: 'http://127.0.0.1:3210' },
+      { submissionId: 's1', input: validBase, method: 'POST' },
+      { submissionId: 's1', input: validBase, execute: true },
+      { submissionId: 's1', input: validBase, review: true },
+      { submissionId: 's1', input: validBase, merge: true }
+    ];
+    for (const raw of extraCases) {
+      assert.throws(
+        () => snapshotCreateTaskRequest(raw),
+        (err: AgentHubValidationError) => err.code === 'MALFORMED_REQUEST'
+      );
+    }
+
+    assert.throws(() => snapshotCreateTaskRequest(null), (err: AgentHubValidationError) => err.code === 'MALFORMED_REQUEST');
+    assert.throws(() => snapshotCreateTaskRequest([]), (err: AgentHubValidationError) => err.code === 'MALFORMED_REQUEST');
+    assert.throws(() => snapshotCreateTaskRequest('nope'), (err: AgentHubValidationError) => err.code === 'MALFORMED_REQUEST');
+  });
+
+  test('rejected envelopes never send HTTP', { timeout: 5000 }, async () => {
+    let hit = false;
+    const server = http.createServer((_req, res) => {
+      hit = true;
+      res.writeHead(500);
+      res.end();
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    const submissionService = new AgentHubTaskSubmission(connection);
+    try {
+      const extra = await submissionService.submitTask({
+        submissionId: 'sub-extra',
+        input: validBase,
+        idempotencyKey: 'injected'
+      } as any);
+      assert.equal(extra.status, 'failed');
+      if (extra.status === 'failed') {
+        assert.equal(extra.error.code, 'MALFORMED_REQUEST');
+      }
+      const empty = await submissionService.submitTask(null);
+      assert.equal(empty.status, 'failed');
+      assert.equal(hit, false);
+    } finally {
+      submissionService.stop();
+      connection.stop();
+      server.close();
+    }
+  });
+});
+
+describe('TaskSubmissionIdLifecycle', () => {
+  test('ambiguous retry keeps ID; created/failed rotate; edit after ambiguous rotates', { timeout: 5000 }, () => {
+    let n = 0;
+    const life = new TaskSubmissionIdLifecycle(() => `id-${++n}`);
+    assert.equal(life.id, 'id-1');
+
+    const first = life.beginSubmit();
+    assert.equal(first, 'id-1');
+    life.onResult('ambiguous');
+    assert.equal(life.id, 'id-1');
+    assert.equal(life.beginRetry(), 'id-1');
+    life.onResult('ambiguous');
+    assert.equal(life.id, 'id-1');
+
+    const createdLife = new TaskSubmissionIdLifecycle(() => `id-${++n}`);
+    const createdId = createdLife.beginSubmit();
+    createdLife.onResult('created');
+    assert.notEqual(createdLife.id, createdId);
+    const nextAfterCreated = createdLife.beginSubmit();
+    assert.equal(nextAfterCreated, createdLife.id);
+    assert.notEqual(nextAfterCreated, createdId);
+
+    const failedLife = new TaskSubmissionIdLifecycle(() => `id-${++n}`);
+    const failedId = failedLife.beginSubmit();
+    failedLife.onResult('failed');
+    assert.notEqual(failedLife.id, failedId);
+    const nextAfterFailed = failedLife.beginSubmit();
+    assert.notEqual(nextAfterFailed, failedId);
+
+    const editLife = new TaskSubmissionIdLifecycle(() => `id-${++n}`);
+    const ambId = editLife.beginSubmit();
+    editLife.onResult('ambiguous');
+    const afterEdit = editLife.onEdit();
+    assert.notEqual(afterEdit, ambId);
   });
 });

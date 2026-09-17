@@ -28,7 +28,9 @@ AgentHub remains the sole authority for task ID, lifecycle status, assignment, r
 - **Base Tag**: `V0.8.1D`
 - **Base Commit**: `db06002da92771121f77008a21bd3dbcbb9bd84c`
 - **Target Tag**: `V0.8.2`
-- **Status**: Local verification PASS. GitHub CI requires push of this commit.
+- **Status**: Completed, verified, sealed at tag `V0.8.2`
+
+Historical CI addendum (this `main` copy only; tag `V0.8.2` blob is not rewritten): GitHub Actions run `35271690610` later completed with Typecheck PASS, AgentHub focused tests PASS, and Build PASS. Tag `V0.8.2` and `main` both pointed at `923483e3946cd0b4b6bcb1b63e4b082ff91d9109`.
 
 ---
 
@@ -120,7 +122,7 @@ Main derives `Idempotency-Key: desktop-task:<submissionId>`. Renderer cannot sup
 | typecheck PASS | PASS | PASS |
 | build PASS | PASS | PASS |
 | `git diff --check` | PASS | PASS |
-| GitHub CI PASS | PASS | pending push (local gates identical to CI: typecheck, test:agenthub, check:links, build) |
+| GitHub CI PASS | PASS | PASS (run 35271690610; recorded after the V0.8.2 tag landed) |
 
 ---
 

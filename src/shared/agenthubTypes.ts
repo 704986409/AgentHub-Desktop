@@ -602,3 +602,32 @@ export function snapshotCreateTaskInput(raw: unknown): CreateTaskInputDto {
     risk: raw.risk as TaskRisk
   });
 }
+
+const ALLOWED_CREATE_TASK_REQUEST_KEYS = new Set(['submissionId', 'input']);
+
+export function snapshotCreateTaskRequest(raw: unknown): CreateTaskRequestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', 'Task submission request must be an object');
+  }
+
+  for (const key of Object.keys(raw)) {
+    if (!ALLOWED_CREATE_TASK_REQUEST_KEYS.has(key)) {
+      throw new AgentHubValidationError(
+        'MALFORMED_REQUEST',
+        `Unexpected key in task submission request: '${key}'`
+      );
+    }
+  }
+
+  if (!('submissionId' in raw) || typeof raw.submissionId !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'submissionId' must be a string");
+  }
+  if (!('input' in raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'input' is required");
+  }
+
+  return Object.freeze({
+    submissionId: raw.submissionId,
+    input: snapshotCreateTaskInput(raw.input)
+  });
+}

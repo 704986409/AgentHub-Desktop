@@ -8,6 +8,7 @@ import {
   type TaskRisk,
   type CreateTaskInputDto
 } from '@shared/agenthubTypes';
+import { TaskSubmissionIdLifecycle } from '@shared/agenthubSubmissionLifecycle';
 
 interface AgentHubTaskModalProps {
   isOpen: boolean;
@@ -27,7 +28,8 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
   const [specialtiesRaw, setSpecialtiesRaw] = useState('');
   const [criteriaRaw, setCriteriaRaw] = useState('');
 
-  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
+  const lifecycleRef = React.useRef(new TaskSubmissionIdLifecycle());
+  const [submissionId, setSubmissionId] = useState(lifecycleRef.current.id);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'created' | 'ambiguous' | 'failed'>('idle');
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
@@ -45,7 +47,8 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
 
   const onFieldChange = <T,>(setter: (v: T) => void, val: T) => {
     if (status === 'ambiguous' || status === 'failed' || status === 'created') {
-      setSubmissionId(crypto.randomUUID());
+      lifecycleRef.current.onEdit();
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('idle');
       setErrorMessage(null);
       setWarningMessage(null);
@@ -91,26 +94,36 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
     setErrorMessage(null);
     setWarningMessage(null);
     setLastSubmittedInput(input);
+    const effectiveSubmissionId = lifecycleRef.current.beginSubmit();
+    setSubmissionId(effectiveSubmissionId);
 
     let result;
     try {
-      result = await submitTask({ submissionId, input });
+      result = await submitTask({ submissionId: effectiveSubmissionId, input });
     } catch (err: any) {
+      lifecycleRef.current.onResult('failed');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('failed');
       setErrorMessage(err?.message || 'Task submission failed');
       return;
     }
 
     if (result.status === 'created') {
+      lifecycleRef.current.onResult('created');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('created');
       setCreatedTaskId(result.task.taskId);
       if (!result.stateSynchronized && result.warning) {
         setWarningMessage(`Warning [${result.warning.code}]: ${result.warning.message}`);
       }
     } else if (result.status === 'ambiguous') {
+      lifecycleRef.current.onResult('ambiguous');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('ambiguous');
       setErrorMessage(`[${result.error.code}] ${result.error.message} (Ambiguous outcome: server may or may not have committed)`);
     } else {
+      lifecycleRef.current.onResult('failed');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('failed');
       setErrorMessage(`[${result.error.code}] ${result.error.message}`);
     }
@@ -121,27 +134,37 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
     setStatus('submitting');
     setErrorMessage(null);
     setWarningMessage(null);
+    const effectiveSubmissionId = lifecycleRef.current.beginRetry();
+    setSubmissionId(effectiveSubmissionId);
 
     // Reuse EXACT same submissionId and normalized body
     let result;
     try {
-      result = await submitTask({ submissionId, input: lastSubmittedInput });
+      result = await submitTask({ submissionId: effectiveSubmissionId, input: lastSubmittedInput });
     } catch (err: any) {
+      lifecycleRef.current.onResult('failed');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('failed');
       setErrorMessage(err?.message || 'Task retry failed');
       return;
     }
 
     if (result.status === 'created') {
+      lifecycleRef.current.onResult('created');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('created');
       setCreatedTaskId(result.task.taskId);
       if (!result.stateSynchronized && result.warning) {
         setWarningMessage(`Warning [${result.warning.code}]: ${result.warning.message}`);
       }
     } else if (result.status === 'ambiguous') {
+      lifecycleRef.current.onResult('ambiguous');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('ambiguous');
       setErrorMessage(`[${result.error.code}] ${result.error.message}`);
     } else {
+      lifecycleRef.current.onResult('failed');
+      setSubmissionId(lifecycleRef.current.id);
       setStatus('failed');
       setErrorMessage(`[${result.error.code}] ${result.error.message}`);
     }
