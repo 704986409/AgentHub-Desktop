@@ -19,6 +19,8 @@ export class AgentHubConnection {
   readonly #cache: AgentHubStateCache;
 
   #isStarted = false;
+  #generation = 0;
+  #activeAbortController: AbortController | null = null;
   #retryCount = 0;
   #reconnectTimer: NodeJS.Timeout | null = null;
   #debounceTimer: NodeJS.Timeout | null = null;
@@ -57,48 +59,91 @@ export class AgentHubConnection {
       return;
     }
     this.#isStarted = true;
+    this.#generation++;
+    const currentGen = this.#generation;
+    this.#activeAbortController = new AbortController();
     this.#retryCount = 0;
     this.#cache.setConnectionStatus('connecting');
 
-    await this.#attemptConnect();
+    await this.#attemptConnect(currentGen);
   }
 
   /**
-   * Stop the connection lifecycle and release all timers and sockets.
+   * Stop the connection lifecycle, abort in-flight REST, clear timers, and close sockets.
+   * Prevents any pending async results from mutating state or resurrecting connection.
    */
   public stop(): void {
     this.#isStarted = false;
+    this.#generation++;
     this.#clearTimers();
+
+    if (this.#activeAbortController) {
+      try {
+        this.#activeAbortController.abort();
+      } catch {
+        // Ignore abort errors
+      }
+      this.#activeAbortController = null;
+    }
+
     this.#realtimeClient.stop();
+    this.#isSyncing = false;
+    this.#hasPendingSync = false;
     this.#cache.setConnectionStatus('disconnected');
   }
 
   /**
    * Manually trigger a fresh snapshot sync.
+   * If the connection lifecycle is stopped, does nothing and returns null.
    */
   public async refresh(): Promise<AgentHubStateSnapshot | null> {
-    return this.#doSync();
+    if (!this.#isStarted) {
+      return null;
+    }
+    return this.#doSync(this.#generation);
   }
 
   #setupRealtimeListeners(): void {
     this.#realtimeClient.on('hello', () => {
+      const gen = this.#generation;
+      if (!this.#isStarted || gen !== this.#generation) return;
+
       this.#retryCount = 0;
-      // On successful WS handshake, trigger snapshot sync
-      this.#scheduleResync(0);
+      // On valid WS handshake: if we already have snapshot, mark connected
+      if (this.#cache.getState().snapshot) {
+        this.#cache.setConnectionStatus('connected');
+      }
+      this.#scheduleResync(0, gen);
+    });
+
+    this.#realtimeClient.on('incompatible_hello', (err: Error) => {
+      if (!this.#isStarted) return;
+      const hasSnapshot = this.#cache.getState().snapshot !== null;
+      this.#cache.setConnectionStatus(hasSnapshot ? 'degraded' : 'connecting', {
+        code: 'INCOMPATIBLE_HELLO',
+        message: err.message
+      });
+      this.#scheduleReconnect(this.#generation);
     });
 
     this.#realtimeClient.on('event', (evt) => {
+      const gen = this.#generation;
+      if (!this.#isStarted || gen !== this.#generation) return;
+
       this.#cache.recordEventTimestamp(evt.timestamp);
       // Coalesced REST resync: WS event is just an invalidation notification
-      this.#scheduleResync(RESYNC_DEBOUNCE_MS);
+      this.#scheduleResync(RESYNC_DEBOUNCE_MS, gen);
     });
 
     this.#realtimeClient.on('close', (_code: number, reason: string, wasOpen: boolean) => {
-      if (!this.#isStarted) return;
+      const gen = this.#generation;
+      if (!this.#isStarted || gen !== this.#generation) return;
 
       const currentStatus = this.#cache.getState().connection;
-      // If we previously had a connected session, state is degraded until reconnected
-      if (wasOpen || currentStatus === 'connected') {
+      const hasSnapshot = this.#cache.getState().snapshot !== null;
+
+      // If we had an open session or currently hold cached data, state is degraded
+      if (wasOpen || currentStatus === 'connected' || hasSnapshot) {
         this.#cache.setConnectionStatus('degraded', {
           code: 'WS_CLOSED',
           message: reason || 'Realtime connection closed by server'
@@ -107,7 +152,7 @@ export class AgentHubConnection {
         this.#cache.setConnectionStatus('connecting');
       }
 
-      this.#scheduleReconnect();
+      this.#scheduleReconnect(gen);
     });
 
     this.#realtimeClient.on('error', (err: Error) => {
@@ -117,22 +162,26 @@ export class AgentHubConnection {
     });
   }
 
-  async #attemptConnect(): Promise<void> {
-    if (!this.#isStarted) return;
+  async #attemptConnect(gen: number): Promise<void> {
+    if (!this.#isStarted || gen !== this.#generation) return;
+    const signal = this.#activeAbortController?.signal;
 
     try {
       // 1. Initial health check via REST
-      const health = await this.#restClient.health();
+      const health = await this.#restClient.health(signal);
+      if (!this.#isStarted || gen !== this.#generation) return;
       this.#cache.setHealth(health);
 
       // 2. Initial state snapshot sync
-      const snapshot = await this.#restClient.state();
+      const snapshot = await this.#restClient.state(signal);
+      if (!this.#isStarted || gen !== this.#generation) return;
       this.#cache.updateSnapshot(snapshot);
 
       // 3. Initiate WS connection
+      // Status remains 'connecting' until WS hello is confirmed
       this.#realtimeClient.connect();
     } catch (err) {
-      if (!this.#isStarted) return;
+      if (!this.#isStarted || gen !== this.#generation) return;
       const code = err instanceof AgentHubContractError ? err.code : 'CONN_FAILED';
       const msg = (err as Error).message;
 
@@ -142,28 +191,28 @@ export class AgentHubConnection {
         message: msg
       });
 
-      this.#scheduleReconnect();
+      this.#scheduleReconnect(gen);
     }
   }
 
-  #scheduleReconnect(): void {
-    if (!this.#isStarted || this.#reconnectTimer) return;
+  #scheduleReconnect(gen: number): void {
+    if (!this.#isStarted || gen !== this.#generation || this.#reconnectTimer) return;
 
     const delay = BACKOFF_DELAYS_MS[Math.min(this.#retryCount, BACKOFF_DELAYS_MS.length - 1)];
     this.#retryCount++;
 
     this.#reconnectTimer = setTimeout(async () => {
       this.#reconnectTimer = null;
-      if (!this.#isStarted) return;
+      if (!this.#isStarted || gen !== this.#generation) return;
 
       if (!this.#realtimeClient.isConnected) {
-        await this.#attemptConnect();
+        await this.#attemptConnect(gen);
       }
     }, delay);
   }
 
-  #scheduleResync(delayMs: number): void {
-    if (!this.#isStarted) return;
+  #scheduleResync(delayMs: number, gen: number): void {
+    if (!this.#isStarted || gen !== this.#generation) return;
 
     if (this.#debounceTimer) {
       clearTimeout(this.#debounceTimer);
@@ -172,35 +221,60 @@ export class AgentHubConnection {
 
     this.#debounceTimer = setTimeout(async () => {
       this.#debounceTimer = null;
-      await this.#doSync();
+      await this.#doSync(gen);
     }, delayMs);
   }
 
-  async #doSync(): Promise<AgentHubStateSnapshot | null> {
+  async #doSync(gen: number): Promise<AgentHubStateSnapshot | null> {
+    if (!this.#isStarted || gen !== this.#generation) return null;
+
     if (this.#isSyncing) {
       this.#hasPendingSync = true;
       return null;
     }
 
     this.#isSyncing = true;
+    const signal = this.#activeAbortController?.signal;
+
     try {
       const [health, snapshot] = await Promise.all([
-        this.#restClient.health(),
-        this.#restClient.state()
+        this.#restClient.health(signal),
+        this.#restClient.state(signal)
       ]);
+
+      if (!this.#isStarted || gen !== this.#generation) return null;
 
       this.#cache.setHealth(health);
       this.#cache.updateSnapshot(snapshot);
+
+      // connected requires BOTH valid REST snapshot AND valid open WS hello
+      if (this.#realtimeClient.isConnected) {
+        this.#cache.setConnectionStatus('connected');
+      } else {
+        this.#cache.setConnectionStatus('degraded', {
+          code: 'WS_DISCONNECTED',
+          message: 'REST snapshot succeeded but realtime connection is disconnected'
+        });
+      }
       return snapshot;
     } catch (err) {
+      if (!this.#isStarted || gen !== this.#generation) return null;
+
       const code = err instanceof AgentHubContractError ? err.code : 'SYNC_FAILED';
-      this.#cache.setError(code, (err as Error).message);
+      const msg = (err as Error).message;
+
+      const hasSnapshot = this.#cache.getState().snapshot !== null;
+      // Authoritative resync failure downgrades to degraded (preserving last snapshot)
+      this.#cache.setConnectionStatus(hasSnapshot ? 'degraded' : 'connecting', {
+        code,
+        message: msg
+      });
       return null;
     } finally {
       this.#isSyncing = false;
-      if (this.#hasPendingSync && this.#isStarted) {
+      if (this.#hasPendingSync && this.#isStarted && gen === this.#generation) {
         this.#hasPendingSync = false;
-        this.#scheduleResync(RESYNC_DEBOUNCE_MS);
+        this.#scheduleResync(RESYNC_DEBOUNCE_MS, gen);
       }
     }
   }

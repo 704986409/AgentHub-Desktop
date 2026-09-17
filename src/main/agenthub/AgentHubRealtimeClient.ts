@@ -5,6 +5,7 @@ import type {
   AgentHubWsHelloMessage,
   AgentHubWsServerMessage
 } from './AgentHubTypes';
+import { snapshotEventDto } from './AgentHubTypes';
 import { AgentHubContractError, validateAgentHubBaseUrl } from './AgentHubRestClient';
 
 export class AgentHubRealtimeClient extends EventEmitter {
@@ -92,7 +93,7 @@ export class AgentHubRealtimeClient extends EventEmitter {
     try {
       parsed = JSON.parse(raw);
     } catch {
-      // Malformed frame: ignore or emit warning
+      // Malformed frame: fail closed
       return;
     }
 
@@ -100,22 +101,29 @@ export class AgentHubRealtimeClient extends EventEmitter {
     const msg = parsed as Partial<AgentHubWsServerMessage>;
 
     if (!this.#helloReceived) {
-      // First frame must be hello
-      if (msg.type === 'hello' && msg.version === 1) {
+      // First frame must be hello with version 1 and apiVersion 'v1'
+      if (msg.type === 'hello' && msg.version === 1 && msg.apiVersion === 'v1') {
         this.#helloReceived = true;
         this.emit('hello', msg as AgentHubWsHelloMessage);
       } else {
-        // Incompatible hello version: terminate socket
+        // Incompatible hello: terminate socket and notify
+        const err = new AgentHubContractError(
+          'INCOMPATIBLE_HELLO',
+          `Incompatible hello frame (expected version: 1, apiVersion: 'v1'): ${raw}`
+        );
         this.stop();
-        this.emit('error', new AgentHubContractError('INCOMPATIBLE_HELLO', `Incompatible hello frame: ${raw}`));
+        this.emit('error', err);
+        this.emit('incompatible_hello', err);
       }
       return;
     }
 
     if (msg.type === 'event' && msg.version === 1 && msg.event && typeof msg.event === 'object') {
-      const evt = msg.event as AgentHubEventDto;
-      if (typeof evt.eventId === 'string' && typeof evt.eventType === 'string') {
+      try {
+        const evt = snapshotEventDto(msg.event);
         this.emit('event', evt);
+      } catch {
+        // Malformed event: fail-closed, do not mutate state
       }
     }
   }

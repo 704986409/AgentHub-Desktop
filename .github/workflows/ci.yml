@@ -20,6 +20,8 @@ jobs:
         run: npm ci
       - name: Typecheck (node + web)
         run: npm run typecheck
+      - name: AgentHub focused test suite
+        run: npm run test:agenthub
       # Release gate: every advertised download link and docs version string must
       # match package.json. A version left behind in RELEASE.md / docs turns the
       # download buttons into 404s the moment the next release ships — this catches

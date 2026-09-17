@@ -32,7 +32,7 @@ export class AgentHubStateCache extends EventEmitter {
     this.#state = {
       ...this.#state,
       connection: status,
-      lastError: error ?? (status === 'connected' ? null : this.#state.lastError)
+      lastError: error !== undefined ? error : (status === 'connected' ? null : this.#state.lastError)
     };
     this.emit('change', this.#state);
   }
@@ -47,6 +47,7 @@ export class AgentHubStateCache extends EventEmitter {
 
   /**
    * Atomically replace the snapshot from an authoritative REST response.
+   * Does NOT alter transport connection status.
    */
   public updateSnapshot(snapshot: AgentHubStateSnapshot): void {
     const now = new Date().toISOString();
@@ -54,7 +55,6 @@ export class AgentHubStateCache extends EventEmitter {
       ...this.#state,
       snapshot,
       lastSyncAt: now,
-      connection: 'connected',
       lastError: null
     };
     this.emit('change', this.#state);

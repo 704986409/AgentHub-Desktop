@@ -6,7 +6,7 @@ import { AgentHubRealtimeClient } from '../src/main/agenthub/AgentHubRealtimeCli
 import { AgentHubContractError } from '../src/main/agenthub/AgentHubRestClient';
 
 describe('AgentHubRealtimeClient', () => {
-  test('connects, receives hello, receives events, and sends zero outbound messages', async () => {
+  test('connects, receives hello with apiVersion v1, receives events, and sends zero outbound messages', async () => {
     const server = http.createServer();
     const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
 
@@ -19,11 +19,11 @@ describe('AgentHubRealtimeClient', () => {
         clientSentMessages++;
       });
 
-      // 1. Send valid hello frame
+      // 1. Send valid hello frame according to backend contract (version 1, apiVersion 'v1')
       ws.send(JSON.stringify({
         type: 'hello',
         version: 1,
-        apiVersion: '0.7.0'
+        apiVersion: 'v1'
       }));
     });
 
@@ -39,7 +39,7 @@ describe('AgentHubRealtimeClient', () => {
       client.connect();
 
       const hello = await helloPromise;
-      assert.equal(hello.apiVersion, '0.7.0');
+      assert.equal(hello.apiVersion, 'v1');
       assert.equal(client.isConnected, true);
 
       // 2. Server sends an event
@@ -75,37 +75,42 @@ describe('AgentHubRealtimeClient', () => {
     }
   });
 
-  test('rejects incompatible hello handshake and terminates socket', async () => {
-    const server = http.createServer();
-    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+  test('rejects incompatible hello handshakes (version!=1, apiVersion!=v1, missing apiVersion, event before hello)', async () => {
+    const incompatibleFixtures = [
+      { type: 'hello', version: 2, apiVersion: 'v1' }, // version 2
+      { type: 'hello', version: 1, apiVersion: '0.7.0' }, // legacy 0.7.0
+      { type: 'hello', version: 1, apiVersion: 'v2' }, // future v2
+      { type: 'hello', version: 1 }, // missing apiVersion
+      { type: 'event', version: 1, event: { eventId: 'e1', eventType: 'x', timestamp: '2026' } } // event before hello
+    ];
 
-    wss.on('connection', (ws) => {
-      // Send incompatible hello version 2
-      ws.send(JSON.stringify({
-        type: 'hello',
-        version: 2,
-        apiVersion: '2.0.0'
-      }));
-    });
+    for (const fixture of incompatibleFixtures) {
+      const server = http.createServer();
+      const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
 
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-    const addr = server.address() as { port: number };
-    const client = new AgentHubRealtimeClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
-
-    try {
-      const errorPromise = new Promise<AgentHubContractError>((resolve) => {
-        client.on('error', (err) => resolve(err as AgentHubContractError));
+      wss.on('connection', (ws) => {
+        ws.send(JSON.stringify(fixture));
       });
 
-      client.connect();
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      const addr = server.address() as { port: number };
+      const client = new AgentHubRealtimeClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
 
-      const err = await errorPromise;
-      assert.equal(err.code, 'INCOMPATIBLE_HELLO');
-      assert.equal(client.isConnected, false);
-    } finally {
-      client.stop();
-      wss.close();
-      server.close();
+      try {
+        const errorPromise = new Promise<AgentHubContractError>((resolve) => {
+          client.on('error', (err) => resolve(err as AgentHubContractError));
+        });
+
+        client.connect();
+
+        const err = await errorPromise;
+        assert.equal(err.code, 'INCOMPATIBLE_HELLO');
+        assert.equal(client.isConnected, false);
+      } finally {
+        client.stop();
+        wss.close();
+        server.close();
+      }
     }
   });
 });
