@@ -230,19 +230,12 @@ export class AgentHubRestClient {
         throw new AgentHubContractError('MALFORMED_JSON', `Failed to parse JSON response: ${(err as Error).message}`);
       }
 
-      if (!parsed || typeof parsed !== 'object') {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Response must be a JSON object');
       }
 
-      const env = parsed as {
-        readonly ok?: unknown;
-        readonly requestId?: unknown;
-        readonly data?: unknown;
-        readonly error?: {
-          readonly code?: unknown;
-          readonly message?: unknown;
-        } | unknown;
-      };
+      const env = parsed as Record<string, unknown>;
+      const keys = Object.keys(env);
 
       // Validate requestId
       if (typeof env.requestId !== 'string' || !env.requestId.trim()) {
@@ -255,15 +248,28 @@ export class AgentHubRestClient {
       }
 
       if (env.ok === false) {
+        for (const k of keys) {
+          if (k !== 'ok' && k !== 'requestId' && k !== 'error') {
+            throw new AgentHubContractError('MALFORMED_ENVELOPE', `Unexpected key '${k}' in error envelope`);
+          }
+        }
         const errObj = env.error as { code?: unknown; message?: unknown } | undefined;
-        if (!errObj || typeof errObj !== 'object') {
+        if (!errObj || typeof errObj !== 'object' || Array.isArray(errObj)) {
           throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Error envelope must contain an error object');
         }
         if (typeof errObj.code !== 'string' || !errObj.code.trim()) {
           throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Error object must contain a non-blank code');
         }
-        const message = typeof errObj.message === 'string' ? errObj.message : `HTTP ${response.status}`;
-        throw new AgentHubContractError(errObj.code, message);
+        if (typeof errObj.message !== 'string') {
+          throw new AgentHubContractError('MALFORMED_ENVELOPE', 'Error object must contain a string message');
+        }
+        throw new AgentHubContractError(errObj.code, errObj.message);
+      }
+
+      for (const k of keys) {
+        if (k !== 'ok' && k !== 'requestId' && k !== 'data') {
+          throw new AgentHubContractError('MALFORMED_ENVELOPE', `Unexpected key '${k}' in success envelope`);
+        }
       }
 
       if (!response.ok) {

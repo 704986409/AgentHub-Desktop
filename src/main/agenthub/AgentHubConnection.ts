@@ -8,6 +8,7 @@ const RESYNC_DEBOUNCE_MS = 50;
 
 export interface AgentHubConnectionOptions {
   readonly baseUrl?: string;
+  readonly helloTimeoutMs?: number;
   readonly restClient?: AgentHubRestClient;
   readonly realtimeClient?: AgentHubRealtimeClient;
   readonly cache?: AgentHubStateCache;
@@ -24,13 +25,18 @@ export class AgentHubConnection {
   #retryCount = 0;
   #reconnectTimer: NodeJS.Timeout | null = null;
   #debounceTimer: NodeJS.Timeout | null = null;
-  #isSyncing = false;
-  #hasPendingSync = false;
+  #syncGeneration: number | null = null;
+  #pendingSyncGeneration: number | null = null;
 
   constructor(options: AgentHubConnectionOptions = {}) {
     this.#cache = options.cache ?? new AgentHubStateCache();
     this.#restClient = options.restClient ?? new AgentHubRestClient({ baseUrl: options.baseUrl });
-    this.#realtimeClient = options.realtimeClient ?? new AgentHubRealtimeClient({ baseUrl: options.baseUrl });
+    this.#realtimeClient =
+      options.realtimeClient ??
+      new AgentHubRealtimeClient({
+        baseUrl: options.baseUrl,
+        helloTimeoutMs: options.helloTimeoutMs
+      });
 
     this.#setupRealtimeListeners();
   }
@@ -87,8 +93,8 @@ export class AgentHubConnection {
     }
 
     this.#realtimeClient.stop();
-    this.#isSyncing = false;
-    this.#hasPendingSync = false;
+    this.#syncGeneration = null;
+    this.#pendingSyncGeneration = null;
     this.#cache.setConnectionStatus('disconnected');
   }
 
@@ -117,13 +123,25 @@ export class AgentHubConnection {
     });
 
     this.#realtimeClient.on('incompatible_hello', (err: Error) => {
-      if (!this.#isStarted) return;
+      const gen = this.#generation;
+      if (!this.#isStarted || gen !== this.#generation) return;
       const hasSnapshot = this.#cache.getState().snapshot !== null;
       this.#cache.setConnectionStatus(hasSnapshot ? 'degraded' : 'connecting', {
         code: 'INCOMPATIBLE_HELLO',
         message: err.message
       });
-      this.#scheduleReconnect(this.#generation);
+      this.#scheduleReconnect(gen);
+    });
+
+    this.#realtimeClient.on('hello_timeout', (err: Error) => {
+      const gen = this.#generation;
+      if (!this.#isStarted || gen !== this.#generation) return;
+      const hasSnapshot = this.#cache.getState().snapshot !== null;
+      this.#cache.setConnectionStatus(hasSnapshot ? 'degraded' : 'connecting', {
+        code: 'WS_HELLO_TIMEOUT',
+        message: err.message
+      });
+      this.#scheduleReconnect(gen);
     });
 
     this.#realtimeClient.on('event', (evt) => {
@@ -164,6 +182,9 @@ export class AgentHubConnection {
 
   async #attemptConnect(gen: number): Promise<void> {
     if (!this.#isStarted || gen !== this.#generation) return;
+    if (this.#syncGeneration === gen) return;
+
+    this.#syncGeneration = gen;
     const signal = this.#activeAbortController?.signal;
 
     try {
@@ -192,6 +213,16 @@ export class AgentHubConnection {
       });
 
       this.#scheduleReconnect(gen);
+    } finally {
+      if (this.#syncGeneration === gen) {
+        this.#syncGeneration = null;
+      }
+      if (this.#pendingSyncGeneration === gen) {
+        this.#pendingSyncGeneration = null;
+        if (this.#isStarted && gen === this.#generation) {
+          this.#scheduleResync(RESYNC_DEBOUNCE_MS, gen);
+        }
+      }
     }
   }
 
@@ -228,12 +259,12 @@ export class AgentHubConnection {
   async #doSync(gen: number): Promise<AgentHubStateSnapshot | null> {
     if (!this.#isStarted || gen !== this.#generation) return null;
 
-    if (this.#isSyncing) {
-      this.#hasPendingSync = true;
+    if (this.#syncGeneration === gen) {
+      this.#pendingSyncGeneration = gen;
       return null;
     }
 
-    this.#isSyncing = true;
+    this.#syncGeneration = gen;
     const signal = this.#activeAbortController?.signal;
 
     try {
@@ -271,10 +302,14 @@ export class AgentHubConnection {
       });
       return null;
     } finally {
-      this.#isSyncing = false;
-      if (this.#hasPendingSync && this.#isStarted && gen === this.#generation) {
-        this.#hasPendingSync = false;
-        this.#scheduleResync(RESYNC_DEBOUNCE_MS, gen);
+      if (this.#syncGeneration === gen) {
+        this.#syncGeneration = null;
+      }
+      if (this.#pendingSyncGeneration === gen) {
+        this.#pendingSyncGeneration = null;
+        if (this.#isStarted && gen === this.#generation) {
+          this.#scheduleResync(RESYNC_DEBOUNCE_MS, gen);
+        }
       }
     }
   }

@@ -6,6 +6,15 @@ import {
   AgentHubContractError,
   validateAgentHubBaseUrl
 } from '../src/main/agenthub/AgentHubRestClient';
+import {
+  snapshotAgentDto,
+  snapshotTaskDto,
+  snapshotAssignmentDto,
+  snapshotProjectDto,
+  snapshotEventDto,
+  AgentHubValidationError,
+  sanitizeEventPayload
+} from '../src/shared/agenthubTypes';
 
 describe('validateAgentHubBaseUrl', () => {
   test('accepts valid 127.0.0.1 URLs', () => {
@@ -139,7 +148,19 @@ describe('AgentHubRestClient network and envelope validation', () => {
           ok: true,
           requestId: 'req-e1',
           data: [
-            { eventId: 'evt-1', eventType: 'task.created', timestamp: '2026-01-01T00:00:00Z' }
+            {
+              eventId: 'evt-1',
+              eventType: 'task.created',
+              timestamp: '2026-01-01T00:00:00Z',
+              projectId: null,
+              agentId: null,
+              taskId: null,
+              assignmentId: null,
+              actor: null,
+              oldStatus: null,
+              newStatus: null,
+              payload: null
+            }
           ]
         }));
         return;
@@ -211,7 +232,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
     }
   });
 
-  test('validates envelopes: rejects missing or blank requestId and validates error shapes', async () => {
+  test('validates envelopes: rejects missing or blank requestId, missing/non-string error.message, and unexpected keys', async () => {
     let mode = 'missing_requestId';
 
     const server = http.createServer((_req, res) => {
@@ -224,6 +245,18 @@ describe('AgentHubRestClient network and envelope validation', () => {
       } else if (mode === 'error_missing_code') {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, requestId: 'req-err', error: { message: 'Failed' } }));
+      } else if (mode === 'error_missing_message') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, requestId: 'req-err', error: { code: 'FAIL' } }));
+      } else if (mode === 'error_non_string_message') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, requestId: 'req-err', error: { code: 'FAIL', message: 12345 } }));
+      } else if (mode === 'unexpected_success_key') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'req-ok', data: { status: 'ok', version: '0.7.0' }, extra: 1 }));
+      } else if (mode === 'unexpected_error_key') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, requestId: 'req-err', error: { code: 'FAIL', message: 'err' }, extra: 1 }));
       }
     });
 
@@ -243,6 +276,26 @@ describe('AgentHubRestClient network and envelope validation', () => {
       }, (err: AgentHubContractError) => err.code === 'MALFORMED_ENVELOPE');
 
       mode = 'error_missing_code';
+      await assert.rejects(async () => {
+        await client.health();
+      }, (err: AgentHubContractError) => err.code === 'MALFORMED_ENVELOPE');
+
+      mode = 'error_missing_message';
+      await assert.rejects(async () => {
+        await client.health();
+      }, (err: AgentHubContractError) => err.code === 'MALFORMED_ENVELOPE');
+
+      mode = 'error_non_string_message';
+      await assert.rejects(async () => {
+        await client.health();
+      }, (err: AgentHubContractError) => err.code === 'MALFORMED_ENVELOPE');
+
+      mode = 'unexpected_success_key';
+      await assert.rejects(async () => {
+        await client.health();
+      }, (err: AgentHubContractError) => err.code === 'MALFORMED_ENVELOPE');
+
+      mode = 'unexpected_error_key';
       await assert.rejects(async () => {
         await client.health();
       }, (err: AgentHubContractError) => err.code === 'MALFORMED_ENVELOPE');
@@ -277,6 +330,10 @@ describe('AgentHubRestClient network and envelope validation', () => {
               authority: 'autonomous',
               routingPriority: 0,
               enabled: true,
+              allowedComplexities: [],
+              allowedRiskLevels: [],
+              capabilities: [],
+              specialties: [],
               worktreePath: 'D:\\worktrees\\agent-1', // Leak attempt
               cwd: 'D:\\worktrees\\agent-1', // Leak attempt
               env: { API_KEY: 'secret-key-123' }, // Leak attempt
@@ -295,6 +352,13 @@ describe('AgentHubRestClient network and envelope validation', () => {
             eventId: 'evt-leak',
             eventType: 'task.completed',
             timestamp: '2026-01-01T00:00:00Z',
+            projectId: null,
+            agentId: null,
+            taskId: null,
+            assignmentId: null,
+            actor: null,
+            oldStatus: null,
+            newStatus: null,
             payload: {
               worktreePath: 'D:\\private\\path', // Should be stripped
               normalField: 'clean-value',
@@ -357,5 +421,238 @@ describe('AgentHubRestClient network and envelope validation', () => {
     } finally {
       server.close();
     }
+  });
+
+  test('recursively strips forbidden keys case-insensitively in event payload', () => {
+    const raw = {
+      safeField: 'hello',
+      RepositoryRoot: 'C:\\repo',
+      repositoryroot: 'C:\\repo2',
+      CWD: 'D:\\cwd',
+      cwd: 'D:\\cwd2',
+      SESSIONID: 'secret-sess',
+      sessionId: 'sess-2',
+      ENV: { API_KEY: 'key' },
+      nested: {
+        normal: 123,
+        WorktreePath: 'E:\\wt',
+        deep: [
+          { safe: true, GitDir: 'F:\\git' },
+          { SafeItem: 'val', PROFILEHASH: 'hash-abc' }
+        ]
+      }
+    };
+
+    const sanitized = sanitizeEventPayload(raw) as Record<string, unknown>;
+    assert.equal(sanitized.safeField, 'hello');
+    assert.equal('RepositoryRoot' in sanitized, false);
+    assert.equal('repositoryroot' in sanitized, false);
+    assert.equal('CWD' in sanitized, false);
+    assert.equal('cwd' in sanitized, false);
+    assert.equal('SESSIONID' in sanitized, false);
+    assert.equal('sessionId' in sanitized, false);
+    assert.equal('ENV' in sanitized, false);
+
+    const nested = sanitized.nested as Record<string, unknown>;
+    assert.equal(nested.normal, 123);
+    assert.equal('WorktreePath' in nested, false);
+
+    const deep = nested.deep as Array<Record<string, unknown>>;
+    assert.equal(deep[0].safe, true);
+    assert.equal('GitDir' in deep[0], false);
+    assert.equal(deep[1].SafeItem, 'val');
+    assert.equal('PROFILEHASH' in deep[1], false);
+  });
+});
+
+describe('AgentHub DTO Strict Runtime Validation', () => {
+  const validAgent = {
+    agentId: 'a1',
+    projectId: null,
+    name: 'Agent 1',
+    providerId: 'codex',
+    position: 'engineer',
+    status: 'idle',
+    authority: 'autonomous',
+    routingPriority: 0,
+    enabled: true,
+    allowedComplexities: ['low', 'medium'],
+    allowedRiskLevels: ['low'],
+    capabilities: ['code'],
+    specialties: ['ts'],
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01'
+  };
+
+  test('snapshotAgentDto succeeds with valid required and nullable fields', () => {
+    const agent = snapshotAgentDto(validAgent);
+    assert.equal(agent.agentId, 'a1');
+    assert.equal(agent.projectId, null);
+    assert.equal(agent.enabled, true);
+    assert.equal(agent.routingPriority, 0);
+  });
+
+  test('snapshotAgentDto fails closed with AgentHubValidationError on missing or malformed fields', () => {
+    assert.throws(() => snapshotAgentDto({ ...validAgent, name: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAgentDto({ ...validAgent, name: '   ' }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    // Missing required nullable field (undefined is rejected)
+    assert.throws(() => snapshotAgentDto({ ...validAgent, projectId: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    // Non-finite routingPriority
+    assert.throws(() => snapshotAgentDto({ ...validAgent, routingPriority: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAgentDto({ ...validAgent, routingPriority: NaN }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAgentDto({ ...validAgent, routingPriority: Infinity }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAgentDto({ ...validAgent, routingPriority: -Infinity }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAgentDto({ ...validAgent, routingPriority: '1' }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    // Non-boolean enabled
+    assert.throws(() => snapshotAgentDto({ ...validAgent, enabled: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAgentDto({ ...validAgent, enabled: 1 }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    // Missing/null arrays
+    assert.throws(() => snapshotAgentDto({ ...validAgent, capabilities: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAgentDto({ ...validAgent, capabilities: null }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+  });
+
+  const validTask = {
+    taskId: 't1',
+    projectId: 'p1',
+    title: 'Task 1',
+    description: null,
+    complexity: 'low',
+    risk: 'low',
+    status: 'pending',
+    assignedAgentId: null,
+    assignmentId: null,
+    requiredCapabilities: [],
+    requiredSpecialties: [],
+    acceptanceCriteria: [],
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01'
+  };
+
+  test('snapshotTaskDto fails closed on missing nullable fields or arrays', () => {
+    const task = snapshotTaskDto(validTask);
+    assert.equal(task.taskId, 't1');
+    assert.equal(task.description, null);
+
+    assert.throws(() => snapshotTaskDto({ ...validTask, description: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotTaskDto({ ...validTask, assignedAgentId: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotTaskDto({ ...validTask, assignmentId: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotTaskDto({ ...validTask, requiredCapabilities: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+  });
+
+  const validAssignment = {
+    assignmentId: 'as1',
+    taskId: 't1',
+    agentId: 'a1',
+    specVersion: '1.0',
+    status: 'assigned',
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01'
+  };
+
+  test('snapshotAssignmentDto fails closed on missing specVersion (no default synthesis)', () => {
+    const asg = snapshotAssignmentDto(validAssignment);
+    assert.equal(asg.specVersion, '1.0');
+
+    assert.throws(() => snapshotAssignmentDto({ ...validAssignment, specVersion: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotAssignmentDto({ ...validAssignment, specVersion: '' }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+  });
+
+  test('snapshotProjectDto fails closed on missing description', () => {
+    const validProj = {
+      projectId: 'p1',
+      name: 'Proj 1',
+      description: null,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01'
+    };
+    const proj = snapshotProjectDto(validProj);
+    assert.equal(proj.projectId, 'p1');
+
+    assert.throws(() => snapshotProjectDto({ ...validProj, description: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+  });
+
+  test('snapshotEventDto fails closed on missing structural fields or missing nullable fields', () => {
+    const validEvt = {
+      eventId: 'e1',
+      eventType: 'task.created',
+      timestamp: '2026-01-01T00:00:00Z',
+      projectId: null,
+      agentId: null,
+      taskId: null,
+      assignmentId: null,
+      actor: null,
+      oldStatus: null,
+      newStatus: null,
+      payload: null
+    };
+    const evt = snapshotEventDto(validEvt);
+    assert.equal(evt.eventId, 'e1');
+    assert.equal(evt.projectId, null);
+
+    assert.throws(() => snapshotEventDto({ ...validEvt, eventId: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
+    assert.throws(() => snapshotEventDto({ ...validEvt, projectId: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_FIELD'
+    });
   });
 });

@@ -8,17 +8,31 @@ import type {
 import { snapshotEventDto } from './AgentHubTypes';
 import { AgentHubContractError, validateAgentHubBaseUrl } from './AgentHubRestClient';
 
+export interface AgentHubRealtimeClientOptions {
+  readonly baseUrl?: string;
+  readonly helloTimeoutMs?: number;
+  readonly createWebSocket?: (url: string) => WebSocket;
+}
+
+const DEFAULT_HELLO_TIMEOUT_MS = 5000;
+
 export class AgentHubRealtimeClient extends EventEmitter {
   readonly #wsUrl: string;
-  #socket: WebSocket | null = null;
-  #isStopping = false;
-  #helloReceived = false;
+  readonly #helloTimeoutMs: number;
+  readonly #createWebSocket?: (url: string) => WebSocket;
 
-  constructor(options: { baseUrl?: string } = {}) {
+  #currentSocket: WebSocket | null = null;
+  #helloReceived = false;
+  #isStopped = true;
+
+  #helloTimer: NodeJS.Timeout | null = null;
+
+  constructor(options: AgentHubRealtimeClientOptions = {}) {
     super();
     const httpUrl = validateAgentHubBaseUrl(options.baseUrl ?? 'http://127.0.0.1:3210');
-    // Derive WebSocket URL from validated loopback HTTP base URL
     this.#wsUrl = httpUrl.replace(/^http:/, 'ws:') + '/api/v1/realtime';
+    this.#helloTimeoutMs = options.helloTimeoutMs ?? DEFAULT_HELLO_TIMEOUT_MS;
+    this.#createWebSocket = options.createWebSocket;
   }
 
   public get wsUrl(): string {
@@ -26,74 +40,130 @@ export class AgentHubRealtimeClient extends EventEmitter {
   }
 
   public get isConnected(): boolean {
-    return this.#socket !== null && this.#socket.readyState === WebSocket.OPEN && this.#helloReceived;
+    return (
+      this.#currentSocket !== null &&
+      this.#currentSocket.readyState === WebSocket.OPEN &&
+      this.#helloReceived
+    );
+  }
+
+  #clearHelloTimer(): void {
+    if (this.#helloTimer) {
+      clearTimeout(this.#helloTimer);
+      this.#helloTimer = null;
+    }
   }
 
   /**
    * Connect to the AgentHub realtime WebSocket service.
+   * Ensures single active socket ownership and isolates events to that instance.
    */
   public connect(): void {
-    if (this.#socket && (this.#socket.readyState === WebSocket.CONNECTING || this.#socket.readyState === WebSocket.OPEN)) {
-      return; // Already connecting or open
+    if (
+      this.#currentSocket &&
+      (this.#currentSocket.readyState === WebSocket.CONNECTING || this.#currentSocket.readyState === WebSocket.OPEN)
+    ) {
+      return; // Already active
     }
 
-    this.#isStopping = false;
+    this.#isStopped = false;
     this.#helloReceived = false;
+    this.#clearHelloTimer();
 
+    let socket: WebSocket;
     try {
-      this.#socket = new WebSocket(this.#wsUrl);
+      socket = this.#createWebSocket ? this.#createWebSocket(this.#wsUrl) : new WebSocket(this.#wsUrl);
+      this.#currentSocket = socket;
     } catch (err) {
       this.emit('error', new AgentHubContractError('WS_INIT_FAILED', (err as Error).message));
       return;
     }
 
-    this.#socket.on('open', () => {
-      // Wait for server hello message before treating connection as ready
+    socket.on('open', () => {
+      if (this.#currentSocket !== socket) return;
+
+      // Arm bounded hello timeout
+      this.#clearHelloTimer();
+      this.#helloTimer = setTimeout(() => {
+        this.#helloTimer = null;
+        if (this.#currentSocket !== socket || this.#helloReceived) return;
+
+        const err = new AgentHubContractError(
+          'WS_HELLO_TIMEOUT',
+          `WebSocket hello handshake timed out after ${this.#helloTimeoutMs}ms`
+        );
+
+        this.#terminateSocket(socket);
+        if (this.#currentSocket === socket) {
+          this.#currentSocket = null;
+          this.#helloReceived = false;
+        }
+
+        this.emit('error', err);
+        this.emit('hello_timeout', err);
+      }, this.#helloTimeoutMs);
     });
 
-    this.#socket.on('message', (data: Buffer | string) => {
-      this.#handleMessage(data.toString());
+    socket.on('message', (data: Buffer | string) => {
+      if (this.#currentSocket !== socket) return;
+      this.#handleSocketMessage(socket, data.toString());
     });
 
-    this.#socket.on('error', (err: Error) => {
+    socket.on('error', (err: Error) => {
+      if (this.#currentSocket !== socket) return;
       this.emit('error', err);
     });
 
-    this.#socket.on('close', (code: number, reasonBuf: Buffer) => {
+    socket.on('close', (code: number, reasonBuf: Buffer) => {
+      this.#clearHelloTimer();
+      if (this.#currentSocket !== socket) {
+        return; // Stale socket event, ignore completely
+      }
+
       const reason = reasonBuf.toString();
       const wasOpen = this.#helloReceived;
-      this.#socket = null;
+      this.#currentSocket = null;
       this.#helloReceived = false;
-      if (!this.#isStopping) {
+
+      if (!this.#isStopped) {
         this.emit('close', code, reason, wasOpen);
       }
     });
   }
 
   /**
-   * Cleanly stop the WebSocket connection.
+   * Cleanly stop the WebSocket client and disconnect current socket.
    */
   public stop(): void {
-    this.#isStopping = true;
-    if (this.#socket) {
-      try {
-        if (this.#socket.readyState === WebSocket.OPEN || this.#socket.readyState === WebSocket.CONNECTING) {
-          this.#socket.close(1000, 'client closed');
-        }
-      } catch {
-        // Ignore close errors during shutdown
-      }
-      this.#socket = null;
-    }
+    this.#isStopped = true;
+    this.#clearHelloTimer();
+    const socket = this.#currentSocket;
+    this.#currentSocket = null;
     this.#helloReceived = false;
+
+    if (socket) {
+      this.#terminateSocket(socket);
+    }
   }
 
-  #handleMessage(raw: string): void {
+  #terminateSocket(socket: WebSocket): void {
+    try {
+      if (typeof socket.terminate === 'function') {
+        socket.terminate();
+      } else if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close(1000, 'client closed');
+      }
+    } catch {
+      // Ignore errors during termination
+    }
+  }
+
+  #handleSocketMessage(socket: WebSocket, raw: string): void {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      // Malformed frame: fail closed
+      // Malformed JSON: fail closed
       return;
     }
 
@@ -103,15 +173,22 @@ export class AgentHubRealtimeClient extends EventEmitter {
     if (!this.#helloReceived) {
       // First frame must be hello with version 1 and apiVersion 'v1'
       if (msg.type === 'hello' && msg.version === 1 && msg.apiVersion === 'v1') {
+        this.#clearHelloTimer();
         this.#helloReceived = true;
         this.emit('hello', msg as AgentHubWsHelloMessage);
       } else {
-        // Incompatible hello: terminate socket and notify
+        this.#clearHelloTimer();
         const err = new AgentHubContractError(
           'INCOMPATIBLE_HELLO',
           `Incompatible hello frame (expected version: 1, apiVersion: 'v1'): ${raw}`
         );
-        this.stop();
+
+        this.#terminateSocket(socket);
+        if (this.#currentSocket === socket) {
+          this.#currentSocket = null;
+          this.#helloReceived = false;
+        }
+
         this.emit('error', err);
         this.emit('incompatible_hello', err);
       }

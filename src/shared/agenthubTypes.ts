@@ -5,6 +5,7 @@
  * - Pinned to AgentHub 0.7.0G public contracts.
  * - Runtime fail-closed sanitization: never return raw network objects.
  * - ZERO backend-private fields can cross into Desktop cache/IPC.
+ * - Fail closed: do NOT synthesize defaults for missing/invalid required fields.
  */
 
 export interface AgentHubSuccessEnvelope<T> {
@@ -86,14 +87,14 @@ export interface AgentHubEventDto {
   readonly eventId: string;
   readonly eventType: string;
   readonly timestamp: string;
-  readonly projectId?: string | null;
-  readonly agentId?: string | null;
-  readonly taskId?: string | null;
-  readonly assignmentId?: string | null;
-  readonly actor?: string | null;
-  readonly oldStatus?: string | null;
-  readonly newStatus?: string | null;
-  readonly payload?: Record<string, unknown> | null;
+  readonly projectId: string | null;
+  readonly agentId: string | null;
+  readonly taskId: string | null;
+  readonly assignmentId: string | null;
+  readonly actor: string | null;
+  readonly oldStatus: string | null;
+  readonly newStatus: string | null;
+  readonly payload: Record<string, unknown> | null;
 }
 
 export interface AgentHubStateSnapshot {
@@ -144,43 +145,51 @@ export class AgentHubValidationError extends Error {
   }
 }
 
-export const FORBIDDEN_PRIVATE_KEYS = new Set([
-  'repositoryRoot',
-  'worktreePath',
-  'gitDir',
+export const LOWERCASE_FORBIDDEN_KEYS = new Set([
+  'repositoryroot',
+  'worktreepath',
+  'gitdir',
   'cwd',
   'env',
   'environment',
   'executable',
-  'sessionId',
-  'profileHash',
-  'executionProfileSha256'
+  'sessionid',
+  'profilehash',
+  'executionprofilesha256'
 ]);
 
 function isRecord(val: unknown): val is Record<string, unknown> {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
 }
 
-function parseString(val: unknown, fieldName: string, allowBlank = false): string {
-  if (typeof val !== 'string') {
-    throw new AgentHubValidationError('MALFORMED_FIELD', `Field '${fieldName}' must be a string`);
+export function parseRequiredNonBlankString(record: Record<string, unknown>, fieldName: string): string {
+  if (!(fieldName in record) || record[fieldName] === undefined) {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Required field '${fieldName}' is missing`);
   }
-  if (!allowBlank && !val.trim()) {
-    throw new AgentHubValidationError('MALFORMED_FIELD', `Field '${fieldName}' must not be blank`);
+  const val = record[fieldName];
+  if (typeof val !== 'string' || !val.trim()) {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Field '${fieldName}' must be a non-blank string`);
   }
   return val;
 }
 
-function parseNullableString(val: unknown, fieldName: string): string | null {
-  if (val === null || val === undefined) return null;
+export function parseRequiredNullableString(record: Record<string, unknown>, fieldName: string): string | null {
+  if (!(fieldName in record) || record[fieldName] === undefined) {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Required field '${fieldName}' is missing`);
+  }
+  const val = record[fieldName];
+  if (val === null) return null;
   if (typeof val !== 'string') {
     throw new AgentHubValidationError('MALFORMED_FIELD', `Field '${fieldName}' must be a string or null`);
   }
   return val;
 }
 
-function parseStringArray(val: unknown, fieldName: string): readonly string[] {
-  if (val === undefined || val === null) return Object.freeze([]);
+export function parseRequiredStringArray(record: Record<string, unknown>, fieldName: string): readonly string[] {
+  if (!(fieldName in record) || record[fieldName] === undefined || record[fieldName] === null) {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Required field '${fieldName}' is missing or null`);
+  }
+  const val = record[fieldName];
   if (!Array.isArray(val)) {
     throw new AgentHubValidationError('MALFORMED_FIELD', `Field '${fieldName}' must be an array`);
   }
@@ -194,6 +203,28 @@ function parseStringArray(val: unknown, fieldName: string): readonly string[] {
   return Object.freeze(result);
 }
 
+export function parseFiniteNumber(record: Record<string, unknown>, fieldName: string): number {
+  if (!(fieldName in record) || record[fieldName] === undefined) {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Required field '${fieldName}' is missing`);
+  }
+  const val = record[fieldName];
+  if (typeof val !== 'number' || !Number.isFinite(val)) {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Field '${fieldName}' must be a finite number`);
+  }
+  return val;
+}
+
+export function parseRequiredBoolean(record: Record<string, unknown>, fieldName: string): boolean {
+  if (!(fieldName in record) || record[fieldName] === undefined) {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Required field '${fieldName}' is missing`);
+  }
+  const val = record[fieldName];
+  if (typeof val !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_FIELD', `Field '${fieldName}' must be a boolean`);
+  }
+  return val;
+}
+
 export function sanitizeEventPayload(val: unknown, depth = 0): Record<string, unknown> | null {
   if (val === null || val === undefined) return null;
   if (depth > 5) return null; // Bound nesting depth
@@ -205,7 +236,8 @@ export function sanitizeEventPayload(val: unknown, depth = 0): Record<string, un
 
   for (let i = 0; i < Math.min(entries.length, maxEntries); i++) {
     const [key, value] = entries[i];
-    if (FORBIDDEN_PRIVATE_KEYS.has(key)) {
+    // Case-insensitive forbidden key check
+    if (LOWERCASE_FORBIDDEN_KEYS.has(key.toLowerCase())) {
       continue; // Strip forbidden key
     }
     if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -237,15 +269,13 @@ export function snapshotProjectDto(raw: unknown): ProjectDto {
     throw new AgentHubValidationError('MALFORMED_PROJECT', 'Project must be an object');
   }
 
-  const project: ProjectDto = {
-    projectId: parseString(raw.projectId, 'projectId'),
-    name: parseString(raw.name, 'name'),
-    description: parseNullableString(raw.description, 'description'),
-    createdAt: parseString(raw.createdAt, 'createdAt'),
-    updatedAt: parseString(raw.updatedAt, 'updatedAt')
-  };
-
-  return Object.freeze(project);
+  return Object.freeze({
+    projectId: parseRequiredNonBlankString(raw, 'projectId'),
+    name: parseRequiredNonBlankString(raw, 'name'),
+    description: parseRequiredNullableString(raw, 'description'),
+    createdAt: parseRequiredNonBlankString(raw, 'createdAt'),
+    updatedAt: parseRequiredNonBlankString(raw, 'updatedAt')
+  });
 }
 
 export function snapshotAgentDto(raw: unknown): AgentDto {
@@ -253,28 +283,23 @@ export function snapshotAgentDto(raw: unknown): AgentDto {
     throw new AgentHubValidationError('MALFORMED_AGENT', 'Agent must be an object');
   }
 
-  const routingPriority = typeof raw.routingPriority === 'number' ? raw.routingPriority : 0;
-  const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : false;
-
-  const agent: AgentDto = {
-    agentId: parseString(raw.agentId, 'agentId'),
-    projectId: parseNullableString(raw.projectId, 'projectId'),
-    name: parseString(raw.name, 'name'),
-    providerId: parseString(raw.providerId, 'providerId'),
-    position: typeof raw.position === 'string' ? raw.position : 'engineer',
-    status: parseString(raw.status, 'status'),
-    allowedComplexities: parseStringArray(raw.allowedComplexities, 'allowedComplexities'),
-    allowedRiskLevels: parseStringArray(raw.allowedRiskLevels, 'allowedRiskLevels'),
-    capabilities: parseStringArray(raw.capabilities, 'capabilities'),
-    specialties: parseStringArray(raw.specialties, 'specialties'),
-    authority: typeof raw.authority === 'string' ? raw.authority : 'autonomous',
-    routingPriority,
-    enabled,
-    createdAt: parseString(raw.createdAt, 'createdAt'),
-    updatedAt: parseString(raw.updatedAt, 'updatedAt')
-  };
-
-  return Object.freeze(agent);
+  return Object.freeze({
+    agentId: parseRequiredNonBlankString(raw, 'agentId'),
+    projectId: parseRequiredNullableString(raw, 'projectId'),
+    name: parseRequiredNonBlankString(raw, 'name'),
+    providerId: parseRequiredNonBlankString(raw, 'providerId'),
+    position: parseRequiredNonBlankString(raw, 'position'),
+    status: parseRequiredNonBlankString(raw, 'status'),
+    allowedComplexities: parseRequiredStringArray(raw, 'allowedComplexities'),
+    allowedRiskLevels: parseRequiredStringArray(raw, 'allowedRiskLevels'),
+    capabilities: parseRequiredStringArray(raw, 'capabilities'),
+    specialties: parseRequiredStringArray(raw, 'specialties'),
+    authority: parseRequiredNonBlankString(raw, 'authority'),
+    routingPriority: parseFiniteNumber(raw, 'routingPriority'),
+    enabled: parseRequiredBoolean(raw, 'enabled'),
+    createdAt: parseRequiredNonBlankString(raw, 'createdAt'),
+    updatedAt: parseRequiredNonBlankString(raw, 'updatedAt')
+  });
 }
 
 export function snapshotTaskDto(raw: unknown): TaskDto {
@@ -282,24 +307,22 @@ export function snapshotTaskDto(raw: unknown): TaskDto {
     throw new AgentHubValidationError('MALFORMED_TASK', 'Task must be an object');
   }
 
-  const task: TaskDto = {
-    taskId: parseString(raw.taskId, 'taskId'),
-    projectId: parseString(raw.projectId, 'projectId'),
-    title: parseString(raw.title, 'title'),
-    description: parseNullableString(raw.description, 'description'),
-    requiredCapabilities: parseStringArray(raw.requiredCapabilities, 'requiredCapabilities'),
-    requiredSpecialties: parseStringArray(raw.requiredSpecialties, 'requiredSpecialties'),
-    acceptanceCriteria: parseStringArray(raw.acceptanceCriteria, 'acceptanceCriteria'),
-    complexity: parseString(raw.complexity, 'complexity'),
-    risk: parseString(raw.risk, 'risk'),
-    status: parseString(raw.status, 'status'),
-    assignedAgentId: parseNullableString(raw.assignedAgentId, 'assignedAgentId'),
-    assignmentId: parseNullableString(raw.assignmentId, 'assignmentId'),
-    createdAt: parseString(raw.createdAt, 'createdAt'),
-    updatedAt: parseString(raw.updatedAt, 'updatedAt')
-  };
-
-  return Object.freeze(task);
+  return Object.freeze({
+    taskId: parseRequiredNonBlankString(raw, 'taskId'),
+    projectId: parseRequiredNonBlankString(raw, 'projectId'),
+    title: parseRequiredNonBlankString(raw, 'title'),
+    description: parseRequiredNullableString(raw, 'description'),
+    requiredCapabilities: parseRequiredStringArray(raw, 'requiredCapabilities'),
+    requiredSpecialties: parseRequiredStringArray(raw, 'requiredSpecialties'),
+    acceptanceCriteria: parseRequiredStringArray(raw, 'acceptanceCriteria'),
+    complexity: parseRequiredNonBlankString(raw, 'complexity'),
+    risk: parseRequiredNonBlankString(raw, 'risk'),
+    status: parseRequiredNonBlankString(raw, 'status'),
+    assignedAgentId: parseRequiredNullableString(raw, 'assignedAgentId'),
+    assignmentId: parseRequiredNullableString(raw, 'assignmentId'),
+    createdAt: parseRequiredNonBlankString(raw, 'createdAt'),
+    updatedAt: parseRequiredNonBlankString(raw, 'updatedAt')
+  });
 }
 
 export function snapshotAssignmentDto(raw: unknown): AssignmentDto {
@@ -307,17 +330,15 @@ export function snapshotAssignmentDto(raw: unknown): AssignmentDto {
     throw new AgentHubValidationError('MALFORMED_ASSIGNMENT', 'Assignment must be an object');
   }
 
-  const assignment: AssignmentDto = {
-    assignmentId: parseString(raw.assignmentId, 'assignmentId'),
-    taskId: parseString(raw.taskId, 'taskId'),
-    agentId: parseString(raw.agentId, 'agentId'),
-    specVersion: typeof raw.specVersion === 'string' ? raw.specVersion : '1.0',
-    status: parseString(raw.status, 'status'),
-    createdAt: parseString(raw.createdAt, 'createdAt'),
-    updatedAt: parseString(raw.updatedAt, 'updatedAt')
-  };
-
-  return Object.freeze(assignment);
+  return Object.freeze({
+    assignmentId: parseRequiredNonBlankString(raw, 'assignmentId'),
+    taskId: parseRequiredNonBlankString(raw, 'taskId'),
+    agentId: parseRequiredNonBlankString(raw, 'agentId'),
+    specVersion: parseRequiredNonBlankString(raw, 'specVersion'),
+    status: parseRequiredNonBlankString(raw, 'status'),
+    createdAt: parseRequiredNonBlankString(raw, 'createdAt'),
+    updatedAt: parseRequiredNonBlankString(raw, 'updatedAt')
+  });
 }
 
 export function snapshotEventDto(raw: unknown): AgentHubEventDto {
@@ -325,21 +346,19 @@ export function snapshotEventDto(raw: unknown): AgentHubEventDto {
     throw new AgentHubValidationError('MALFORMED_EVENT', 'Event must be an object');
   }
 
-  const event: AgentHubEventDto = {
-    eventId: parseString(raw.eventId, 'eventId'),
-    eventType: parseString(raw.eventType, 'eventType'),
-    timestamp: parseString(raw.timestamp, 'timestamp'),
-    projectId: parseNullableString(raw.projectId, 'projectId'),
-    agentId: parseNullableString(raw.agentId, 'agentId'),
-    taskId: parseNullableString(raw.taskId, 'taskId'),
-    assignmentId: parseNullableString(raw.assignmentId, 'assignmentId'),
-    actor: parseNullableString(raw.actor, 'actor'),
-    oldStatus: parseNullableString(raw.oldStatus, 'oldStatus'),
-    newStatus: parseNullableString(raw.newStatus, 'newStatus'),
+  return Object.freeze({
+    eventId: parseRequiredNonBlankString(raw, 'eventId'),
+    eventType: parseRequiredNonBlankString(raw, 'eventType'),
+    timestamp: parseRequiredNonBlankString(raw, 'timestamp'),
+    projectId: parseRequiredNullableString(raw, 'projectId'),
+    agentId: parseRequiredNullableString(raw, 'agentId'),
+    taskId: parseRequiredNullableString(raw, 'taskId'),
+    assignmentId: parseRequiredNullableString(raw, 'assignmentId'),
+    actor: parseRequiredNullableString(raw, 'actor'),
+    oldStatus: parseRequiredNullableString(raw, 'oldStatus'),
+    newStatus: parseRequiredNullableString(raw, 'newStatus'),
     payload: sanitizeEventPayload(raw.payload)
-  };
-
-  return Object.freeze(event);
+  });
 }
 
 export function snapshotState(raw: unknown): AgentHubStateSnapshot {

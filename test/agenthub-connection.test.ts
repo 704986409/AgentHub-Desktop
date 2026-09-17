@@ -122,21 +122,23 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
 
       // Simulate burst of 3 WS events -> coalesced into 1 sync
       const prevFetchCount = stateFetchCount;
-      wsClientSocket?.send(JSON.stringify({
-        type: 'event',
-        version: 1,
-        event: { eventId: 'e1', eventType: 'task.updated', timestamp: '2026-01-01T00:00:01Z' }
-      }));
-      wsClientSocket?.send(JSON.stringify({
-        type: 'event',
-        version: 1,
-        event: { eventId: 'e2', eventType: 'task.updated', timestamp: '2026-01-01T00:00:02Z' }
-      }));
-      wsClientSocket?.send(JSON.stringify({
-        type: 'event',
-        version: 1,
-        event: { eventId: 'e3', eventType: 'task.updated', timestamp: '2026-01-01T00:00:03Z' }
-      }));
+      const mkEvent = (id: string, ts: string) => ({
+        eventId: id,
+        eventType: 'task.updated',
+        timestamp: ts,
+        projectId: null,
+        agentId: null,
+        taskId: null,
+        assignmentId: null,
+        actor: null,
+        oldStatus: null,
+        newStatus: null,
+        payload: null
+      });
+
+      wsClientSocket?.send(JSON.stringify({ type: 'event', version: 1, event: mkEvent('e1', '2026-01-01T00:00:01Z') }));
+      wsClientSocket?.send(JSON.stringify({ type: 'event', version: 1, event: mkEvent('e2', '2026-01-01T00:00:02Z') }));
+      wsClientSocket?.send(JSON.stringify({ type: 'event', version: 1, event: mkEvent('e3', '2026-01-01T00:00:03Z') }));
 
       // Wait for debounce to fire
       await new Promise((r) => setTimeout(r, 150));
@@ -158,6 +160,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
       assert.equal(connection.getState().connection, 'disconnected');
     } finally {
       connection.stop();
+      for (const c of wss.clients) c.terminate();
       wss.close();
       server.close();
     }
@@ -227,7 +230,10 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
       assert.ok(connection.getState().snapshot);
     } finally {
       connection.stop();
-      if (wss) wss.close();
+      if (wss) {
+        for (const c of wss.clients) c.terminate();
+        wss.close();
+      }
       if (server) server.close();
     }
   });
@@ -348,7 +354,19 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
       wsClient?.send(JSON.stringify({
         type: 'event',
         version: 1,
-        event: { eventId: 'e-fail', eventType: 'task.broken', timestamp: '2026-01-01T00:00:00Z' }
+        event: {
+          eventId: 'e-fail',
+          eventType: 'task.broken',
+          timestamp: '2026-01-01T00:00:00Z',
+          projectId: 'p-initial',
+          agentId: null,
+          taskId: null,
+          assignmentId: null,
+          actor: null,
+          oldStatus: null,
+          newStatus: null,
+          payload: null
+        }
       }));
 
       // Wait for debounce and sync to fail
@@ -360,6 +378,213 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
       assert.equal(connection.getState().lastError?.code, 'SYNC_ERROR');
     } finally {
       connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
+
+  test('stop-restart race: generation sync ownership prevents stale cleanup from clobbering new generation', async () => {
+    let stateCalls = 0;
+    let releaseGenAResponse: (() => void) | null = null;
+    let activeWsClients: WebSocket[] = [];
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h1', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+
+      if (req.url === '/api/v1/state') {
+        stateCalls++;
+        const currentCall = stateCalls;
+        if (currentCall === 1) {
+          // Generation A initial state request: hold it
+          new Promise<void>((resolve) => {
+            releaseGenAResponse = resolve;
+          }).then(() => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: true,
+              requestId: 's-genA',
+              data: {
+                projects: [{ projectId: 'proj-A', name: 'Project A', description: null, createdAt: '2026', updatedAt: '2026' }],
+                agents: [],
+                tasks: [],
+                assignments: []
+              }
+            }));
+          });
+          return;
+        }
+
+        // Generation B state request: respond immediately with B data
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: `s-genB-${currentCall}`,
+          data: {
+            projects: [{ projectId: `proj-B-${currentCall}`, name: 'Project B', description: null, createdAt: '2026', updatedAt: '2026' }],
+            agents: [],
+            tasks: [],
+            assignments: []
+          }
+        }));
+        return;
+      }
+
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end('{}');
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      activeWsClients.push(ws);
+      ws.on('close', () => {
+        activeWsClients = activeWsClients.filter((s) => s !== ws);
+      });
+      ws.send(JSON.stringify({ type: 'hello', version: 1, apiVersion: 'v1' }));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      // 1. start generation A
+      void connection.start();
+
+      // Wait a tick for /health to finish and /state A to be in flight
+      await new Promise((r) => setTimeout(r, 60));
+      assert.equal(stateCalls, 1);
+
+      // 3. stop()
+      connection.stop();
+      assert.equal(connection.getState().connection, 'disconnected');
+
+      // 4. immediately start generation B
+      await connection.start();
+
+      // 5. B connects and finishes valid sync
+      await new Promise((r) => setTimeout(r, 120));
+      assert.equal(connection.getState().connection, 'connected');
+      assert.ok(connection.getState().snapshot?.projects[0].projectId?.startsWith('proj-B-'));
+
+      // 6. release A response / allow A finally
+      if (releaseGenAResponse) (releaseGenAResponse as () => void)();
+      await new Promise((r) => setTimeout(r, 60));
+
+      // 7. send WS event during/after B sync
+      const currentWs = activeWsClients[activeWsClients.length - 1];
+      assert.ok(currentWs, 'Active WS for generation B must exist');
+      currentWs.send(JSON.stringify({
+        type: 'event',
+        version: 1,
+        event: {
+          eventId: 'evt-b-1',
+          eventType: 'task.updated',
+          timestamp: '2026-01-01T00:00:10Z',
+          projectId: 'proj-B',
+          agentId: null,
+          taskId: null,
+          assignmentId: null,
+          actor: null,
+          oldStatus: null,
+          newStatus: null,
+          payload: null
+        }
+      }));
+
+      // Wait for debounce and resync
+      await new Promise((r) => setTimeout(r, 150));
+
+      // 8. Assert:
+      // - B remains authoritative (not reverted to proj-A)
+      assert.ok(connection.getState().snapshot?.projects[0].projectId?.startsWith('proj-B-'));
+      assert.notEqual(connection.getState().snapshot?.projects[0].projectId, 'proj-A');
+      // - state remains connected
+      assert.equal(connection.getState().connection, 'connected');
+      // - exactly one current WS
+      assert.equal(activeWsClients.length, 1);
+    } finally {
+      if (releaseGenAResponse) (releaseGenAResponse as () => void)();
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
+
+  test('hello-timeout triggers degraded/connecting and single bounded reconnect path', async () => {
+    let wsConnections = 0;
+    let sendHello = false;
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h1', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+      if (req.url === '/api/v1/state') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: 's1',
+          data: {
+            projects: [{ projectId: 'p1', name: 'Proj', description: null, createdAt: '2026', updatedAt: '2026' }],
+            agents: [],
+            tasks: [],
+            assignments: []
+          }
+        }));
+        return;
+      }
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      wsConnections++;
+      if (sendHello) {
+        ws.send(JSON.stringify({ type: 'hello', version: 1, apiVersion: 'v1' }));
+      }
+      // If sendHello is false, do not send hello frame to trigger timeout
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({
+      baseUrl: `http://127.0.0.1:${addr.port}`,
+      helloTimeoutMs: 60
+    });
+
+    try {
+      await connection.start();
+
+      // Wait for hello timeout to trigger (60ms + buffer)
+      await new Promise((r) => setTimeout(r, 120));
+
+      // After timeout, snapshot is retained but connection is degraded with WS_HELLO_TIMEOUT
+      assert.equal(connection.getState().connection, 'degraded');
+      assert.equal(connection.getState().lastError?.code, 'WS_HELLO_TIMEOUT');
+      assert.ok(connection.getState().snapshot);
+
+      // Now allow hello on next connection
+      sendHello = true;
+
+      // Wait for backoff reconnect (1000ms delay)
+      const maxWaitMs = 2500;
+      const startWait = Date.now();
+      while (Date.now() - startWait < maxWaitMs) {
+        if (connection.getState().connection === 'connected') break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      assert.equal(connection.getState().connection, 'connected');
+      assert.ok(wsConnections >= 2);
+    } finally {
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
       wss.close();
       server.close();
     }
