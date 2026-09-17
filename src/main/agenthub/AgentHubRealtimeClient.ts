@@ -25,7 +25,7 @@ export class AgentHubRealtimeClient extends EventEmitter {
   #helloReceived = false;
   #isStopped = true;
 
-  #helloTimer: NodeJS.Timeout | null = null;
+  #currentHelloTimer: NodeJS.Timeout | null = null;
 
   constructor(options: AgentHubRealtimeClientOptions = {}) {
     super();
@@ -47,13 +47,6 @@ export class AgentHubRealtimeClient extends EventEmitter {
     );
   }
 
-  #clearHelloTimer(): void {
-    if (this.#helloTimer) {
-      clearTimeout(this.#helloTimer);
-      this.#helloTimer = null;
-    }
-  }
-
   /**
    * Connect to the AgentHub realtime WebSocket service.
    * Ensures single active socket ownership and isolates events to that instance.
@@ -68,24 +61,43 @@ export class AgentHubRealtimeClient extends EventEmitter {
 
     this.#isStopped = false;
     this.#helloReceived = false;
-    this.#clearHelloTimer();
+    if (this.#currentHelloTimer !== null) {
+      clearTimeout(this.#currentHelloTimer);
+      this.#currentHelloTimer = null;
+    }
 
     let socket: WebSocket;
     try {
       socket = this.#createWebSocket ? this.#createWebSocket(this.#wsUrl) : new WebSocket(this.#wsUrl);
       this.#currentSocket = socket;
     } catch (err) {
-      this.emit('error', new AgentHubContractError('WS_INIT_FAILED', (err as Error).message));
+      const error = new AgentHubContractError('WS_INIT_FAILED', (err as Error).message);
+      this.emit('error', error);
+      this.emit('init_failed', error);
       return;
     }
+
+    let helloTimer: NodeJS.Timeout | null = null;
+    const clearSocketHelloTimer = () => {
+      if (helloTimer !== null) {
+        clearTimeout(helloTimer);
+        if (this.#currentHelloTimer === helloTimer) {
+          this.#currentHelloTimer = null;
+        }
+        helloTimer = null;
+      }
+    };
 
     socket.on('open', () => {
       if (this.#currentSocket !== socket) return;
 
-      // Arm bounded hello timeout
-      this.#clearHelloTimer();
-      this.#helloTimer = setTimeout(() => {
-        this.#helloTimer = null;
+      // Arm bounded hello timeout specifically for this socket instance
+      clearSocketHelloTimer();
+      helloTimer = setTimeout(() => {
+        if (this.#currentHelloTimer === helloTimer) {
+          this.#currentHelloTimer = null;
+        }
+        helloTimer = null;
         if (this.#currentSocket !== socket || this.#helloReceived) return;
 
         const err = new AgentHubContractError(
@@ -102,11 +114,12 @@ export class AgentHubRealtimeClient extends EventEmitter {
         this.emit('error', err);
         this.emit('hello_timeout', err);
       }, this.#helloTimeoutMs);
+      this.#currentHelloTimer = helloTimer;
     });
 
     socket.on('message', (data: Buffer | string) => {
       if (this.#currentSocket !== socket) return;
-      this.#handleSocketMessage(socket, data.toString());
+      this.#handleSocketMessage(socket, data.toString(), clearSocketHelloTimer);
     });
 
     socket.on('error', (err: Error) => {
@@ -114,13 +127,13 @@ export class AgentHubRealtimeClient extends EventEmitter {
       this.emit('error', err);
     });
 
-    socket.on('close', (code: number, reasonBuf: Buffer) => {
-      this.#clearHelloTimer();
+    socket.on('close', (code: number, reasonBuf?: Buffer) => {
+      clearSocketHelloTimer();
       if (this.#currentSocket !== socket) {
         return; // Stale socket event, ignore completely
       }
 
-      const reason = reasonBuf.toString();
+      const reason = reasonBuf ? reasonBuf.toString() : '';
       const wasOpen = this.#helloReceived;
       this.#currentSocket = null;
       this.#helloReceived = false;
@@ -136,7 +149,10 @@ export class AgentHubRealtimeClient extends EventEmitter {
    */
   public stop(): void {
     this.#isStopped = true;
-    this.#clearHelloTimer();
+    if (this.#currentHelloTimer !== null) {
+      clearTimeout(this.#currentHelloTimer);
+      this.#currentHelloTimer = null;
+    }
     const socket = this.#currentSocket;
     this.#currentSocket = null;
     this.#helloReceived = false;
@@ -158,7 +174,7 @@ export class AgentHubRealtimeClient extends EventEmitter {
     }
   }
 
-  #handleSocketMessage(socket: WebSocket, raw: string): void {
+  #handleSocketMessage(socket: WebSocket, raw: string, clearTimer: () => void): void {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -173,11 +189,11 @@ export class AgentHubRealtimeClient extends EventEmitter {
     if (!this.#helloReceived) {
       // First frame must be hello with version 1 and apiVersion 'v1'
       if (msg.type === 'hello' && msg.version === 1 && msg.apiVersion === 'v1') {
-        this.#clearHelloTimer();
+        clearTimer();
         this.#helloReceived = true;
         this.emit('hello', msg as AgentHubWsHelloMessage);
       } else {
-        this.#clearHelloTimer();
+        clearTimer();
         const err = new AgentHubContractError(
           'INCOMPATIBLE_HELLO',
           `Incompatible hello frame (expected version: 1, apiVersion: 'v1'): ${raw}`

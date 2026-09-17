@@ -4,10 +4,11 @@ import http from 'node:http';
 import net from 'node:net';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AgentHubConnection } from '../src/main/agenthub/AgentHubConnection';
+import { AgentHubRealtimeClient } from '../src/main/agenthub/AgentHubRealtimeClient';
 import { AgentHubStateCache } from '../src/main/agenthub/AgentHubStateCache';
 
 describe('AgentHubStateCache', () => {
-  test('emits change events on status, health, and snapshot updates without coupling connection', () => {
+  test('emits change events on status, health, and snapshot updates without coupling connection', { timeout: 5000 }, () => {
     const cache = new AgentHubStateCache();
     const changes: string[] = [];
 
@@ -45,7 +46,7 @@ describe('AgentHubStateCache', () => {
 });
 
 describe('AgentHubConnection Lifecycle and Failure Closures', () => {
-  test('orchestrates start, initial sync, WS event coalesced resync, and clean stop', async () => {
+  test('orchestrates start, initial sync, WS event coalesced resync, and clean stop', { timeout: 5000 }, async () => {
     let stateFetchCount = 0;
     let wsClientSocket: WebSocket | null = null;
 
@@ -133,7 +134,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
         actor: null,
         oldStatus: null,
         newStatus: null,
-        payload: null
+        payload: {}
       });
 
       wsClientSocket?.send(JSON.stringify({ type: 'event', version: 1, event: mkEvent('e1', '2026-01-01T00:00:01Z') }));
@@ -166,7 +167,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
     }
   });
 
-  test('backend-later recovery: starts offline, server appears later, transitions to connected', async () => {
+  test('backend-later recovery: starts offline, server appears later, transitions to connected', { timeout: 5000 }, async () => {
     // 1. Acquire an unused ephemeral port
     const helperServer = net.createServer();
     const port = await new Promise<number>((resolve) => {
@@ -238,7 +239,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
     }
   });
 
-  test('stop-race: in-flight delayed REST response cannot resurrect connection after stop', async () => {
+  test('stop-race: in-flight delayed REST response cannot resurrect connection after stop', { timeout: 5000 }, async () => {
     let releaseResponse: (() => void) | null = null;
 
     const server = http.createServer((req, res) => {
@@ -295,7 +296,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
     }
   });
 
-  test('resync-failure: when authoritative resync fails, state downgrades to degraded and retains snapshot', async () => {
+  test('resync-failure: when authoritative resync fails, state downgrades to degraded and retains snapshot', { timeout: 5000 }, async () => {
     let returnErrorOnState = false;
     let wsClient: WebSocket | null = null;
 
@@ -365,7 +366,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
           actor: null,
           oldStatus: null,
           newStatus: null,
-          payload: null
+          payload: {}
         }
       }));
 
@@ -384,7 +385,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
     }
   });
 
-  test('stop-restart race: generation sync ownership prevents stale cleanup from clobbering new generation', async () => {
+  test('stop-restart race: generation sync ownership prevents stale cleanup from clobbering new generation', { timeout: 5000 }, async () => {
     let stateCalls = 0;
     let releaseGenAResponse: (() => void) | null = null;
     let activeWsClients: WebSocket[] = [];
@@ -492,7 +493,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
           actor: null,
           oldStatus: null,
           newStatus: null,
-          payload: null
+          payload: {}
         }
       }));
 
@@ -516,7 +517,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
     }
   });
 
-  test('hello-timeout triggers degraded/connecting and single bounded reconnect path', async () => {
+  test('hello-timeout triggers degraded/connecting and single bounded reconnect path', { timeout: 5000 }, async () => {
     let wsConnections = 0;
     let sendHello = false;
 
@@ -582,6 +583,233 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
 
       assert.equal(connection.getState().connection, 'connected');
       assert.ok(wsConnections >= 2);
+    } finally {
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
+
+  test('slow-sync + WS-close reconnect: pending reconnect intent is retained and re-armed after sync finishes', { timeout: 5000 }, async () => {
+    let stateCalls = 0;
+    let delayState = false;
+    let releaseState: (() => void) | null = null;
+    let activeWsClients: WebSocket[] = [];
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h1', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+      if (req.url === '/api/v1/state') {
+        stateCalls++;
+        if (delayState) {
+          new Promise<void>((resolve) => {
+            releaseState = resolve;
+          }).then(() => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: true,
+              requestId: `s-${stateCalls}`,
+              data: {
+                projects: [{ projectId: 'p1', name: 'SlowSyncProj', description: null, createdAt: '2026', updatedAt: '2026' }],
+                agents: [],
+                tasks: [],
+                assignments: []
+              }
+            }));
+          });
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: `s-${stateCalls}`,
+          data: {
+            projects: [{ projectId: 'p1', name: 'Proj1', description: null, createdAt: '2026', updatedAt: '2026' }],
+            agents: [],
+            tasks: [],
+            assignments: []
+          }
+        }));
+        return;
+      }
+
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end('{}');
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      activeWsClients.push(ws);
+      ws.on('close', () => {
+        activeWsClients = activeWsClients.filter((s) => s !== ws);
+      });
+      ws.send(JSON.stringify({ type: 'hello', version: 1, apiVersion: 'v1' }));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const connection = new AgentHubConnection({
+      baseUrl: `http://127.0.0.1:${addr.port}`,
+      backoffDelaysMs: [40, 80]
+    });
+
+    try {
+      // 1. Establish valid REST + WS hello
+      await connection.start();
+      await new Promise((r) => setTimeout(r, 80));
+      assert.equal(connection.getState().connection, 'connected');
+      assert.equal(activeWsClients.length, 1);
+
+      // 2. Arm delayed state sync, then trigger REST resync via WS event
+      delayState = true;
+      const initialWs = activeWsClients[0];
+      initialWs.send(JSON.stringify({
+        type: 'event',
+        version: 1,
+        event: {
+          eventId: 'evt-slow-1',
+          eventType: 'task.updated',
+          timestamp: '2026-01-01T00:00:20Z',
+          projectId: 'p1',
+          agentId: null,
+          taskId: null,
+          assignmentId: null,
+          actor: null,
+          oldStatus: null,
+          newStatus: null,
+          payload: {}
+        }
+      }));
+
+      // Wait for debounce (50ms) so #doSync runs and enters delayed /state
+      await new Promise((r) => setTimeout(r, 80));
+      assert.ok(releaseState !== null, '/state request must be in flight and waiting');
+
+      // 3. While resync is in flight, close WS
+      initialWs.terminate();
+
+      // 4. Allow reconnect timer to fire while sync remains owned (delay is 40ms)
+      await new Promise((r) => setTimeout(r, 70));
+
+      // 5. Verify reconnect intent is retained (status degraded, not reconnected yet because sync owns gen)
+      assert.equal(connection.getState().connection, 'degraded');
+
+      // 6. Release REST sync
+      delayState = false;
+      if (releaseState) (releaseState as () => void)();
+
+      // 7. Backend accepts reconnect, sends valid hello
+      const startWait = Date.now();
+      while (Date.now() - startWait < 1500) {
+        if (connection.getState().connection === 'connected') break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      // 9. Assert final state connected
+      assert.equal(connection.getState().connection, 'connected');
+      assert.equal(connection.getState().snapshot?.projects[0].projectId, 'p1');
+      assert.ok(stateCalls >= 3, 'Must have completed initial sync, delayed sync, and reconnect sync');
+
+      // 10. Assert only one current WS
+      assert.equal(activeWsClients.length, 1);
+
+      // 11. Assert no reconnect storm: wait 100ms and verify client count stays 1
+      await new Promise((r) => setTimeout(r, 100));
+      assert.equal(activeWsClients.length, 1);
+    } finally {
+      delayState = false;
+      if (releaseState) (releaseState as () => void)();
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
+
+  test('WS_INIT_FAILED: synchronous socket creation failure schedules bounded recovery and recovers', { timeout: 5000 }, async () => {
+    let wsConnections = 0;
+    let shouldFail = true;
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h1', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+      if (req.url === '/api/v1/state') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: 's1',
+          data: {
+            projects: [{ projectId: 'p1', name: 'InitFailProj', description: null, createdAt: '2026', updatedAt: '2026' }],
+            agents: [],
+            tasks: [],
+            assignments: []
+          }
+        }));
+        return;
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end('{}');
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      wsConnections++;
+      ws.send(JSON.stringify({ type: 'hello', version: 1, apiVersion: 'v1' }));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+    const realtimeClient = new AgentHubRealtimeClient({
+      baseUrl,
+      helloTimeoutMs: 100,
+      createWebSocket: (url: string) => {
+        if (shouldFail) {
+          shouldFail = false;
+          throw new Error('OS socket creation failed');
+        }
+        return new WebSocket(url);
+      }
+    });
+
+    const connection = new AgentHubConnection({
+      baseUrl,
+      realtimeClient,
+      backoffDelaysMs: [50, 100]
+    });
+
+    try {
+      await connection.start();
+
+      // Immediately after start, socket creation threw WS_INIT_FAILED synchronously.
+      // Connection has snapshot so it must degrade and report WS_INIT_FAILED
+      assert.equal(connection.getState().connection, 'degraded');
+      assert.equal(connection.getState().lastError?.code, 'WS_INIT_FAILED');
+
+      // Wait for bounded reconnect (50ms backoff)
+      const startWait = Date.now();
+      while (Date.now() - startWait < 1500) {
+        if (connection.getState().connection === 'connected') break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      // Assert recovered to connected
+      assert.equal(connection.getState().connection, 'connected');
+      assert.equal(wsConnections, 1);
+      assert.equal(realtimeClient.isConnected, true);
+
+      // Verify stop suppresses any further activity
+      connection.stop();
+      assert.equal(connection.getState().connection, 'disconnected');
     } finally {
       connection.stop();
       for (const c of wss.clients) c.terminate();

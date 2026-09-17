@@ -12,12 +12,14 @@ export interface AgentHubConnectionOptions {
   readonly restClient?: AgentHubRestClient;
   readonly realtimeClient?: AgentHubRealtimeClient;
   readonly cache?: AgentHubStateCache;
+  readonly backoffDelaysMs?: readonly number[];
 }
 
 export class AgentHubConnection {
   readonly #restClient: AgentHubRestClient;
   readonly #realtimeClient: AgentHubRealtimeClient;
   readonly #cache: AgentHubStateCache;
+  readonly #backoffDelaysMs: readonly number[];
 
   #isStarted = false;
   #generation = 0;
@@ -27,6 +29,7 @@ export class AgentHubConnection {
   #debounceTimer: NodeJS.Timeout | null = null;
   #syncGeneration: number | null = null;
   #pendingSyncGeneration: number | null = null;
+  #pendingReconnectGeneration: number | null = null;
 
   constructor(options: AgentHubConnectionOptions = {}) {
     this.#cache = options.cache ?? new AgentHubStateCache();
@@ -37,6 +40,7 @@ export class AgentHubConnection {
         baseUrl: options.baseUrl,
         helloTimeoutMs: options.helloTimeoutMs
       });
+    this.#backoffDelaysMs = options.backoffDelaysMs ?? BACKOFF_DELAYS_MS;
 
     this.#setupRealtimeListeners();
   }
@@ -95,6 +99,7 @@ export class AgentHubConnection {
     this.#realtimeClient.stop();
     this.#syncGeneration = null;
     this.#pendingSyncGeneration = null;
+    this.#pendingReconnectGeneration = null;
     this.#cache.setConnectionStatus('disconnected');
   }
 
@@ -144,6 +149,17 @@ export class AgentHubConnection {
       this.#scheduleReconnect(gen);
     });
 
+    this.#realtimeClient.on('init_failed', (err: Error) => {
+      const gen = this.#generation;
+      if (!this.#isStarted || gen !== this.#generation) return;
+      const hasSnapshot = this.#cache.getState().snapshot !== null;
+      this.#cache.setConnectionStatus(hasSnapshot ? 'degraded' : 'connecting', {
+        code: 'WS_INIT_FAILED',
+        message: err.message
+      });
+      this.#scheduleReconnect(gen);
+    });
+
     this.#realtimeClient.on('event', (evt) => {
       const gen = this.#generation;
       if (!this.#isStarted || gen !== this.#generation) return;
@@ -182,7 +198,10 @@ export class AgentHubConnection {
 
   async #attemptConnect(gen: number): Promise<void> {
     if (!this.#isStarted || gen !== this.#generation) return;
-    if (this.#syncGeneration === gen) return;
+    if (this.#syncGeneration === gen) {
+      this.#pendingReconnectGeneration = gen;
+      return;
+    }
 
     this.#syncGeneration = gen;
     const signal = this.#activeAbortController?.signal;
@@ -223,13 +242,19 @@ export class AgentHubConnection {
           this.#scheduleResync(RESYNC_DEBOUNCE_MS, gen);
         }
       }
+      if (this.#pendingReconnectGeneration === gen) {
+        this.#pendingReconnectGeneration = null;
+        if (this.#isStarted && gen === this.#generation && !this.#realtimeClient.isConnected) {
+          this.#scheduleReconnect(gen);
+        }
+      }
     }
   }
 
   #scheduleReconnect(gen: number): void {
     if (!this.#isStarted || gen !== this.#generation || this.#reconnectTimer) return;
 
-    const delay = BACKOFF_DELAYS_MS[Math.min(this.#retryCount, BACKOFF_DELAYS_MS.length - 1)];
+    const delay = this.#backoffDelaysMs[Math.min(this.#retryCount, this.#backoffDelaysMs.length - 1)];
     this.#retryCount++;
 
     this.#reconnectTimer = setTimeout(async () => {
@@ -237,6 +262,10 @@ export class AgentHubConnection {
       if (!this.#isStarted || gen !== this.#generation) return;
 
       if (!this.#realtimeClient.isConnected) {
+        if (this.#syncGeneration === gen) {
+          this.#pendingReconnectGeneration = gen;
+          return;
+        }
         await this.#attemptConnect(gen);
       }
     }, delay);
@@ -309,6 +338,12 @@ export class AgentHubConnection {
         this.#pendingSyncGeneration = null;
         if (this.#isStarted && gen === this.#generation) {
           this.#scheduleResync(RESYNC_DEBOUNCE_MS, gen);
+        }
+      }
+      if (this.#pendingReconnectGeneration === gen) {
+        this.#pendingReconnectGeneration = null;
+        if (this.#isStarted && gen === this.#generation && !this.#realtimeClient.isConnected) {
+          this.#scheduleReconnect(gen);
         }
       }
     }

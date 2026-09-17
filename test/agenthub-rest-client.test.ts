@@ -17,13 +17,13 @@ import {
 } from '../src/shared/agenthubTypes';
 
 describe('validateAgentHubBaseUrl', () => {
-  test('accepts valid 127.0.0.1 URLs', () => {
+  test('accepts valid 127.0.0.1 URLs', { timeout: 5000 }, () => {
     assert.equal(validateAgentHubBaseUrl('http://127.0.0.1:3210'), 'http://127.0.0.1:3210');
     assert.equal(validateAgentHubBaseUrl('http://127.0.0.1:8080/'), 'http://127.0.0.1:8080');
     assert.equal(validateAgentHubBaseUrl('  http://127.0.0.1:3000  '), 'http://127.0.0.1:3000');
   });
 
-  test('rejects non-loopback hostnames or IPs', () => {
+  test('rejects non-loopback hostnames or IPs', { timeout: 5000 }, () => {
     assert.throws(() => validateAgentHubBaseUrl('http://localhost:3210'), {
       name: 'AgentHubContractError',
       code: 'NON_LOOPBACK_HOST'
@@ -42,7 +42,7 @@ describe('validateAgentHubBaseUrl', () => {
     });
   });
 
-  test('rejects non-http protocols', () => {
+  test('rejects non-http protocols', { timeout: 5000 }, () => {
     assert.throws(() => validateAgentHubBaseUrl('https://127.0.0.1:3210'), {
       name: 'AgentHubContractError',
       code: 'INVALID_PROTOCOL'
@@ -53,7 +53,7 @@ describe('validateAgentHubBaseUrl', () => {
     });
   });
 
-  test('rejects credentials, paths, query, and fragments', () => {
+  test('rejects credentials, paths, query, and fragments', { timeout: 5000 }, () => {
     assert.throws(() => validateAgentHubBaseUrl('http://user:pass@127.0.0.1:3210'), {
       name: 'AgentHubContractError',
       code: 'CREDENTIALS_FORBIDDEN'
@@ -74,7 +74,7 @@ describe('validateAgentHubBaseUrl', () => {
 });
 
 describe('AgentHubRestClient network and envelope validation', () => {
-  test('successfully performs GET health, state, and events with STRICT GET only', async () => {
+  test('successfully performs GET health, state, and events with STRICT GET only', { timeout: 5000 }, async () => {
     const receivedMethods: string[] = [];
 
     const server = http.createServer((req, res) => {
@@ -159,7 +159,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
               actor: null,
               oldStatus: null,
               newStatus: null,
-              payload: null
+              payload: {}
             }
           ]
         }));
@@ -201,7 +201,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
     }
   });
 
-  test('rejects health when status is not ok or version is blank', async () => {
+  test('rejects health when status is not ok or version is blank', { timeout: 5000 }, async () => {
     let mode = 'bad_status';
 
     const server = http.createServer((_req, res) => {
@@ -232,7 +232,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
     }
   });
 
-  test('validates envelopes: rejects missing or blank requestId, missing/non-string error.message, and unexpected keys', async () => {
+  test('validates envelopes: rejects missing or blank requestId, missing/non-string error.message, and unexpected keys', { timeout: 5000 }, async () => {
     let mode = 'missing_requestId';
 
     const server = http.createServer((_req, res) => {
@@ -304,7 +304,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
     }
   });
 
-  test('runtime snapshot sanitizes private fields from state and events', async () => {
+  test('runtime snapshot sanitizes private fields from state and events', { timeout: 5000 }, async () => {
     const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       if (req.url === '/api/v1/state') {
@@ -400,7 +400,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
     }
   });
 
-  test('oversized body is rejected with BODY_OVERFLOW', async () => {
+  test('oversized body is rejected with BODY_OVERFLOW', { timeout: 5000 }, async () => {
     const server = http.createServer((_req, res) => {
       // Announce Content-Length greater than 8 MiB (e.g. 9 MiB)
       res.writeHead(200, {
@@ -423,7 +423,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
     }
   });
 
-  test('recursively strips forbidden keys case-insensitively in event payload', () => {
+  test('recursively strips forbidden keys case-insensitively in event payload', { timeout: 5000 }, () => {
     const raw = {
       safeField: 'hello',
       RepositoryRoot: 'C:\\repo',
@@ -484,7 +484,7 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     updatedAt: '2026-01-01'
   };
 
-  test('snapshotAgentDto succeeds with valid required and nullable fields', () => {
+  test('snapshotAgentDto succeeds with valid required and nullable fields', { timeout: 5000 }, () => {
     const agent = snapshotAgentDto(validAgent);
     assert.equal(agent.agentId, 'a1');
     assert.equal(agent.projectId, null);
@@ -492,7 +492,7 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     assert.equal(agent.routingPriority, 0);
   });
 
-  test('snapshotAgentDto fails closed with AgentHubValidationError on missing or malformed fields', () => {
+  test('snapshotAgentDto fails closed with AgentHubValidationError on missing or malformed fields', { timeout: 5000 }, () => {
     assert.throws(() => snapshotAgentDto({ ...validAgent, name: undefined }), {
       name: 'AgentHubValidationError',
       code: 'MALFORMED_FIELD'
@@ -564,7 +564,7 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     updatedAt: '2026-01-01'
   };
 
-  test('snapshotTaskDto fails closed on missing nullable fields or arrays', () => {
+  test('snapshotTaskDto fails closed on missing nullable fields or arrays', { timeout: 5000 }, () => {
     const task = snapshotTaskDto(validTask);
     assert.equal(task.taskId, 't1');
     assert.equal(task.description, null);
@@ -597,7 +597,7 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     updatedAt: '2026-01-01'
   };
 
-  test('snapshotAssignmentDto fails closed on missing specVersion (no default synthesis)', () => {
+  test('snapshotAssignmentDto fails closed on missing specVersion (no default synthesis)', { timeout: 5000 }, () => {
     const asg = snapshotAssignmentDto(validAssignment);
     assert.equal(asg.specVersion, '1.0');
 
@@ -611,7 +611,7 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     });
   });
 
-  test('snapshotProjectDto fails closed on missing description', () => {
+  test('snapshotProjectDto fails closed on missing description', { timeout: 5000 }, () => {
     const validProj = {
       projectId: 'p1',
       name: 'Proj 1',
@@ -628,7 +628,7 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     });
   });
 
-  test('snapshotEventDto fails closed on missing structural fields or missing nullable fields', () => {
+  test('snapshotEventDto fails closed on missing structural fields or missing nullable fields', { timeout: 5000 }, () => {
     const validEvt = {
       eventId: 'e1',
       eventType: 'task.created',
@@ -640,11 +640,12 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
       actor: null,
       oldStatus: null,
       newStatus: null,
-      payload: null
+      payload: {}
     };
     const evt = snapshotEventDto(validEvt);
     assert.equal(evt.eventId, 'e1');
     assert.equal(evt.projectId, null);
+    assert.deepEqual(evt.payload, {});
 
     assert.throws(() => snapshotEventDto({ ...validEvt, eventId: undefined }), {
       name: 'AgentHubValidationError',
@@ -653,6 +654,113 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     assert.throws(() => snapshotEventDto({ ...validEvt, projectId: undefined }), {
       name: 'AgentHubValidationError',
       code: 'MALFORMED_FIELD'
+    });
+  });
+
+  test('snapshotEventDto and sanitizeEventPayload: strict contract closure for payloads', { timeout: 5000 }, () => {
+    const baseEvt = {
+      eventId: 'e1',
+      eventType: 'task.created',
+      timestamp: '2026-01-01T00:00:00Z',
+      projectId: null,
+      agentId: null,
+      taskId: null,
+      assignmentId: null,
+      actor: null,
+      oldStatus: null,
+      newStatus: null
+    };
+
+    // 1. missing payload -> rejected
+    assert.throws(() => snapshotEventDto({ ...baseEvt }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_EVENT'
+    });
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: undefined }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_EVENT'
+    });
+
+    // 2. {} -> accepted
+    const emptyObjEvt = snapshotEventDto({ ...baseEvt, payload: {} });
+    assert.deepEqual(emptyObjEvt.payload, {});
+
+    // 3. scalar string -> accepted/preserved
+    const strEvt = snapshotEventDto({ ...baseEvt, payload: 'hello world' });
+    assert.equal(strEvt.payload, 'hello world');
+
+    // 4. number -> accepted/preserved
+    const numEvt = snapshotEventDto({ ...baseEvt, payload: 42 });
+    assert.equal(numEvt.payload, 42);
+
+    // 5. boolean -> accepted/preserved
+    const boolEvt = snapshotEventDto({ ...baseEvt, payload: true });
+    assert.equal(boolEvt.payload, true);
+
+    // 6. array -> accepted/preserved
+    const arrEvt = snapshotEventDto({ ...baseEvt, payload: ['item1', 123, false] });
+    assert.deepEqual(arrEvt.payload, ['item1', 123, false]);
+
+    // 7. array containing null -> null retained
+    const arrNullEvt = snapshotEventDto({ ...baseEvt, payload: ['a', null, 'b'] });
+    assert.deepEqual(arrNullEvt.payload, ['a', null, 'b']);
+
+    // 8. nested forbidden keys -> stripped
+    const nestedEvt = snapshotEventDto({
+      ...baseEvt,
+      payload: {
+        safeField: 'val',
+        repositoryRoot: 'C:\\secret',
+        nested: {
+          innerSafe: 99,
+          gitDir: 'D:\\git'
+        }
+      }
+    });
+    assert.deepEqual(nestedEvt.payload, {
+      safeField: 'val',
+      nested: {
+        innerSafe: 99
+      }
+    });
+
+    // 9. array object forbidden keys -> stripped
+    const arrObjEvt = snapshotEventDto({
+      ...baseEvt,
+      payload: [
+        { title: 'ok', worktreePath: 'E:\\wt' },
+        { id: 1, sessionid: 'sess' }
+      ]
+    });
+    assert.deepEqual(arrObjEvt.payload, [
+      { title: 'ok' },
+      { id: 1 }
+    ]);
+
+    // 10. unsupported values in direct snapshot unit test -> rejected
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: () => {} }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: Symbol('unsupported') }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: BigInt(12345) }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: NaN }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: Infinity }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: -Infinity }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
     });
   });
 });

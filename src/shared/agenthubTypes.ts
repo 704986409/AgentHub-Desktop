@@ -83,6 +83,14 @@ export interface AssignmentDto {
   readonly updatedAt: string;
 }
 
+export type AgentHubPublicValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly AgentHubPublicValue[]
+  | { readonly [key: string]: AgentHubPublicValue };
+
 export interface AgentHubEventDto {
   readonly eventId: string;
   readonly eventType: string;
@@ -94,7 +102,7 @@ export interface AgentHubEventDto {
   readonly actor: string | null;
   readonly oldStatus: string | null;
   readonly newStatus: string | null;
-  readonly payload: Record<string, unknown> | null;
+  readonly payload: AgentHubPublicValue;
 }
 
 export interface AgentHubStateSnapshot {
@@ -225,43 +233,51 @@ export function parseRequiredBoolean(record: Record<string, unknown>, fieldName:
   return val;
 }
 
-export function sanitizeEventPayload(val: unknown, depth = 0): Record<string, unknown> | null {
-  if (val === null || val === undefined) return null;
-  if (depth > 5) return null; // Bound nesting depth
-  if (!isRecord(val)) return null;
-
-  const sanitized: Record<string, unknown> = {};
-  const entries = Object.entries(val);
-  const maxEntries = 100; // Bound collection size
-
-  for (let i = 0; i < Math.min(entries.length, maxEntries); i++) {
-    const [key, value] = entries[i];
-    // Case-insensitive forbidden key check
-    if (LOWERCASE_FORBIDDEN_KEYS.has(key.toLowerCase())) {
-      continue; // Strip forbidden key
-    }
-    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      sanitized[key] = value;
-    } else if (Array.isArray(value)) {
-      if (depth + 1 <= 5) {
-        sanitized[key] = value
-          .slice(0, 100)
-          .map((item) => {
-            if (isRecord(item)) return sanitizeEventPayload(item, depth + 1);
-            if (item === null || typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
-              return item;
-            }
-            return null;
-          })
-          .filter((item) => item !== null);
-      }
-    } else if (isRecord(value)) {
-      const child = sanitizeEventPayload(value, depth + 1);
-      if (child) sanitized[key] = child;
-    }
+export function sanitizeEventPayload(val: unknown, depth = 0): AgentHubPublicValue {
+  if (depth > 12) {
+    throw new AgentHubValidationError('MALFORMED_PAYLOAD', 'Payload exceeds maximum nesting depth');
   }
 
-  return Object.freeze(sanitized);
+  if (val === null) {
+    return null;
+  }
+
+  if (typeof val === 'string') {
+    return val;
+  }
+
+  if (typeof val === 'number') {
+    if (!Number.isFinite(val)) {
+      throw new AgentHubValidationError('MALFORMED_PAYLOAD', 'Payload number must be finite');
+    }
+    return val;
+  }
+
+  if (typeof val === 'boolean') {
+    return val;
+  }
+
+  if (Array.isArray(val)) {
+    const maxItems = 1000;
+    const sanitizedArray = val.slice(0, maxItems).map((item) => sanitizeEventPayload(item, depth + 1));
+    return Object.freeze(sanitizedArray);
+  }
+
+  if (isRecord(val)) {
+    const sanitizedObj: Record<string, AgentHubPublicValue> = {};
+    const entries = Object.entries(val);
+    const maxEntries = 1000;
+    for (let i = 0; i < Math.min(entries.length, maxEntries); i++) {
+      const [key, child] = entries[i];
+      if (LOWERCASE_FORBIDDEN_KEYS.has(key.toLowerCase())) {
+        continue;
+      }
+      sanitizedObj[key] = sanitizeEventPayload(child, depth + 1);
+    }
+    return Object.freeze(sanitizedObj);
+  }
+
+  throw new AgentHubValidationError('MALFORMED_PAYLOAD', `Unsupported payload type: ${typeof val}`);
 }
 
 export function snapshotProjectDto(raw: unknown): ProjectDto {
@@ -344,6 +360,10 @@ export function snapshotAssignmentDto(raw: unknown): AssignmentDto {
 export function snapshotEventDto(raw: unknown): AgentHubEventDto {
   if (!isRecord(raw)) {
     throw new AgentHubValidationError('MALFORMED_EVENT', 'Event must be an object');
+  }
+
+  if (!('payload' in raw) || raw.payload === undefined) {
+    throw new AgentHubValidationError('MALFORMED_EVENT', "Required field 'payload' is missing");
   }
 
   return Object.freeze({
