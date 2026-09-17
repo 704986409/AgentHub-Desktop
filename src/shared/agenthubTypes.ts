@@ -234,8 +234,18 @@ export function parseRequiredBoolean(record: Record<string, unknown>, fieldName:
 }
 
 export function sanitizeEventPayload(val: unknown, depth = 0): AgentHubPublicValue {
-  if (depth > 12) {
-    throw new AgentHubValidationError('MALFORMED_PAYLOAD', 'Payload exceeds maximum nesting depth');
+  if (depth > 13) {
+    throw new AgentHubValidationError('MALFORMED_PAYLOAD', 'Payload exceeds maximum nesting depth (13)');
+  }
+
+  if (depth === 13) {
+    if (val === '[TRUNCATED]') {
+      return val;
+    }
+    if (Array.isArray(val) || isRecord(val)) {
+      throw new AgentHubValidationError('MALFORMED_PAYLOAD', 'Payload container cannot continue at depth 13');
+    }
+    throw new AgentHubValidationError('MALFORMED_PAYLOAD', 'Leaf at depth 13 must be [TRUNCATED]');
   }
 
   if (val === null) {
@@ -258,17 +268,16 @@ export function sanitizeEventPayload(val: unknown, depth = 0): AgentHubPublicVal
   }
 
   if (Array.isArray(val)) {
-    const maxItems = 1000;
-    const sanitizedArray = val.slice(0, maxItems).map((item) => sanitizeEventPayload(item, depth + 1));
+    if (val.length > 1000) {
+      throw new AgentHubValidationError('MALFORMED_PAYLOAD', 'Array exceeds maximum element limit (1000)');
+    }
+    const sanitizedArray = val.map((item) => sanitizeEventPayload(item, depth + 1));
     return Object.freeze(sanitizedArray);
   }
 
   if (isRecord(val)) {
     const sanitizedObj: Record<string, AgentHubPublicValue> = {};
-    const entries = Object.entries(val);
-    const maxEntries = 1000;
-    for (let i = 0; i < Math.min(entries.length, maxEntries); i++) {
-      const [key, child] = entries[i];
+    for (const [key, child] of Object.entries(val)) {
       if (LOWERCASE_FORBIDDEN_KEYS.has(key.toLowerCase())) {
         continue;
       }

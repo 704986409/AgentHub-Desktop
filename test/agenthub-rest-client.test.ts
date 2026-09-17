@@ -763,4 +763,119 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
       code: 'MALFORMED_PAYLOAD'
     });
   });
+
+  test('event payload normalized depth: accepts depth-13 [TRUNCATED], rejects depth-13 containers and depth >13', { timeout: 5000 }, () => {
+    const baseEvt = {
+      eventId: 'evt-depth',
+      eventType: 'agent.updated',
+      timestamp: '2026-01-01T00:00:00Z',
+      projectId: null,
+      agentId: null,
+      taskId: null,
+      assignmentId: null,
+      actor: null,
+      oldStatus: null,
+      newStatus: null
+    };
+
+    // Helper to construct container at depth 12 holding child at depth 13
+    const makeDeepPayload = (leaf: unknown): unknown => {
+      let cur: unknown = leaf;
+      for (let d = 12; d >= 0; d--) {
+        cur = { [`l_${d}`]: cur };
+      }
+      return cur;
+    };
+
+    // 1. Valid backend-normalized fixture: container at depth 12 with [TRUNCATED] at depth 13
+    const validDeep = makeDeepPayload('[TRUNCATED]');
+    const dto = snapshotEventDto({ ...baseEvt, payload: validDeep });
+    let check: any = dto.payload;
+    for (let d = 0; d <= 12; d++) {
+      check = check[`l_${d}`];
+    }
+    assert.equal(check, '[TRUNCATED]', 'deepest leaf must remain exactly [TRUNCATED]');
+
+    // 2. Invalid container continuation at depth 13: object at depth 13 -> rejected
+    const invalidObjContinuation = makeDeepPayload({ deeper: 1 });
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: invalidObjContinuation }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+
+    // 3. Invalid container continuation at depth 13: array at depth 13 -> rejected
+    const invalidArrContinuation = makeDeepPayload(['deeper']);
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: invalidArrContinuation }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+
+    // 4. Invalid non-[TRUNCATED] leaf at depth 13 -> rejected
+    const invalidScalarDepth13 = makeDeepPayload('not-truncated-string');
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: invalidScalarDepth13 }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+
+    // 5. Direct depth > 13 rejected
+    assert.throws(() => sanitizeEventPayload('val', 14), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+  });
+
+  test('event payload collection semantics: preserves 1000 items, rejects >1000 array items, preserves >1000 object keys and strips forbidden keys', { timeout: 5000 }, () => {
+    const baseEvt = {
+      eventId: 'evt-coll',
+      eventType: 'agent.updated',
+      timestamp: '2026-01-01T00:00:00Z',
+      projectId: null,
+      agentId: null,
+      taskId: null,
+      assignmentId: null,
+      actor: null,
+      oldStatus: null,
+      newStatus: null
+    };
+
+    // 1. Array length 1000 -> accepted and preserved exactly
+    const arr1000 = Array.from({ length: 1000 }, (_, i) => `item_${i}`);
+    const evt1000 = snapshotEventDto({ ...baseEvt, payload: arr1000 });
+    const resArr = evt1000.payload as readonly unknown[];
+    assert.equal(resArr.length, 1000);
+    assert.equal(resArr[0], 'item_0');
+    assert.equal(resArr[999], 'item_999');
+
+    // 2. Array length 1001 -> rejected fail-closed, not truncated
+    const arr1001 = Array.from({ length: 1001 }, (_, i) => `item_${i}`);
+    assert.throws(() => snapshotEventDto({ ...baseEvt, payload: arr1001 }), {
+      name: 'AgentHubValidationError',
+      code: 'MALFORMED_PAYLOAD'
+    });
+
+    // 3. Object with >1000 allowed keys (1050 keys) -> preserved, not silently truncated
+    const bigObj: Record<string, unknown> = {};
+    for (let i = 0; i < 1050; i++) {
+      bigObj[`k_${i}`] = i;
+    }
+    // Add forbidden private keys
+    bigObj['repositoryRoot'] = 'C:\\secret';
+    bigObj['CWD'] = 'D:\\secret';
+    bigObj['SessionId'] = 'secret-session';
+
+    const evtBigObj = snapshotEventDto({ ...baseEvt, payload: bigObj });
+    const resObj = evtBigObj.payload as Record<string, unknown>;
+
+    // Allowed keys count must be exactly 1050
+    assert.equal(Object.keys(resObj).length, 1050);
+    assert.equal(resObj['k_0'], 0);
+    assert.equal(resObj['k_1049'], 1049);
+
+    // Forbidden keys must be stripped
+    assert.equal('repositoryRoot' in resObj, false);
+    assert.equal('CWD' in resObj, false);
+    assert.equal('cwd' in resObj, false);
+    assert.equal('SessionId' in resObj, false);
+    assert.equal('sessionid' in resObj, false);
+  });
 });

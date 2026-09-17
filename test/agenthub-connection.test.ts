@@ -817,4 +817,100 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
       server.close();
     }
   });
+
+  test('valid deep backend-normalized event triggers event emission, records lastEventAt, and triggers coalesced REST resync', { timeout: 5000 }, async () => {
+    let stateFetchCount = 0;
+    let wsClientSocket: WebSocket | null = null;
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/v1/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, requestId: 'h1', data: { status: 'ok', version: '0.7.0' } }));
+        return;
+      }
+
+      if (req.url === '/api/v1/state') {
+        stateFetchCount++;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          requestId: `s-${stateFetchCount}`,
+          data: {
+            projects: [],
+            agents: [],
+            tasks: [],
+            assignments: []
+          }
+        }));
+        return;
+      }
+
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, requestId: '404', error: { code: 'NOT_FOUND', message: 'Not found' } }));
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+    wss.on('connection', (ws) => {
+      wsClientSocket = ws;
+      ws.send(JSON.stringify({
+        type: 'hello',
+        version: 1,
+        apiVersion: 'v1'
+      }));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+    const connection = new AgentHubConnection({ baseUrl });
+
+    try {
+      await connection.start();
+      await new Promise((r) => setTimeout(r, 100));
+
+      assert.equal(connection.getState().connection, 'connected');
+      const initialFetchCount = stateFetchCount;
+      assert.ok(initialFetchCount >= 1);
+
+      // Construct backend normalized depth-13 payload
+      let deepPayload: unknown = '[TRUNCATED]';
+      for (let d = 12; d >= 0; d--) {
+        deepPayload = { [`l_${d}`]: deepPayload };
+      }
+
+      // Send deep event over WebSocket
+      wsClientSocket?.send(JSON.stringify({
+        type: 'event',
+        version: 1,
+        event: {
+          eventId: 'evt-deep-sync',
+          eventType: 'agent.updated',
+          timestamp: '2026-01-01T15:30:00Z',
+          projectId: null,
+          agentId: 'a-deep',
+          taskId: null,
+          assignmentId: null,
+          actor: null,
+          oldStatus: null,
+          newStatus: null,
+          payload: deepPayload
+        }
+      }));
+
+      // Wait for debounce and coalesced resync
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Assert event timestamp recorded in connection state
+      assert.equal(connection.getState().lastEventAt, '2026-01-01T15:30:00Z');
+
+      // Assert state resync was triggered
+      assert.ok(stateFetchCount > initialFetchCount);
+    } finally {
+      connection.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
 });

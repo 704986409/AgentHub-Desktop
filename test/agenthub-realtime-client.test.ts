@@ -312,4 +312,71 @@ describe('AgentHubRealtimeClient', () => {
       client.stop();
     }
   });
+
+  test('valid deep backend-normalized event with depth 13 [TRUNCATED] leaf reaches realtime client and is emitted', { timeout: 5000 }, async () => {
+    const server = http.createServer();
+    const wss = new WebSocketServer({ server, path: '/api/v1/realtime' });
+
+    let serverSocket: WebSocket | null = null;
+    wss.on('connection', (ws) => {
+      serverSocket = ws;
+      ws.send(JSON.stringify({
+        type: 'hello',
+        version: 1,
+        apiVersion: 'v1'
+      }));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRealtimeClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+
+    try {
+      const helloPromise = new Promise<{ apiVersion: string }>((resolve) => {
+        client.on('hello', (hello) => resolve(hello));
+      });
+      client.connect();
+      await helloPromise;
+
+      let deepPayload: unknown = '[TRUNCATED]';
+      for (let d = 12; d >= 0; d--) {
+        deepPayload = { [`l_${d}`]: deepPayload };
+      }
+
+      const eventPromise = new Promise<any>((resolve) => {
+        client.on('event', (evt) => resolve(evt));
+      });
+
+      serverSocket?.send(JSON.stringify({
+        type: 'event',
+        version: 1,
+        event: {
+          eventId: 'evt-deep-ws',
+          eventType: 'agent.updated',
+          timestamp: '2026-01-01T12:00:00Z',
+          projectId: null,
+          agentId: 'agent-deep',
+          taskId: null,
+          assignmentId: null,
+          actor: null,
+          oldStatus: null,
+          newStatus: null,
+          payload: deepPayload
+        }
+      }));
+
+      const evt = await eventPromise;
+      assert.equal(evt.eventId, 'evt-deep-ws');
+      let check: any = evt.payload;
+      for (let d = 0; d <= 12; d++) {
+        check = check[`l_${d}`];
+      }
+      assert.equal(check, '[TRUNCATED]');
+    } finally {
+      client.stop();
+      for (const c of wss.clients) c.terminate();
+      wss.close();
+      server.close();
+    }
+  });
 });
