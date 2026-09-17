@@ -14,7 +14,7 @@ import {
   type CreateTaskInputDto,
   type TaskDto
 } from '../src/shared/agenthubTypes';
-import { TaskSubmissionIdLifecycle } from '../src/shared/agenthubSubmissionLifecycle';
+import { TaskSubmissionIdLifecycle, InvalidSubmissionTransitionError } from '../src/shared/agenthubSubmissionLifecycle';
 
 describe('AgentHub Runtime Create Task Input Validation', () => {
   const validBase: CreateTaskInputDto = {
@@ -276,8 +276,8 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
       // Second submit with same submissionId and exact same body (e.g. user retry)
       const res2 = await submissionService.submitTask({ submissionId, input: validBase });
       assert.equal(res2.status, 'created');
-      assert.equal(receivedHeaders[1]['idempotency-key'], 'desktop-task:sub-test-123');
-      assert.equal(taskCreateCount, 2);
+      assert.equal(receivedHeaders.length, 1);
+      assert.equal(taskCreateCount, 1);
 
       // Verify authoritative state has the task from /state
       assert.equal(connection.getState().snapshot?.tasks.length, 1);
@@ -1206,6 +1206,20 @@ describe('AgentHub V0.8.3 mutation surface allowlist', () => {
     assert.match(connectionSrc, /#commitSnapshotIfCurrent/);
     assert.match(connectionSrc, /#latestCommittedSequence/);
   });
+
+  test('create UI blocks normal Submit while ambiguous and requires snapshot project membership', { timeout: 5000 }, () => {
+    const ui = fs.readFileSync(path.join(process.cwd(), 'src/renderer/src/components/AgentHubTaskModal.tsx'), 'utf8');
+    assert.match(ui, /Retry Same Submission/);
+    assert.match(ui, /status === 'ambiguous'/);
+    assert.match(ui, /status === 'submitting' \|\| status === 'ambiguous'/);
+    assert.match(ui, /No authoritative projects are available/);
+    assert.equal(ui.includes('No projects loaded from snapshot'), false);
+    assert.match(ui, /projects\.some\(\(p\) => p\.projectId === projectId\)/);
+    const store = fs.readFileSync(path.join(process.cwd(), 'src/renderer/src/stores/agentHubStore.ts'), 'utf8');
+    assert.match(store, /code: 'IPC_LOST'/);
+    assert.match(store, /status: 'ambiguous'/);
+    assert.match(store, /code: 'NO_PRELOAD'/);
+  });
 });
 
 describe('AgentHub CreateTask IPC request envelope', () => {
@@ -1311,6 +1325,198 @@ describe('AgentHub CreateTask IPC request envelope', () => {
   });
 });
 
+describe('AgentHub Create mutation certainty and settled replay', () => {
+  const validBase: CreateTaskInputDto = {
+    projectId: 'p-1',
+    title: 'Implement Task Creation',
+    description: 'Unit test task',
+    requiredCapabilities: ['node'],
+    requiredSpecialties: ['backend'],
+    acceptanceCriteria: ['Tests pass'],
+    complexity: 'MEDIUM',
+    risk: 'LOW'
+  };
+
+  test('HTTP 201 + ok:false is ambiguous and retries the same desktop-task key', { timeout: 5000 }, async () => {
+    const keys: string[] = [];
+    let n = 0;
+    const mockTask: TaskDto = {
+      taskId: 'task-replay',
+      projectId: 'p-1',
+      title: 'Implement Task Creation',
+      description: 'Unit test task',
+      requiredCapabilities: ['node'],
+      requiredSpecialties: ['backend'],
+      acceptanceCriteria: ['Tests pass'],
+      complexity: 'MEDIUM',
+      risk: 'LOW',
+      status: 'pending',
+      assignedAgentId: null,
+      assignmentId: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+    const server = http.createServer((req, res) => {
+      if (req.method !== 'POST' || req.url !== '/api/v1/tasks') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      keys.push(String(req.headers['idempotency-key'] || ''));
+      n++;
+      if (n === 1) {
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: false,
+          requestId: 'r1',
+          error: { code: 'UNEXPECTED', message: 'ok false on 201' }
+        }));
+        return;
+      }
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'r2', data: mockTask }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const connection = {
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
+      syncAuthoritativeState: async () => ({
+        disposition: 'committed',
+        snapshot: { projects: [], agents: [], tasks: [mockTask], assignments: [] }
+      })
+    } as unknown as AgentHubConnection;
+    const submissionService = new AgentHubTaskSubmission(connection);
+    const request = { submissionId: 'sub-201-false', input: validBase };
+    try {
+      const first = await submissionService.submitTask(request);
+      assert.equal(first.status, 'ambiguous');
+      const retry = await submissionService.submitTask(request);
+      assert.equal(retry.status, 'created');
+      assert.deepEqual(keys, ['desktop-task:sub-201-false', 'desktop-task:sub-201-false']);
+    } finally {
+      submissionService.stop();
+      server.close();
+    }
+  });
+
+  test('HTTP 409 exact error is definitive failed and settled replay sends zero HTTP', { timeout: 5000 }, async () => {
+    let posts = 0;
+    const server = http.createServer((_req, res) => {
+      posts++;
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'conflict',
+        error: { code: 'AGENTHUB_API_CONFLICT', message: 'duplicate' }
+      }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const connection = {
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection;
+    const submissionService = new AgentHubTaskSubmission(connection);
+    const request = { submissionId: 'sub-409', input: validBase };
+    try {
+      const first = await submissionService.submitTask(request);
+      assert.equal(first.status, 'failed');
+      if (first.status === 'failed') {
+        assert.equal(first.retryable, false);
+        assert.equal(first.error.code, 'AGENTHUB_API_CONFLICT');
+      }
+      const replay = await submissionService.submitTask(request);
+      assert.equal(replay.status, 'failed');
+      assert.equal(posts, 1);
+    } finally {
+      submissionService.stop();
+      server.close();
+    }
+  });
+
+  test('HTTP 409 nested extra error key and HTTP 500 + ok:true are ambiguous', { timeout: 5000 }, async () => {
+    const extra = http.createServer((_req, res) => {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'extra',
+        error: { code: 'FAIL', message: 'nope', extra: true }
+      }));
+    });
+    await new Promise<void>((r) => extra.listen(0, '127.0.0.1', () => r()));
+    const extraAddr = extra.address() as { port: number };
+    const extraConn = {
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${extraAddr.port}` }),
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection;
+    const extraSub = new AgentHubTaskSubmission(extraConn);
+    try {
+      const res = await extraSub.submitTask({ submissionId: 'sub-extra-err', input: validBase });
+      assert.equal(res.status, 'ambiguous');
+    } finally {
+      extraSub.stop();
+      extra.close();
+    }
+
+    const okTrue = http.createServer((_req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'r500', data: { taskId: 'x' } }));
+    });
+    await new Promise<void>((r) => okTrue.listen(0, '127.0.0.1', () => r()));
+    const okAddr = okTrue.address() as { port: number };
+    const okConn = {
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${okAddr.port}` }),
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection;
+    const okSub = new AgentHubTaskSubmission(okConn);
+    try {
+      const res = await okSub.submitTask({ submissionId: 'sub-500-true', input: validBase });
+      assert.equal(res.status, 'ambiguous');
+    } finally {
+      okSub.stop();
+      okTrue.close();
+    }
+  });
+
+  test('create redirect is never followed and remains ambiguous with the same ID', { timeout: 5000 }, async () => {
+    let sinkHits = 0;
+    const sink = http.createServer((_req, res) => {
+      sinkHits++;
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'sink', data: {} }));
+    });
+    await new Promise<void>((r) => sink.listen(0, '127.0.0.1', () => r()));
+    const sinkAddr = sink.address() as { port: number };
+
+    const keys: string[] = [];
+    const origin = http.createServer((req, res) => {
+      if (req.method === 'POST') keys.push(String(req.headers['idempotency-key'] || ''));
+      res.writeHead(307, { Location: `http://127.0.0.1:${sinkAddr.port}${req.url}` });
+      res.end();
+    });
+    await new Promise<void>((r) => origin.listen(0, '127.0.0.1', () => r()));
+    const originAddr = origin.address() as { port: number };
+    const connection = {
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${originAddr.port}` }),
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection;
+    const submissionService = new AgentHubTaskSubmission(connection);
+    const request = { submissionId: 'sub-redirect', input: validBase };
+    try {
+      const first = await submissionService.submitTask(request);
+      assert.equal(first.status, 'ambiguous');
+      const retry = await submissionService.submitTask(request);
+      assert.equal(retry.status, 'ambiguous');
+      assert.equal(sinkHits, 0);
+      assert.deepEqual(keys, ['desktop-task:sub-redirect', 'desktop-task:sub-redirect']);
+    } finally {
+      submissionService.stop();
+      origin.close();
+      sink.close();
+    }
+  });
+});
+
 describe('TaskSubmissionIdLifecycle', () => {
   test('ambiguous retry keeps ID; created/failed rotate; edit after ambiguous rotates', { timeout: 5000 }, () => {
     let n = 0;
@@ -1321,6 +1527,7 @@ describe('TaskSubmissionIdLifecycle', () => {
     assert.equal(first, 'id-1');
     life.onResult('ambiguous');
     assert.equal(life.id, 'id-1');
+    assert.throws(() => life.beginSubmit(), InvalidSubmissionTransitionError);
     assert.equal(life.beginRetry(), 'id-1');
     life.onResult('ambiguous');
     assert.equal(life.id, 'id-1');

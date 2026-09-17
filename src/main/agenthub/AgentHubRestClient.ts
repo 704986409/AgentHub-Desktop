@@ -303,8 +303,17 @@ export class AgentHubRestClient {
         method,
         headers,
         body,
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'manual'
       });
+
+      if (response.status >= 300 && response.status < 400) {
+        fail(
+          'REDIRECT_FORBIDDEN',
+          `AgentHub transport must not follow HTTP redirects (got ${response.status})`,
+          'response-contract'
+        );
+      }
 
       const contentLengthHeader = response.headers.get('Content-Length');
       if (contentLengthHeader) {
@@ -398,13 +407,25 @@ export class AgentHubRestClient {
         if (!errObj || typeof errObj !== 'object' || Array.isArray(errObj)) {
           fail('MALFORMED_ENVELOPE', 'Error envelope must contain an error object', 'response-contract');
         } else {
+          for (const k of Object.keys(errObj)) {
+            if (k !== 'code' && k !== 'message') {
+              fail('MALFORMED_ENVELOPE', `Unexpected key '${k}' in error object`, 'response-contract');
+            }
+          }
           const backendCode = errObj.code;
           const backendMessage = errObj.message;
           if (typeof backendCode !== 'string' || !backendCode.trim()) {
             fail('MALFORMED_ENVELOPE', 'Error object must contain a non-blank code', 'response-contract');
           }
-          if (typeof backendMessage !== 'string') {
-            fail('MALFORMED_ENVELOPE', 'Error object must contain a string message', 'response-contract');
+          if (typeof backendMessage !== 'string' || !backendMessage.trim()) {
+            fail('MALFORMED_ENVELOPE', 'Error object must contain a non-blank message', 'response-contract');
+          }
+          if (response.status < 400 || response.status > 599) {
+            fail(
+              'MALFORMED_ENVELOPE',
+              `HTTP ${response.status} with ok:false is not a valid backend rejection`,
+              'response-contract'
+            );
           }
           fail(backendCode, backendMessage, 'backend');
         }

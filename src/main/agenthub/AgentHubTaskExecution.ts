@@ -14,6 +14,7 @@ import { AgentHubContractError, isDefinitiveMutationFailure } from './AgentHubRe
 interface ExecutionRecord {
   readonly fingerprint: string;
   inFlightPromise?: Promise<TaskExecutionResult>;
+  settledResult?: TaskExecutionResult;
 }
 
 function computeExecutionFingerprint(taskId: string, input: ExecuteTaskInputDto): string {
@@ -39,6 +40,16 @@ function ambiguous(code: string, message: string): TaskExecutionResult {
     retryable: true,
     error: { code, message }
   };
+}
+
+function freezeExecutionResult(result: TaskExecutionResult): TaskExecutionResult {
+  if (result.status === 'failed' || result.status === 'ambiguous') {
+    Object.freeze(result.error);
+  }
+  if (result.status === 'executed' && result.stateSynchronized === false) {
+    Object.freeze(result.warning);
+  }
+  return Object.freeze(result);
 }
 
 /**
@@ -97,6 +108,9 @@ export class AgentHubTaskExecution {
           `Execution ID '${executionId}' was previously used with a different request payload`
         );
       }
+      if (existing.settledResult) {
+        return existing.settledResult;
+      }
       if (existing.inFlightPromise) {
         return await existing.inFlightPromise;
       }
@@ -109,7 +123,12 @@ export class AgentHubTaskExecution {
     record.inFlightPromise = promise;
 
     try {
-      return await promise;
+      const result = await promise;
+      if (result.status === 'executed' || result.status === 'failed') {
+        record.settledResult = freezeExecutionResult(result);
+        return record.settledResult;
+      }
+      return result;
     } finally {
       record.inFlightPromise = undefined;
     }

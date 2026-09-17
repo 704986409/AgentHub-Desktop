@@ -1,5 +1,12 @@
 export type TaskFormPhase = 'idle' | 'submitting' | 'created' | 'ambiguous' | 'failed';
 
+export class InvalidSubmissionTransitionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidSubmissionTransitionError';
+  }
+}
+
 /**
  * Renderer-owned logical submission ID lifecycle.
  * Main still derives the backend Idempotency-Key; this only decides which ID the UI sends.
@@ -23,11 +30,24 @@ export class TaskSubmissionIdLifecycle {
   }
 
   beginSubmit(): string {
+    if (this.#phase === 'ambiguous') {
+      throw new InvalidSubmissionTransitionError(
+        'Normal Submit is not allowed while the previous submission outcome is ambiguous'
+      );
+    }
+    if (this.#phase === 'submitting') {
+      throw new InvalidSubmissionTransitionError('Submit is already in flight');
+    }
     this.#phase = 'submitting';
     return this.#id;
   }
 
   beginRetry(): string {
+    if (this.#phase !== 'ambiguous') {
+      throw new InvalidSubmissionTransitionError(
+        'Retry Same Submission is only allowed while the previous submission outcome is ambiguous'
+      );
+    }
     this.#phase = 'submitting';
     return this.#id;
   }

@@ -105,7 +105,18 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
         error: { code: 'NO_PRELOAD', message: 'AgentHub preload bridge is unavailable' }
       };
     }
-    return window.agentHub.createTask(request);
+    try {
+      return await window.agentHub.createTask(request);
+    } catch (err) {
+      return {
+        status: 'ambiguous',
+        retryable: true,
+        error: {
+          code: 'IPC_LOST',
+          message: (err as Error).message || 'Task submission IPC result was lost'
+        }
+      };
+    }
   },
 
   executeTask: async (request: ExecuteTaskRequestDto): Promise<TaskExecutionResult> => {
@@ -116,6 +127,17 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
         error: { code: 'NO_PRELOAD', message: 'AgentHub preload bridge is unavailable' }
       };
     }
-    return window.agentHub.executeTask(request);
+    try {
+      return await window.agentHub.executeTask(request);
+    } catch (err) {
+      return {
+        status: 'ambiguous',
+        retryable: true,
+        error: {
+          code: 'IPC_LOST',
+          message: (err as Error).message || 'Task execution IPC result was lost'
+        }
+      };
+    }
   }
 }));

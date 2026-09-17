@@ -14,6 +14,7 @@ import { AgentHubContractError, isDefinitiveMutationFailure } from './AgentHubRe
 interface SubmissionRecord {
   readonly fingerprint: string;
   inFlightPromise?: Promise<TaskSubmissionResult>;
+  settledResult?: TaskSubmissionResult;
 }
 
 function computeInputFingerprint(input: CreateTaskInputDto): string {
@@ -44,6 +45,16 @@ function ambiguous(code: string, message: string): TaskSubmissionResult {
     retryable: true,
     error: { code, message }
   };
+}
+
+function freezeSubmissionResult(result: TaskSubmissionResult): TaskSubmissionResult {
+  if (result.status === 'failed' || result.status === 'ambiguous') {
+    Object.freeze(result.error);
+  }
+  if (result.status === 'created' && result.stateSynchronized === false) {
+    Object.freeze(result.warning);
+  }
+  return Object.freeze(result);
 }
 
 /**
@@ -103,6 +114,9 @@ export class AgentHubTaskSubmission {
           `Submission ID '${submissionId}' was previously used with a different request payload`
         );
       }
+      if (existing.settledResult) {
+        return existing.settledResult;
+      }
       if (existing.inFlightPromise) {
         return await existing.inFlightPromise;
       }
@@ -115,7 +129,12 @@ export class AgentHubTaskSubmission {
     record.inFlightPromise = promise;
 
     try {
-      return await promise;
+      const result = await promise;
+      if (result.status === 'created' || result.status === 'failed') {
+        record.settledResult = freezeSubmissionResult(result);
+        return record.settledResult;
+      }
+      return result;
     } finally {
       record.inFlightPromise = undefined;
     }

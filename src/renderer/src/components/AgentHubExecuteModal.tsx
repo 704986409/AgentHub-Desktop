@@ -87,6 +87,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
   const handleExecute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (status === 'executing' || status === 'ambiguous') return;
+    if (!tasks.some((task) => task.taskId === taskId)) return;
 
     const input: ExecuteTaskInputDto = { baseRef, prompt };
     let id: string;
@@ -102,11 +103,20 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
     setExecuteResult(null);
     setLastExecutedInput({ taskId, input });
 
-    const result = await executeTask({
-      executionId: id,
-      taskId,
-      input
-    });
+    let result;
+    try {
+      result = await executeTask({
+        executionId: id,
+        taskId,
+        input
+      });
+    } catch (err: any) {
+      lifecycleRef.current.onResult('ambiguous');
+      setExecutionId(lifecycleRef.current.id);
+      setStatus('ambiguous');
+      setErrorMessage(err?.message || 'Task execution outcome is unknown');
+      return;
+    }
 
     if (result.status === 'executed') {
       lifecycleRef.current.onResult('executed');
@@ -145,11 +155,20 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
     setErrorMessage(null);
     setWarningMessage(null);
 
-    const result = await executeTask({
-      executionId: id,
-      taskId: lastExecutedInput.taskId,
-      input: lastExecutedInput.input
-    });
+    let result;
+    try {
+      result = await executeTask({
+        executionId: id,
+        taskId: lastExecutedInput.taskId,
+        input: lastExecutedInput.input
+      });
+    } catch (err: any) {
+      lifecycleRef.current.onResult('ambiguous');
+      setExecutionId(lifecycleRef.current.id);
+      setStatus('ambiguous');
+      setErrorMessage(err?.message || 'Task execution retry outcome is unknown');
+      return;
+    }
 
     if (result.status === 'executed') {
       lifecycleRef.current.onResult('executed');
@@ -175,7 +194,12 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
   };
 
   const INK = 'var(--cth-ink-900, #0f172a)';
-  const canSubmit = connection !== 'disconnected' && tasks.length > 0 && status !== 'executing' && status !== 'ambiguous';
+  const selectedTaskInSnapshot = tasks.some((task) => task.taskId === taskId);
+  const canSubmit =
+    connection !== 'disconnected' &&
+    selectedTaskInSnapshot &&
+    status !== 'executing' &&
+    status !== 'ambiguous';
 
   return (
     <div
@@ -266,7 +290,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
             </label>
             {tasks.length > 0 ? (
               <select
-                value={taskId}
+                value={selectedTaskInSnapshot ? taskId : ''}
                 onChange={(e) => onFieldChange(setTaskId, e.target.value)}
                 disabled={status === 'executing'}
                 style={{
@@ -276,6 +300,11 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
                   fontFamily: 'inherit'
                 }}
               >
+                {!selectedTaskInSnapshot && (
+                  <option value="" disabled>
+                    Select an authoritative task
+                  </option>
+                )}
                 {tasks.map((task) => (
                   <option key={task.taskId} value={task.taskId}>
                     {formatTaskLabel(task)}

@@ -8,7 +8,7 @@ import {
   type TaskRisk,
   type CreateTaskInputDto
 } from '@shared/agenthubTypes';
-import { TaskSubmissionIdLifecycle } from '@shared/agenthubSubmissionLifecycle';
+import { TaskSubmissionIdLifecycle, InvalidSubmissionTransitionError } from '@shared/agenthubSubmissionLifecycle';
 
 interface AgentHubTaskModalProps {
   isOpen: boolean;
@@ -79,7 +79,8 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (status === 'submitting') return;
+    if (status === 'submitting' || status === 'ambiguous') return;
+    if (!projects.some((p) => p.projectId === projectId)) return;
 
     let input: CreateTaskInputDto;
     try {
@@ -90,21 +91,27 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
       return;
     }
 
+    let effectiveSubmissionId: string;
+    try {
+      effectiveSubmissionId = lifecycleRef.current.beginSubmit();
+    } catch (err) {
+      if (err instanceof InvalidSubmissionTransitionError) return;
+      throw err;
+    }
     setStatus('submitting');
     setErrorMessage(null);
     setWarningMessage(null);
     setLastSubmittedInput(input);
-    const effectiveSubmissionId = lifecycleRef.current.beginSubmit();
     setSubmissionId(effectiveSubmissionId);
 
     let result;
     try {
       result = await submitTask({ submissionId: effectiveSubmissionId, input });
     } catch (err: any) {
-      lifecycleRef.current.onResult('failed');
+      lifecycleRef.current.onResult('ambiguous');
       setSubmissionId(lifecycleRef.current.id);
-      setStatus('failed');
-      setErrorMessage(err?.message || 'Task submission failed');
+      setStatus('ambiguous');
+      setErrorMessage(err?.message || 'Task submission outcome is unknown');
       return;
     }
 
@@ -130,11 +137,17 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
   };
 
   const handleRetry = async () => {
-    if (status === 'submitting' || !lastSubmittedInput) return;
+    if (status !== 'ambiguous' || !lastSubmittedInput) return;
+    let effectiveSubmissionId: string;
+    try {
+      effectiveSubmissionId = lifecycleRef.current.beginRetry();
+    } catch (err) {
+      if (err instanceof InvalidSubmissionTransitionError) return;
+      throw err;
+    }
     setStatus('submitting');
     setErrorMessage(null);
     setWarningMessage(null);
-    const effectiveSubmissionId = lifecycleRef.current.beginRetry();
     setSubmissionId(effectiveSubmissionId);
 
     // Reuse EXACT same submissionId and normalized body
@@ -142,10 +155,10 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
     try {
       result = await submitTask({ submissionId: effectiveSubmissionId, input: lastSubmittedInput });
     } catch (err: any) {
-      lifecycleRef.current.onResult('failed');
+      lifecycleRef.current.onResult('ambiguous');
       setSubmissionId(lifecycleRef.current.id);
-      setStatus('failed');
-      setErrorMessage(err?.message || 'Task retry failed');
+      setStatus('ambiguous');
+      setErrorMessage(err?.message || 'Task retry outcome is unknown');
       return;
     }
 
@@ -261,7 +274,7 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
             </label>
             {projects.length > 0 ? (
               <select
-                value={projectId}
+                value={projects.some((p) => p.projectId === projectId) ? projectId : ''}
                 onChange={(e) => onFieldChange(setProjectId, e.target.value)}
                 disabled={status === 'submitting'}
                 style={{
@@ -272,6 +285,11 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
                   fontSize: 13
                 }}
               >
+                {!projects.some((p) => p.projectId === projectId) && (
+                  <option value="" disabled>
+                    Select an authoritative project
+                  </option>
+                )}
                 {projects.map((p) => (
                   <option key={p.projectId} value={p.projectId}>
                     {p.name} ({p.projectId})
@@ -279,20 +297,9 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
                 ))}
               </select>
             ) : (
-              <input
-                type="text"
-                value={projectId}
-                onChange={(e) => onFieldChange(setProjectId, e.target.value)}
-                placeholder="No projects loaded from snapshot"
-                disabled={status === 'submitting'}
-                style={{
-                  width: '100%',
-                  padding: '6px 8px',
-                  border: `1px solid ${INK}`,
-                  fontFamily: 'inherit',
-                  fontSize: 13
-                }}
-              />
+              <div style={{ fontSize: 13, color: 'var(--cth-ink-500, #64748b)' }}>
+                No authoritative projects are available. Refresh AgentHub state first.
+              </div>
             )}
           </div>
 
@@ -487,13 +494,25 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
 
             <button
               type="submit"
-              disabled={status === 'submitting' || connection === 'disconnected' || !title.trim()}
+              disabled={
+                status === 'submitting' ||
+                status === 'ambiguous' ||
+                connection === 'disconnected' ||
+                !title.trim() ||
+                !projects.some((p) => p.projectId === projectId)
+              }
               style={{
                 padding: '6px 14px',
                 border: `2px solid ${INK}`,
                 background: status === 'submitting' ? 'var(--cth-ink-300, #cbd5e1)' : 'var(--cth-mint-dark, #16a34a)',
                 color: '#ffffff',
-                cursor: status === 'submitting' || !title.trim() ? 'not-allowed' : 'pointer',
+                cursor:
+                  status === 'submitting' ||
+                  status === 'ambiguous' ||
+                  !title.trim() ||
+                  !projects.some((p) => p.projectId === projectId)
+                    ? 'not-allowed'
+                    : 'pointer',
                 fontWeight: 600,
                 fontSize: 13,
                 boxShadow: `2px 2px 0 ${INK}`

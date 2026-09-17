@@ -37,7 +37,7 @@ function validReviewReady(overrides: Record<string, unknown> = {}): Record<strin
     providerId: 'codex',
     workerResult: { summary: 'done', blockers: [], questions: [], risks: [], notes: [] },
     source: {
-      branchName: 'agent/task-1',
+      branchName: 'agenthub/task-1',
       baseCommit: OID40,
       headCommit: HEX64,
       changedPaths: ['src/a.ts'],
@@ -234,7 +234,7 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
 
     const withPatch = snapshotExecuteReviewReadyDto(validReviewReady({
       source: {
-        branchName: 'agent/task-1',
+        branchName: 'agenthub/task-1',
         baseCommit: OID40,
         headCommit: HEX64,
         changedPaths: ['src/a.ts'],
@@ -250,7 +250,7 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
     assert.throws(() => snapshotExecuteReviewReadyDto(validReviewReady({ reviewBundleSha256: 'ZZ' + 'a'.repeat(62) })), (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT');
     assert.throws(() => snapshotExecuteReviewReadyDto(validReviewReady({
       source: {
-        branchName: 'agent/task-1',
+        branchName: 'agenthub/task-1',
         baseCommit: 'not-an-oid',
         headCommit: HEX64,
         changedPaths: [],
@@ -342,10 +342,10 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
   });
 
   test('changedPaths 4096 accepted exactly; 4097 rejected', { timeout: 5000 }, () => {
-    const paths4096 = Array.from({ length: 4096 }, (_, i) => `src/f${i}.ts`);
+    const paths4096 = Array.from({ length: 4096 }, (_, i) => `src/f${String(i).padStart(4, '0')}.ts`);
     const accepted = snapshotExecuteReviewReadyDto(validReviewReady({
       source: {
-        branchName: 'agent/task-1',
+        branchName: 'agenthub/task-1',
         baseCommit: OID40,
         headCommit: HEX64,
         changedPaths: paths4096,
@@ -353,12 +353,12 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
       }
     }));
     assert.equal(accepted.source.changedPaths.length, 4096);
-    assert.equal(accepted.source.changedPaths[0], 'src/f0.ts');
+    assert.equal(accepted.source.changedPaths[0], 'src/f0000.ts');
     assert.equal(accepted.source.changedPaths[4095], 'src/f4095.ts');
 
     assert.throws(() => snapshotExecuteReviewReadyDto(validReviewReady({
       source: {
-        branchName: 'agent/task-1',
+        branchName: 'agenthub/task-1',
         baseCommit: OID40,
         headCommit: HEX64,
         changedPaths: [...paths4096, 'src/extra.ts'],
@@ -373,36 +373,70 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
     const accepted = snapshotExecuteReviewReadyDto(validReviewReady({
       workerResult: {
         summary,
-        blockers: Array.from({ length: 64 }, () => item),
-        questions: Array.from({ length: 64 }, () => item),
+        blockers: [],
+        questions: [],
         risks: Array.from({ length: 64 }, () => item),
         notes: Array.from({ length: 128 }, () => item)
       }
     }));
     assert.equal(accepted.workerResult.summary.length, 8192);
-    assert.equal(accepted.workerResult.blockers.length, 64);
-    assert.equal(accepted.workerResult.questions.length, 64);
+    assert.equal(accepted.workerResult.blockers.length, 0);
+    assert.equal(accepted.workerResult.questions.length, 0);
     assert.equal(accepted.workerResult.risks.length, 64);
     assert.equal(accepted.workerResult.notes.length, 128);
-    assert.equal(accepted.workerResult.blockers[0], item);
+    assert.equal(accepted.workerResult.risks[0], item);
   });
 
   test('backend-valid worker NUL is preserved exactly and oversize remains rejected', { timeout: 5000 }, () => {
     const withNul = snapshotExecuteReviewReadyDto(validReviewReady({
       workerResult: {
         summary: 'done\0with marker',
-        blockers: ['block\0er'],
-        questions: ['ask\0me'],
+        blockers: [],
+        questions: [],
         risks: ['risk\0y'],
         notes: ['note\0x']
       }
     }));
     assert.equal(withNul.workerResult.summary, 'done\0with marker');
-    assert.equal(withNul.workerResult.blockers[0], 'block\0er');
-    assert.equal(withNul.workerResult.questions[0], 'ask\0me');
     assert.equal(withNul.workerResult.risks[0], 'risk\0y');
     assert.equal(withNul.workerResult.notes[0], 'note\0x');
 
+    const nulOnly = snapshotExecuteReviewReadyDto(validReviewReady({
+      workerResult: { summary: '\0', blockers: [], questions: [], risks: ['x\0'], notes: ['\0'] }
+    }));
+    assert.equal(nulOnly.workerResult.summary, '\0');
+    assert.equal(nulOnly.workerResult.notes[0], '\0');
+
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: '   ', blockers: [], questions: [], risks: [], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'ok', blockers: ['   '], questions: [], risks: [], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'ok', blockers: [], questions: ['\t'], risks: [], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'ok', blockers: [], questions: [], risks: ['\n'], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'ok', blockers: [], questions: [], risks: [], notes: ['   '] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
     assert.throws(
       () => snapshotExecuteReviewReadyDto(validReviewReady({
         workerResult: { summary: 'x'.repeat(8193), blockers: [], questions: [], risks: [], notes: [] }
@@ -411,8 +445,180 @@ describe('AgentHub Execute review-ready and terminal DTOs', () => {
     );
     assert.throws(
       () => snapshotExecuteReviewReadyDto(validReviewReady({
-        workerResult: { summary: 'ok', blockers: ['y'.repeat(4097)], questions: [], risks: [], notes: [] }
+        workerResult: { summary: 'ok', blockers: [], questions: [], risks: ['y'.repeat(4097)], notes: [] }
       })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+  });
+
+  test('review-ready worker, handle, branch, paths, and command invariants', { timeout: 5000 }, () => {
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'ok', blockers: ['block\0er'], questions: [], risks: [], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        workerResult: { summary: 'ok', blockers: [], questions: ['ask\0me'], risks: [], notes: [] }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+
+    const otherSha = 'b'.repeat(64);
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({ reviewHandle: 'not-a-sha' })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({ reviewHandle: otherSha })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({ taskId: 'bad task' })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({ taskId: 'CON' })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        source: {
+          branchName: 'agenthub/other-task',
+          baseCommit: OID40,
+          headCommit: HEX64,
+          changedPaths: ['src/a.ts'],
+          changeSetSha256: HEX64
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        source: {
+          branchName: 'agenthub/task-1',
+          baseCommit: OID40,
+          headCommit: HEX64,
+          changedPaths: ['src/a.ts', 'src/a.ts'],
+          changeSetSha256: HEX64
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        source: {
+          branchName: 'agenthub/task-1',
+          baseCommit: OID40,
+          headCommit: HEX64,
+          changedPaths: ['src/b.ts', 'src/a.ts'],
+          changeSetSha256: HEX64
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+
+    const longId = 'c'.repeat(65);
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        buildTest: {
+          build: 'passed',
+          test: 'not-run',
+          outcome: 'passed',
+          commands: [{ id: longId, phase: 'build', outcome: 'passed', stdoutPreview: '', stderrPreview: '' }]
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        buildTest: {
+          build: 'passed',
+          test: 'not-run',
+          outcome: 'passed',
+          commands: [{ id: 'has space', phase: 'build', outcome: 'passed', stdoutPreview: '', stderrPreview: '' }]
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        buildTest: {
+          build: 'passed',
+          test: 'not-run',
+          outcome: 'passed',
+          commands: [{ id: 'has/slash', phase: 'build', outcome: 'passed', stdoutPreview: '', stderrPreview: '' }]
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        buildTest: {
+          build: 'passed',
+          test: 'not-run',
+          outcome: 'passed',
+          commands: [
+            { id: 'cmd-1', phase: 'build', outcome: 'passed', stdoutPreview: '', stderrPreview: '' },
+            { id: 'cmd-1', phase: 'test', outcome: 'passed', stdoutPreview: '', stderrPreview: '' }
+          ]
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+
+    const maxExit = snapshotExecuteReviewReadyDto(validReviewReady({
+      buildTest: {
+        build: 'passed',
+        test: 'not-run',
+        outcome: 'passed',
+        commands: [{ id: 'cmd-1', phase: 'build', outcome: 'passed', exitCode: 2147483647, stdoutPreview: '', stderrPreview: '' }]
+      }
+    }));
+    assert.equal(maxExit.buildTest.commands[0].exitCode, 2147483647);
+    const minExit = snapshotExecuteReviewReadyDto(validReviewReady({
+      buildTest: {
+        build: 'passed',
+        test: 'not-run',
+        outcome: 'passed',
+        commands: [{ id: 'cmd-1', phase: 'build', outcome: 'passed', exitCode: -2147483648, stdoutPreview: '', stderrPreview: '' }]
+      }
+    }));
+    assert.equal(minExit.buildTest.commands[0].exitCode, -2147483648);
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(validReviewReady({
+        buildTest: {
+          build: 'passed',
+          test: 'not-run',
+          outcome: 'passed',
+          commands: [{ id: 'cmd-1', phase: 'build', outcome: 'passed', exitCode: 2147483648, stdoutPreview: '', stderrPreview: '' }]
+        }
+      })),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+
+    assert.throws(
+      () => snapshotExecuteTerminalLifecycleDto({
+        ...validTerminal('blocked'),
+        reviewEvidenceSha256: HEX64
+      }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteTerminalLifecycleDto({
+        ...validTerminal('blocked'),
+        merge: { ok: true }
+      }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+    assert.throws(
+      () => snapshotExecuteTerminalLifecycleDto({
+        ...validTerminal('blocked'),
+        mergeGate: { ok: true }
+      }),
       (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
     );
   });
@@ -456,7 +662,7 @@ describe('AgentHub Task Execution service', () => {
       const r2 = await execution.executeTask(req);
       assert.equal(r1.status, 'executed');
       assert.equal(r2.status, 'executed');
-      assert.deepEqual(keys, ['desktop-execute:exec-same', 'desktop-execute:exec-same']);
+      assert.deepEqual(keys, ['desktop-execute:exec-same']);
     } finally {
       execution.stop();
       server.close();
@@ -910,17 +1116,17 @@ describe('AgentHub Task Execution service', () => {
   });
 
   test('valid backend-sized review-ready that V0.8.3 rejected is now executed', { timeout: 5000 }, async () => {
-    const paths = Array.from({ length: 4096 }, (_, i) => `src/f${i}.ts`);
+    const paths = Array.from({ length: 4096 }, (_, i) => `src/f${String(i).padStart(4, '0')}.ts`);
     const payload = validReviewReady({
       workerResult: {
         summary: '项'.repeat(8192),
-        blockers: ['危'.repeat(4096)],
+        blockers: [],
         questions: [],
-        risks: [],
+        risks: ['危'.repeat(4096)],
         notes: []
       },
       source: {
-        branchName: 'agent/task-1',
+        branchName: 'agenthub/task-1',
         baseCommit: OID40,
         headCommit: HEX64,
         changedPaths: paths,
@@ -988,6 +1194,174 @@ describe('AgentHub Task Execution service', () => {
       server.close();
     }
   });
+
+  test('HTTP 200 review-ready with blank worker summary is ambiguous and retries same key', { timeout: 5000 }, async () => {
+    const keys: string[] = [];
+    let n = 0;
+    const server = http.createServer((req, res) => {
+      if (req.method !== 'POST') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      keys.push(String(req.headers['idempotency-key'] || ''));
+      n++;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      if (n === 1) {
+        res.end(envelope(validReviewReady({
+          workerResult: { summary: '   ', blockers: [], questions: [], risks: [], notes: [] }
+        })));
+        return;
+      }
+      res.end(envelope(validReviewReady()));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const { connection } = stubConnection(`http://127.0.0.1:${addr.port}`);
+    const execution = new AgentHubTaskExecution(connection);
+    const req = { executionId: 'exec-blank-summary', taskId: 'task-1', input: validInput };
+    try {
+      const first = await execution.executeTask(req);
+      assert.equal(first.status, 'ambiguous');
+      if (first.status === 'ambiguous') assert.equal(first.retryable, true);
+      const retry = await execution.executeTask(req);
+      assert.equal(retry.status, 'executed');
+      assert.deepEqual(keys, ['desktop-execute:exec-blank-summary', 'desktop-execute:exec-blank-summary']);
+    } finally {
+      execution.stop();
+      server.close();
+    }
+  });
+
+  test('HTTP 200 + ok:false execute is ambiguous; 409 exact error is definitive failed', { timeout: 5000 }, async () => {
+    const keys: string[] = [];
+    const server200 = http.createServer((req, res) => {
+      if (req.method === 'POST') keys.push(String(req.headers['idempotency-key'] || ''));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'contradiction',
+        error: { code: 'UNEXPECTED', message: 'ok false on 200' }
+      }));
+    });
+    await new Promise<void>((r) => server200.listen(0, '127.0.0.1', () => r()));
+    const addr200 = server200.address() as { port: number };
+    const { connection: conn200 } = stubConnection(`http://127.0.0.1:${addr200.port}`);
+    const exec200 = new AgentHubTaskExecution(conn200);
+    try {
+      const first = await exec200.executeTask({ executionId: 'exec-200-false', taskId: 'task-1', input: validInput });
+      assert.equal(first.status, 'ambiguous');
+      const retry = await exec200.executeTask({ executionId: 'exec-200-false', taskId: 'task-1', input: validInput });
+      assert.equal(retry.status, 'ambiguous');
+      assert.deepEqual(keys, ['desktop-execute:exec-200-false', 'desktop-execute:exec-200-false']);
+    } finally {
+      exec200.stop();
+      server200.close();
+    }
+
+    let posts = 0;
+    const server409 = http.createServer((_req, res) => {
+      posts++;
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'conflict',
+        error: { code: 'AGENTHUB_API_CONFLICT', message: 'already reserved' }
+      }));
+    });
+    await new Promise<void>((r) => server409.listen(0, '127.0.0.1', () => r()));
+    const addr409 = server409.address() as { port: number };
+    const { connection: conn409 } = stubConnection(`http://127.0.0.1:${addr409.port}`);
+    const exec409 = new AgentHubTaskExecution(conn409);
+    try {
+      const req = { executionId: 'exec-409', taskId: 'task-1', input: validInput };
+      const first = await exec409.executeTask(req);
+      assert.equal(first.status, 'failed');
+      if (first.status === 'failed') {
+        assert.equal(first.retryable, false);
+        assert.equal(first.error.code, 'AGENTHUB_API_CONFLICT');
+      }
+      const replay = await exec409.executeTask(req);
+      assert.equal(replay.status, 'failed');
+      assert.equal(posts, 1);
+    } finally {
+      exec409.stop();
+      server409.close();
+    }
+  });
+
+  test('HTTP 409 nested extra error key and HTTP 500 + ok:true are ambiguous', { timeout: 5000 }, async () => {
+    const extra = http.createServer((_req, res) => {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'extra',
+        error: { code: 'FAIL', message: 'nope', extra: true }
+      }));
+    });
+    await new Promise<void>((r) => extra.listen(0, '127.0.0.1', () => r()));
+    const extraAddr = extra.address() as { port: number };
+    const { connection: extraConn } = stubConnection(`http://127.0.0.1:${extraAddr.port}`);
+    const extraExec = new AgentHubTaskExecution(extraConn);
+    try {
+      const res = await extraExec.executeTask({ executionId: 'exec-extra-err', taskId: 'task-1', input: validInput });
+      assert.equal(res.status, 'ambiguous');
+    } finally {
+      extraExec.stop();
+      extra.close();
+    }
+
+    const okTrue = http.createServer((_req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'r500', data: validTerminal('failed') }));
+    });
+    await new Promise<void>((r) => okTrue.listen(0, '127.0.0.1', () => r()));
+    const okAddr = okTrue.address() as { port: number };
+    const { connection: okConn } = stubConnection(`http://127.0.0.1:${okAddr.port}`);
+    const okExec = new AgentHubTaskExecution(okConn);
+    try {
+      const res = await okExec.executeTask({ executionId: 'exec-500-true', taskId: 'task-1', input: validInput });
+      assert.equal(res.status, 'ambiguous');
+    } finally {
+      okExec.stop();
+      okTrue.close();
+    }
+  });
+
+  test('execute redirect is never followed and remains ambiguous with the same ID', { timeout: 5000 }, async () => {
+    let sinkHits = 0;
+    const sink = http.createServer((_req, res) => {
+      sinkHits++;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(envelope(validTerminal('blocked')));
+    });
+    await new Promise<void>((r) => sink.listen(0, '127.0.0.1', () => r()));
+    const sinkAddr = sink.address() as { port: number };
+
+    const keys: string[] = [];
+    const origin = http.createServer((req, res) => {
+      if (req.method === 'POST') keys.push(String(req.headers['idempotency-key'] || ''));
+      res.writeHead(307, { Location: `http://127.0.0.1:${sinkAddr.port}${req.url}` });
+      res.end();
+    });
+    await new Promise<void>((r) => origin.listen(0, '127.0.0.1', () => r()));
+    const originAddr = origin.address() as { port: number };
+    const { connection } = stubConnection(`http://127.0.0.1:${originAddr.port}`);
+    const execution = new AgentHubTaskExecution(connection);
+    const req = { executionId: 'exec-redirect', taskId: 'task-1', input: validInput };
+    try {
+      const first = await execution.executeTask(req);
+      assert.equal(first.status, 'ambiguous');
+      const retry = await execution.executeTask(req);
+      assert.equal(retry.status, 'ambiguous');
+      assert.equal(sinkHits, 0);
+      assert.deepEqual(keys, ['desktop-execute:exec-redirect', 'desktop-execute:exec-redirect']);
+    } finally {
+      execution.stop();
+      origin.close();
+      sink.close();
+    }
+  });
 });
 
 describe('AgentHub Task Execution ID lifecycle', () => {
@@ -1036,6 +1410,9 @@ describe('AgentHub Task Execution ownership and UI allowlist', () => {
     assert.match(ui, /Retry Same Execution/);
     assert.match(ui, /status !== 'ambiguous'/);
     assert.match(ui, /status === 'executing' \|\| status === 'ambiguous'/);
+    assert.match(ui, /selectedTaskInSnapshot/);
+    assert.match(ui, /tasks\.some\(\(task\) => task\.taskId === taskId\)/);
+    assert.match(ui, /IPC result was lost|Task execution outcome is unknown/);
     assert.equal(ui.includes('Accept'), false);
     assert.equal(ui.includes('Request Revision'), false);
     assert.equal(ui.includes('Approve'), false);

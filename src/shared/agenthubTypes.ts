@@ -274,9 +274,6 @@ export interface ExecuteTerminalLifecycleDto {
   readonly taskId: string;
   readonly assignmentId: string;
   readonly lifecycleSha256: string;
-  readonly reviewEvidenceSha256?: string;
-  readonly merge?: AgentHubPublicValue;
-  readonly mergeGate?: AgentHubPublicValue;
 }
 
 export type ExecuteTaskResultDto = ExecuteReviewReadyDto | ExecuteTerminalLifecycleDto;
@@ -771,10 +768,17 @@ const WORKER_RISKS_MAX_ITEMS = 64;
 const WORKER_NOTES_MAX_ITEMS = 128;
 const CHANGED_PATHS_MAX_ITEMS = 4096;
 const COMMANDS_MAX_ITEMS = 256;
-const COMMAND_ID_MAX_BYTES = 256;
+const COMMAND_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
 const COMMAND_PREVIEW_MAX_BYTES = 1024 * 1024;
 const BRANCH_NAME_MAX_BYTES = 4096;
-const REVIEW_HANDLE_MAX_BYTES = 256;
+const MANAGED_TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+const WINDOWS_RESERVED_DEVICE_NAMES = new Set([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+]);
+const INT32_MIN = -2147483648;
+const INT32_MAX = 2147483647;
 
 function rejectUnexpectedKeys(
   raw: Record<string, unknown>,
@@ -838,7 +842,8 @@ function snapshotBoundedCharStringArray(
   maxItems: number,
   maxItemChars: number,
   code: string,
-  forbidNul = true
+  forbidNul = true,
+  requireNonBlank = false
 ): readonly string[] {
   if (!Array.isArray(value)) {
     throw new AgentHubValidationError(code, `Field '${fieldName}' must be an array`);
@@ -853,6 +858,9 @@ function snapshotBoundedCharStringArray(
     }
     if (forbidNul) {
       rejectIfContainsNul(item, fieldName, code);
+    }
+    if (requireNonBlank && item.trim().length === 0) {
+      throw new AgentHubValidationError(code, `Elements in '${fieldName}' must be non-blank strings`);
     }
     if (item.length > maxItemChars) {
       throw new AgentHubValidationError(code, `Element in '${fieldName}' exceeds maximum length (${maxItemChars} characters)`);
@@ -875,11 +883,22 @@ function snapshotPathArray(
     throw new AgentHubValidationError(code, `Field '${fieldName}' exceeds maximum length (${maxItems} items)`);
   }
   const items: string[] = [];
+  const seen = new Set<string>();
   for (const item of value) {
     if (typeof item !== 'string') {
       throw new AgentHubValidationError(code, `Elements in '${fieldName}' must be strings`);
     }
+    if (item.length === 0) {
+      throw new AgentHubValidationError(code, `Elements in '${fieldName}' must be nonempty strings`);
+    }
     rejectIfContainsNul(item, fieldName, code);
+    if (seen.has(item)) {
+      throw new AgentHubValidationError(code, `Field '${fieldName}' must not contain duplicate paths`);
+    }
+    if (items.length > 0 && item < items[items.length - 1]) {
+      throw new AgentHubValidationError(code, `Field '${fieldName}' must be in backend lexical order`);
+    }
+    seen.add(item);
     items.push(item);
   }
   return Object.freeze(items);
@@ -897,6 +916,33 @@ function snapshotGitOid(value: unknown, fieldName: string, code: string): string
     throw new AgentHubValidationError(code, `Field '${fieldName}' must be a 40- or 64-character lowercase hex Git OID`);
   }
   return value;
+}
+
+function snapshotManagedExecuteTaskId(raw: unknown, fieldName: string): string {
+  const taskId = snapshotBoundedText(raw, fieldName, EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true);
+  if (!MANAGED_TASK_ID_RE.test(taskId) || taskId.includes('..') || taskId.endsWith('.')) {
+    throw new AgentHubValidationError(
+      'MALFORMED_EXECUTE_RESULT',
+      `Field '${fieldName}' must be a pinned managed task ID`
+    );
+  }
+  if (WINDOWS_RESERVED_DEVICE_NAMES.has(taskId.toUpperCase())) {
+    throw new AgentHubValidationError(
+      'MALFORMED_EXECUTE_RESULT',
+      `Field '${fieldName}' must not be a Windows-reserved device name`
+    );
+  }
+  return taskId;
+}
+
+function snapshotExecuteCommandId(raw: unknown): string {
+  if (typeof raw !== 'string' || !COMMAND_ID_RE.test(raw)) {
+    throw new AgentHubValidationError(
+      'MALFORMED_EXECUTE_RESULT',
+      "Field 'command.id' must match ^[A-Za-z0-9._-]{1,64}$"
+    );
+  }
+  return raw;
 }
 
 const ALLOWED_EXECUTE_TASK_INPUT_KEYS = new Set(['baseRef', 'prompt']);
@@ -982,10 +1028,7 @@ const ALLOWED_TERMINAL_KEYS = new Set([
   'outcome',
   'taskId',
   'assignmentId',
-  'lifecycleSha256',
-  'reviewEvidenceSha256',
-  'merge',
-  'mergeGate'
+  'lifecycleSha256'
 ]);
 
 function snapshotExecuteWorkerResult(raw: unknown): ExecuteWorkerResultDto {
@@ -994,11 +1037,11 @@ function snapshotExecuteWorkerResult(raw: unknown): ExecuteWorkerResultDto {
   }
   rejectUnexpectedKeys(raw, ALLOWED_WORKER_RESULT_KEYS, 'MALFORMED_EXECUTE_RESULT', 'workerResult');
   return Object.freeze({
-    summary: snapshotBoundedChars(raw.summary, 'workerResult.summary', WORKER_SUMMARY_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false, false),
-    blockers: snapshotBoundedCharStringArray(raw.blockers, 'workerResult.blockers', WORKER_BLOCKERS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
-    questions: snapshotBoundedCharStringArray(raw.questions, 'workerResult.questions', WORKER_QUESTIONS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
-    risks: snapshotBoundedCharStringArray(raw.risks, 'workerResult.risks', WORKER_RISKS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false),
-    notes: snapshotBoundedCharStringArray(raw.notes, 'workerResult.notes', WORKER_NOTES_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false)
+    summary: snapshotBoundedChars(raw.summary, 'workerResult.summary', WORKER_SUMMARY_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', true, false),
+    blockers: snapshotBoundedCharStringArray(raw.blockers, 'workerResult.blockers', WORKER_BLOCKERS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false, true),
+    questions: snapshotBoundedCharStringArray(raw.questions, 'workerResult.questions', WORKER_QUESTIONS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false, true),
+    risks: snapshotBoundedCharStringArray(raw.risks, 'workerResult.risks', WORKER_RISKS_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false, true),
+    notes: snapshotBoundedCharStringArray(raw.notes, 'workerResult.notes', WORKER_NOTES_MAX_ITEMS, WORKER_ITEM_MAX_CHARS, 'MALFORMED_EXECUTE_RESULT', false, true)
   });
 }
 
@@ -1055,15 +1098,23 @@ function snapshotExecuteCommand(raw: unknown): ExecuteBuildTestCommandDto {
     stderrPreview: string;
     exitCode?: number;
   } = {
-    id: snapshotBoundedText(raw.id, 'command.id', COMMAND_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    id: snapshotExecuteCommandId(raw.id),
     phase: raw.phase as ExecuteCommandPhase,
     outcome: raw.outcome as ExecuteCommandOutcome,
     stdoutPreview: snapshotBoundedText(raw.stdoutPreview, 'command.stdoutPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false),
     stderrPreview: snapshotBoundedText(raw.stderrPreview, 'command.stderrPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false)
   };
   if ('exitCode' in raw) {
-    if (typeof raw.exitCode !== 'number' || !Number.isSafeInteger(raw.exitCode)) {
-      throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'command.exitCode' must be a finite safe integer when present");
+    if (
+      typeof raw.exitCode !== 'number' ||
+      !Number.isSafeInteger(raw.exitCode) ||
+      raw.exitCode < INT32_MIN ||
+      raw.exitCode > INT32_MAX
+    ) {
+      throw new AgentHubValidationError(
+        'MALFORMED_EXECUTE_RESULT',
+        "Field 'command.exitCode' must be a safe int32 when present"
+      );
     }
     command.exitCode = raw.exitCode;
   }
@@ -1090,11 +1141,19 @@ function snapshotExecuteBuildTest(raw: unknown): ExecuteBuildTestDto {
   if (raw.commands.length > COMMANDS_MAX_ITEMS) {
     throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', `Field 'buildTest.commands' exceeds maximum length (${COMMANDS_MAX_ITEMS} items)`);
   }
+  const commands = Object.freeze(raw.commands.map(snapshotExecuteCommand));
+  const commandIds = new Set<string>();
+  for (const command of commands) {
+    if (commandIds.has(command.id)) {
+      throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'buildTest.commands' must have unique ids");
+    }
+    commandIds.add(command.id);
+  }
   return Object.freeze({
     build: raw.build as ExecuteBuildTestStatus,
     test: raw.test as ExecuteBuildTestStatus,
     outcome: raw.outcome as ExecuteEvidenceOutcome,
-    commands: Object.freeze(raw.commands.map(snapshotExecuteCommand))
+    commands
   });
 }
 
@@ -1106,16 +1165,39 @@ export function snapshotExecuteReviewReadyDto(raw: unknown): ExecuteReviewReadyD
   if (raw.outcome !== 'review-ready') {
     throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'outcome' must be 'review-ready'");
   }
+  const reviewBundleSha256 = snapshotSha256(raw.reviewBundleSha256, 'reviewBundleSha256', 'MALFORMED_EXECUTE_RESULT');
+  const reviewHandle = snapshotSha256(raw.reviewHandle, 'reviewHandle', 'MALFORMED_EXECUTE_RESULT');
+  if (reviewHandle !== reviewBundleSha256) {
+    throw new AgentHubValidationError(
+      'MALFORMED_EXECUTE_RESULT',
+      "Field 'reviewHandle' must equal reviewBundleSha256"
+    );
+  }
+  const taskId = snapshotManagedExecuteTaskId(raw.taskId, 'taskId');
+  const workerResult = snapshotExecuteWorkerResult(raw.workerResult);
+  if (workerResult.blockers.length > 0 || workerResult.questions.length > 0) {
+    throw new AgentHubValidationError(
+      'MALFORMED_EXECUTE_RESULT',
+      'review-ready workerResult must not include blockers or questions'
+    );
+  }
+  const source = snapshotExecuteSource(raw.source);
+  if (source.branchName !== `agenthub/${taskId}`) {
+    throw new AgentHubValidationError(
+      'MALFORMED_EXECUTE_RESULT',
+      "Field 'source.branchName' must equal agenthub/<taskId>"
+    );
+  }
   return Object.freeze({
     outcome: 'review-ready' as const,
-    reviewHandle: snapshotBoundedText(raw.reviewHandle, 'reviewHandle', REVIEW_HANDLE_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
-    reviewBundleSha256: snapshotSha256(raw.reviewBundleSha256, 'reviewBundleSha256', 'MALFORMED_EXECUTE_RESULT'),
-    taskId: snapshotBoundedText(raw.taskId, 'taskId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    reviewHandle,
+    reviewBundleSha256,
+    taskId,
     assignmentId: snapshotBoundedText(raw.assignmentId, 'assignmentId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
     agentId: snapshotBoundedText(raw.agentId, 'agentId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
     providerId: snapshotBoundedText(raw.providerId, 'providerId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
-    workerResult: snapshotExecuteWorkerResult(raw.workerResult),
-    source: snapshotExecuteSource(raw.source),
+    workerResult,
+    source,
     buildTest: snapshotExecuteBuildTest(raw.buildTest),
     evidenceSha256: snapshotSha256(raw.evidenceSha256, 'evidenceSha256', 'MALFORMED_EXECUTE_RESULT')
   });
@@ -1129,30 +1211,12 @@ export function snapshotExecuteTerminalLifecycleDto(raw: unknown): ExecuteTermin
   if (typeof raw.outcome !== 'string' || !EXECUTE_TERMINAL_OUTCOMES.includes(raw.outcome as ExecuteTerminalLifecycleDto['outcome'])) {
     throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', "Field 'outcome' must be blocked, waiting-input, or failed");
   }
-  const dto: {
-    outcome: ExecuteTerminalLifecycleDto['outcome'];
-    taskId: string;
-    assignmentId: string;
-    lifecycleSha256: string;
-    reviewEvidenceSha256?: string;
-    merge?: AgentHubPublicValue;
-    mergeGate?: AgentHubPublicValue;
-  } = {
+  return Object.freeze({
     outcome: raw.outcome as ExecuteTerminalLifecycleDto['outcome'],
-    taskId: snapshotBoundedText(raw.taskId, 'taskId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
+    taskId: snapshotManagedExecuteTaskId(raw.taskId, 'taskId'),
     assignmentId: snapshotBoundedText(raw.assignmentId, 'assignmentId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', true),
     lifecycleSha256: snapshotSha256(raw.lifecycleSha256, 'lifecycleSha256', 'MALFORMED_EXECUTE_RESULT')
-  };
-  if ('reviewEvidenceSha256' in raw) {
-    dto.reviewEvidenceSha256 = snapshotSha256(raw.reviewEvidenceSha256, 'reviewEvidenceSha256', 'MALFORMED_EXECUTE_RESULT');
-  }
-  if ('merge' in raw) {
-    dto.merge = sanitizeEventPayload(raw.merge);
-  }
-  if ('mergeGate' in raw) {
-    dto.mergeGate = sanitizeEventPayload(raw.mergeGate);
-  }
-  return Object.freeze(dto);
+  });
 }
 
 export function snapshotExecuteTaskResult(raw: unknown): ExecuteTaskResultDto {

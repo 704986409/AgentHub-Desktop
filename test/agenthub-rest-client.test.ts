@@ -1076,7 +1076,7 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () =>
     providerId: 'codex',
     workerResult: { summary: 'done', blockers: [], questions: [], risks: [], notes: [] },
     source: {
-      branchName: 'agent/task-1',
+      branchName: 'agenthub/task-1',
       baseCommit: OID40,
       headCommit: HEX64,
       changedPaths: ['src/a.ts'],
@@ -1322,6 +1322,85 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () =>
       assert.equal(hit, false);
     } finally {
       server.close();
+    }
+  });
+
+  test('RestClient never follows redirects for health or mutation', { timeout: 5000 }, async () => {
+    let sinkHits = 0;
+    const sink = http.createServer((_req, res) => {
+      sinkHits++;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, requestId: 'sink', data: { status: 'ok', version: '0.7.0' } }));
+    });
+    await new Promise<void>((r) => sink.listen(0, '127.0.0.1', () => r()));
+    const sinkAddr = sink.address() as { port: number };
+
+    const origin = http.createServer((req, res) => {
+      res.writeHead(307, { Location: `http://127.0.0.1:${sinkAddr.port}${req.url}` });
+      res.end();
+    });
+    await new Promise<void>((r) => origin.listen(0, '127.0.0.1', () => r()));
+    const originAddr = origin.address() as { port: number };
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${originAddr.port}` });
+    try {
+      await assert.rejects(
+        () => client.health(),
+        (err: AgentHubContractError) =>
+          err.code === 'REDIRECT_FORBIDDEN' && err.requestDispatched === true && err.phase === 'response-contract'
+      );
+      await assert.rejects(
+        () => client.executeTask('task-1', sampleInput, 'key-redirect'),
+        (err: AgentHubContractError) =>
+          err.code === 'REDIRECT_FORBIDDEN' && err.requestDispatched === true && err.phase === 'response-contract'
+      );
+      assert.equal(sinkHits, 0);
+    } finally {
+      origin.close();
+      sink.close();
+    }
+  });
+
+  test('2xx + ok:false is response-contract; 4xx exact error remains backend', { timeout: 5000 }, async () => {
+    const mixed = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'mixed',
+        error: { code: 'UNEXPECTED', message: 'ok false on 200' }
+      }));
+    });
+    await new Promise<void>((r) => mixed.listen(0, '127.0.0.1', () => r()));
+    const mixedAddr = mixed.address() as { port: number };
+    const mixedClient = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${mixedAddr.port}` });
+    try {
+      await assert.rejects(
+        () => mixedClient.executeTask('task-1', sampleInput, 'key-mixed'),
+        (err: AgentHubContractError) =>
+          err.code === 'MALFORMED_ENVELOPE' && err.phase === 'response-contract' && err.requestDispatched === true
+      );
+    } finally {
+      mixed.close();
+    }
+
+    const exact = http.createServer((_req, res) => {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        requestId: 'exact',
+        error: { code: 'AGENTHUB_API_CONFLICT', message: 'already reserved' }
+      }));
+    });
+    await new Promise<void>((r) => exact.listen(0, '127.0.0.1', () => r()));
+    const exactAddr = exact.address() as { port: number };
+    const exactClient = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${exactAddr.port}` });
+    try {
+      await assert.rejects(
+        () => exactClient.executeTask('task-1', sampleInput, 'key-exact'),
+        (err: AgentHubContractError) =>
+          err.code === 'AGENTHUB_API_CONFLICT' && err.phase === 'backend' && err.requestDispatched === true
+      );
+    } finally {
+      exact.close();
     }
   });
 });
