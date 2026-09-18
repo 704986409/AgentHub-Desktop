@@ -15,7 +15,8 @@ import {
   TASK_COMPLEXITIES,
   TASK_RISKS,
   formatProviderStatus,
-  isProviderUsable
+  isProviderUsable,
+  resolveProviderModelSuggestions
 } from '@shared/agenthubTypes';
 import modelCatalog from '@shared/modelCatalog.json';
 import { ProviderLogo } from './ProviderLogo';
@@ -151,18 +152,11 @@ export function AgentHubAgentForm({
     [providerCatalog, value.providerId]
   );
 
-  const { modelSuggestions, isOfflineFallback } = useMemo(() => {
-    if (currentProviderDto && currentProviderDto.modelDiscovery === 'native' && currentProviderDto.models.length > 0) {
-      return {
-        modelSuggestions: currentProviderDto.models.map((m) => ({ id: m.modelId, label: m.label })),
-        isOfflineFallback: false
-      };
-    }
-    const fallback = catalogModels(value.providerId);
-    return {
-      modelSuggestions: fallback,
-      isOfflineFallback: true
-    };
+  const { modelSuggestions, isOfflineFallback, nativeEmpty } = useMemo(() => {
+    const fallback = catalogModels(value.providerId)
+      .filter((item): item is { id: string; label: string } => typeof item.id === 'string' && item.id.length > 0)
+      .map((item) => ({ id: item.id, label: item.label }));
+    return resolveProviderModelSuggestions(currentProviderDto, fallback);
   }, [currentProviderDto, value.providerId]);
 
   const isCurrentProviderUsable = currentProviderDto?.usable ?? false;
@@ -284,6 +278,11 @@ export function AgentHubAgentForm({
               onChange({ ...value, modelId: event.target.value });
             }}
           />
+          {nativeEmpty && (
+            <span style={{ color: '#64748b', fontSize: 11 }}>
+              当前 Provider 原生模型发现结果为空
+            </span>
+          )}
           {isOfflineFallback && modelSuggestions.length > 0 && (
             <span style={{ color: '#ea580c', fontSize: 11 }}>Offline fallback — may be stale</span>
           )}

@@ -2,7 +2,7 @@
  * Public Data Transfer Objects (DTOs) and runtime snapshotting for AgentHub Desktop.
  * 
  * Strict Invariants:
- * - Pinned to AgentHub 0.7.1 public contracts.
+ * - Pinned to AgentHub 0.7.2A public contracts.
  * - Runtime fail-closed sanitization: never return raw network objects.
  * - ZERO backend-private fields can cross into Desktop cache/IPC.
  * - Fail closed: do NOT synthesize defaults for missing/invalid required fields.
@@ -2287,4 +2287,31 @@ export function isProviderUsable(providerId: string, catalog: readonly ProviderD
   }
   const entry = catalog.find((p) => p.providerId === providerId);
   return Boolean(entry?.usable && entry?.status === 'READY');
+}
+
+export interface ProviderModelSuggestion {
+  readonly id: string;
+  readonly label: string;
+}
+
+export function resolveProviderModelSuggestions(
+  dto: ProviderDto | null | undefined,
+  fallback: readonly ProviderModelSuggestion[]
+): {
+  readonly modelSuggestions: readonly ProviderModelSuggestion[];
+  readonly isOfflineFallback: boolean;
+  readonly nativeEmpty: boolean;
+} {
+  if (dto?.modelDiscovery === 'native') {
+    return {
+      modelSuggestions: dto.models.map((model) => ({ id: model.modelId, label: model.label })),
+      isOfflineFallback: false,
+      nativeEmpty: dto.models.length === 0
+    };
+  }
+  return {
+    modelSuggestions: fallback,
+    isOfflineFallback: true,
+    nativeEmpty: false
+  };
 }

@@ -99,10 +99,13 @@ describe('AgentHub V0.8.8 Form & Modal UI Static Verification', () => {
 
     // 3-tier model selection and offline fallback
     assert.match(source, /catalogModels/);
+    assert.match(source, /resolveProviderModelSuggestions/);
     assert.match(source, /modelSuggestions/);
     assert.match(source, /isOfflineFallback/);
+    assert.match(source, /nativeEmpty/);
     assert.match(source, /Manual modelId is preserved exactly/);
     assert.match(source, /Offline fallback — may be stale/);
+    assert.match(source, /当前 Provider 原生模型发现结果为空/);
 
     // Provider switch resets modelId
     assert.match(source, /modelId:\s*''/);
