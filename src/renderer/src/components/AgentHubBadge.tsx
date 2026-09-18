@@ -4,6 +4,7 @@ import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionSt
 import { AgentHubTaskModal } from './AgentHubTaskModal';
 import { AgentHubExecuteModal } from './AgentHubExecuteModal';
 import { AgentHubReviewEvidenceModal } from './AgentHubReviewEvidenceModal';
+import { AgentHubAgentManagementModal } from './AgentHubAgentManagementModal';
 
 export function AgentHubBadge() {
   const {
@@ -21,6 +22,7 @@ export function AgentHubBadge() {
   const [hover, setHover] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
+  const [isManageOpen, setIsManageOpen] = useState(false);
 
   const reviewRecordCount = Object.keys(
     useAgentHubReviewSessionStore((s) => s.reviewReadyByTaskId)
@@ -182,6 +184,27 @@ export function AgentHubBadge() {
                   type="button"
                   onClick={() => {
                     setHover(false);
+                    setIsManageOpen(true);
+                  }}
+                  style={{
+                    marginTop: 6,
+                    width: '100%',
+                    padding: '5px 8px',
+                    background: 'var(--cth-paper-100, #ffffff)',
+                    border: '1px solid var(--cth-ink-900, #0f172a)',
+                    color: 'var(--cth-ink-900, #0f172a)',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    borderRadius: 2
+                  }}
+                >
+                  Manage Agents ({agentCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHover(false);
                     setIsExecuteModalOpen(true);
                   }}
                   style={{
@@ -240,6 +263,10 @@ export function AgentHubBadge() {
       <AgentHubReviewEvidenceModal
         isOpen={isReviewModalOpen}
         onClose={closeReviewModal}
+      />
+      <AgentHubAgentManagementModal
+        isOpen={isManageOpen}
+        onClose={() => setIsManageOpen(false)}
       />
     </span>
   );

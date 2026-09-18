@@ -14,6 +14,7 @@ describe('AgentHub Office Shell Authority', () => {
     projectId: 'proj-1',
     name: 'Ada Lovelace',
     providerId: 'claude',
+    modelId: 'claude-sonnet-4',
     position: 'engineer',
     status: 'IDLE',
     allowedComplexities: ['MEDIUM'],

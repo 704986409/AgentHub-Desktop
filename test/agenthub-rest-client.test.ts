@@ -113,6 +113,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
               projectId: null,
               name: 'Agent 1',
               providerId: 'claude',
+              modelId: 'claude-sonnet-4',
               position: 'lead',
               status: 'idle',
               authority: 'autonomous',
@@ -330,6 +331,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
               projectId: 'p1',
               name: 'Agent 1',
               providerId: 'claude',
+              modelId: 'claude-sonnet-4',
               position: 'dev',
               status: 'idle',
               authority: 'autonomous',
@@ -476,6 +478,7 @@ describe('AgentHub DTO Strict Runtime Validation', () => {
     projectId: null,
     name: 'Agent 1',
     providerId: 'codex',
+    modelId: 'gpt-5',
     position: 'engineer',
     status: 'idle',
     authority: 'autonomous',
@@ -1031,10 +1034,15 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks', () => {
     }
   });
 
-  test('mutation allowlist: createTask and executeTask exist; no review/merge or generic request', { timeout: 5000 }, () => {
+  test('mutation allowlist: task, review, and agent methods exist; no generic request', { timeout: 5000 }, () => {
     const client = new AgentHubRestClient();
     assert.equal(typeof client.createTask, 'function');
     assert.equal(typeof client.executeTask, 'function');
+    assert.equal(typeof client.createAgent, 'function');
+    assert.equal(typeof client.updateAgent, 'function');
+    assert.equal(typeof client.enableAgent, 'function');
+    assert.equal(typeof client.disableAgent, 'function');
+    assert.equal(typeof client.deleteAgent, 'function');
 
     assert.equal((client as any).reviewTask, undefined);
     assert.equal((client as any).mergeTask, undefined);

@@ -454,7 +454,7 @@ describe('AgentHub Review Evidence Read-Only', () => {
     }
   });
 
-  test('architecture guard: Mutation allowlist remains createTask + executeTask + reviewDecision only', { timeout: 5000 }, () => {
+  test('architecture guard: Mutation allowlist is closed and still forbids merge/review-action extras', { timeout: 5000 }, () => {
     const ipcPath = path.resolve(__dirname, '../src/main/agenthub/AgentHubIpc.ts');
     const ipcSource = fs.readFileSync(ipcPath, 'utf-8');
 

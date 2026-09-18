@@ -28,6 +28,7 @@ describe('AgentHub Office State Projection', () => {
     projectId: 'proj-1',
     name: 'Ada Lovelace',
     providerId: 'claude',
+    modelId: 'claude-sonnet-4',
     position: 'engineer',
     status: 'IDLE',
     allowedComplexities: ['MEDIUM'],
@@ -310,9 +311,9 @@ describe('AgentHub Office State Projection', () => {
     ]);
   });
 
-  test('strict model rule: model is NOT public in AgentDto and NEVER synthesized', { timeout: 5000 }, () => {
+  test('modelId is a genuine AgentHub DTO field and Office does not synthesize legacy model', { timeout: 5000 }, () => {
     const snapshot: AgentHubStateSnapshot = {
-      agents: [{ ...baseAgent, agentId: 'a-nomodel' }],
+      agents: [{ ...baseAgent, agentId: 'a-nomodel', modelId: 'claude-sonnet-4' }],
       projects: [],
       assignments: [],
       tasks: []
@@ -320,8 +321,10 @@ describe('AgentHub Office State Projection', () => {
 
     const projection = projectAgentHubOffice(snapshot);
     const vm = projection.agents[0];
+    assert.equal(baseAgent.modelId, 'claude-sonnet-4');
     assert.equal((vm as any).model, undefined);
     assert.ok(!('model' in vm));
+    assert.ok(!('modelId' in vm), 'Office view model must not copy or synthesize modelId');
   });
 
   test('deterministic decoration: same agentId gives same character and accent regardless of order', { timeout: 5000 }, () => {

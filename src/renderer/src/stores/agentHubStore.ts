@@ -10,7 +10,11 @@ import type {
   TaskExecutionResult,
   TaskSubmissionResult,
   ReviewDecisionRequestDto,
-  ReviewDecisionResult
+  ReviewDecisionResult,
+  CreateAgentRequestDto,
+  UpdateAgentRequestDto,
+  AgentActionRequestDto,
+  AgentMutationResult
 } from '@shared/agenthubTypes';
 
 export interface AgentHubStoreState {
@@ -29,6 +33,11 @@ export interface AgentHubStoreState {
   submitTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
   executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
   reviewDecision: (request: ReviewDecisionRequestDto) => Promise<ReviewDecisionResult>;
+  createAgent: (request: CreateAgentRequestDto) => Promise<AgentMutationResult>;
+  updateAgent: (request: UpdateAgentRequestDto) => Promise<AgentMutationResult>;
+  enableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
+  disableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
+  deleteAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
 }
 
 
@@ -201,5 +210,48 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
         }
       };
     }
-  }
+  },
+
+  createAgent: (request) => invokeAgentMutation('createAgent', request),
+  updateAgent: (request) => invokeAgentMutation('updateAgent', request),
+  enableAgent: (request) => invokeAgentMutation('enableAgent', request),
+  disableAgent: (request) => invokeAgentMutation('disableAgent', request),
+  deleteAgent: (request) => invokeAgentMutation('deleteAgent', request)
 }));
+
+async function invokeAgentMutation(
+  method: 'createAgent' | 'updateAgent' | 'enableAgent' | 'disableAgent' | 'deleteAgent',
+  request: CreateAgentRequestDto | UpdateAgentRequestDto | AgentActionRequestDto
+): Promise<AgentMutationResult> {
+  if (typeof window === 'undefined' || !window.agentHub) {
+    return {
+      status: 'failed',
+      retryable: false,
+      error: { code: 'NO_PRELOAD', message: 'AgentHub preload bridge is unavailable' }
+    };
+  }
+  try {
+    if (method === 'createAgent') {
+      return await window.agentHub.createAgent(request as CreateAgentRequestDto);
+    }
+    if (method === 'updateAgent') {
+      return await window.agentHub.updateAgent(request as UpdateAgentRequestDto);
+    }
+    if (method === 'enableAgent') {
+      return await window.agentHub.enableAgent(request as AgentActionRequestDto);
+    }
+    if (method === 'disableAgent') {
+      return await window.agentHub.disableAgent(request as AgentActionRequestDto);
+    }
+    return await window.agentHub.deleteAgent(request as AgentActionRequestDto);
+  } catch (err) {
+    return {
+      status: 'ambiguous',
+      retryable: true,
+      error: {
+        code: 'IPC_LOST',
+        message: (err as Error).message || 'Agent mutation IPC result was lost'
+      }
+    };
+  }
+}

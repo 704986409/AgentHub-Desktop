@@ -2,7 +2,7 @@
  * Public Data Transfer Objects (DTOs) and runtime snapshotting for AgentHub Desktop.
  * 
  * Strict Invariants:
- * - Pinned to AgentHub 0.7.0G public contracts.
+ * - Pinned to AgentHub 0.7.1 public contracts.
  * - Runtime fail-closed sanitization: never return raw network objects.
  * - ZERO backend-private fields can cross into Desktop cache/IPC.
  * - Fail closed: do NOT synthesize defaults for missing/invalid required fields.
@@ -38,11 +38,15 @@ export interface ProjectDto {
   readonly updatedAt: string;
 }
 
+export type AgentStatusDto = 'IDLE' | 'BUSY' | 'OFFLINE' | 'DISABLED';
+export type AgentAuthorityDto = 'READ_ONLY' | 'STANDARD' | 'PRIVILEGED' | 'ADMIN';
+
 export interface AgentDto {
   readonly agentId: string;
   readonly projectId: string | null;
   readonly name: string;
   readonly providerId: string;
+  readonly modelId: string;
   readonly position: string;
   readonly status: string;
   readonly allowedComplexities: readonly string[];
@@ -489,6 +493,7 @@ export function snapshotAgentDto(raw: unknown): AgentDto {
     projectId: parseRequiredNullableString(raw, 'projectId'),
     name: parseRequiredNonBlankString(raw, 'name'),
     providerId: parseRequiredNonBlankString(raw, 'providerId'),
+    modelId: parseRequiredNonBlankString(raw, 'modelId'),
     position: parseRequiredNonBlankString(raw, 'position'),
     status: parseRequiredNonBlankString(raw, 'status'),
     allowedComplexities: parseRequiredStringArray(raw, 'allowedComplexities'),
@@ -1786,4 +1791,279 @@ export function snapshotReviewDecisionLifecycleResult(raw: unknown): ReviewDecis
   }
 
   throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', `Unknown review decision outcome '${raw.outcome}'`);
+}
+
+export const AGENT_AUTHORITIES: readonly AgentAuthorityDto[] = Object.freeze([
+  'READ_ONLY',
+  'STANDARD',
+  'PRIVILEGED',
+  'ADMIN'
+]);
+
+export const ACTIONABLE_AGENT_PROVIDER_IDS = Object.freeze(['claude', 'codex'] as const);
+
+export interface CreateAgentInputDto {
+  readonly projectId: string | null;
+  readonly name: string;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly position: string;
+  readonly allowedComplexities: readonly TaskComplexity[];
+  readonly allowedRiskLevels: readonly TaskRisk[];
+  readonly capabilities: readonly string[];
+  readonly specialties: readonly string[];
+  readonly authority: AgentAuthorityDto;
+  readonly routingPriority: number;
+  readonly enabled: boolean;
+}
+
+export interface CreateAgentRequestDto {
+  readonly mutationId: string;
+  readonly input: CreateAgentInputDto;
+}
+
+export interface UpdateAgentInputDto {
+  readonly name: string;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly position: string;
+  readonly allowedComplexities: readonly TaskComplexity[];
+  readonly allowedRiskLevels: readonly TaskRisk[];
+  readonly capabilities: readonly string[];
+  readonly specialties: readonly string[];
+  readonly authority: AgentAuthorityDto;
+  readonly routingPriority: number;
+}
+
+export interface UpdateAgentRequestDto {
+  readonly mutationId: string;
+  readonly agentId: string;
+  readonly input: UpdateAgentInputDto;
+}
+
+export interface AgentActionRequestDto {
+  readonly mutationId: string;
+  readonly agentId: string;
+}
+
+export interface AgentDeleteDto {
+  readonly agentId: string;
+  readonly deleted: true;
+}
+
+export type AgentMutationAppliedPayload =
+  | {
+      readonly operation: 'create' | 'update' | 'enable' | 'disable';
+      readonly agent: AgentDto;
+    }
+  | {
+      readonly operation: 'delete';
+      readonly agentId: string;
+      readonly deleted: true;
+    };
+
+export type AgentMutationResult =
+  | {
+      readonly status: 'applied';
+      readonly payload: AgentMutationAppliedPayload;
+      readonly stateSynchronized: true;
+    }
+  | {
+      readonly status: 'applied';
+      readonly payload: AgentMutationAppliedPayload;
+      readonly stateSynchronized: false;
+      readonly warning: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'failed';
+      readonly retryable: false;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'ambiguous';
+      readonly retryable: boolean;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    };
+
+const ALLOWED_CREATE_AGENT_INPUT_KEYS = new Set([
+  'projectId', 'name', 'providerId', 'modelId', 'position',
+  'allowedComplexities', 'allowedRiskLevels', 'capabilities', 'specialties',
+  'authority', 'routingPriority', 'enabled'
+]);
+const ALLOWED_UPDATE_AGENT_INPUT_KEYS = new Set([
+  'name', 'providerId', 'modelId', 'position',
+  'allowedComplexities', 'allowedRiskLevels', 'capabilities', 'specialties',
+  'authority', 'routingPriority'
+]);
+const ALLOWED_CREATE_AGENT_REQUEST_KEYS = new Set(['mutationId', 'input']);
+const ALLOWED_UPDATE_AGENT_REQUEST_KEYS = new Set(['mutationId', 'agentId', 'input']);
+const ALLOWED_AGENT_ACTION_REQUEST_KEYS = new Set(['mutationId', 'agentId']);
+const ALLOWED_AGENT_DELETE_KEYS = new Set(['agentId', 'deleted']);
+
+function snapshotExactBoundedText(value: unknown, fieldName: string, maxBytes: number): string {
+  if (typeof value !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must be a string`);
+  }
+  rejectIfContainsNul(value, fieldName);
+  if (value.trim().length === 0 || value !== value.trim()) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must be a non-blank string without surrounding whitespace`);
+  }
+  if (getUtf8Bytes(value) > maxBytes) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' exceeds maximum length (${maxBytes} bytes)`);
+  }
+  return value;
+}
+
+function snapshotExactEnum<T extends string>(value: unknown, fieldName: string, allowed: readonly T[]): T {
+  if (typeof value !== 'string' || !allowed.includes(value as T)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must be one of: ${allowed.join(', ')}`);
+  }
+  return value as T;
+}
+
+function snapshotUniqueBoundedStringArray(
+  value: unknown,
+  fieldName: string,
+  maxItems: number,
+  maxItemBytes: number
+): readonly string[] {
+  if (!Array.isArray(value) || value.length > maxItems) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must be an array with at most ${maxItems} items`);
+  }
+  const items = value.map((item, index) => snapshotExactBoundedText(item, `${fieldName}[${index}]`, maxItemBytes));
+  if (new Set(items).size !== items.length) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must not contain duplicates`);
+  }
+  return Object.freeze([...items]);
+}
+
+function snapshotEnumArray<T extends string>(
+  value: unknown,
+  fieldName: string,
+  allowed: readonly T[]
+): readonly T[] {
+  if (!Array.isArray(value) || value.length > 256) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must be an array with at most 256 items`);
+  }
+  const items = value.map((item, index) => snapshotExactEnum(item, `${fieldName}[${index}]`, allowed));
+  if (new Set(items).size !== items.length) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must not contain duplicates`);
+  }
+  return Object.freeze([...items]);
+}
+
+export function snapshotCreateAgentInput(raw: unknown): CreateAgentInputDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', 'Create Agent input must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_CREATE_AGENT_INPUT_KEYS, 'MALFORMED_INPUT', 'create Agent input');
+  if (typeof raw.enabled !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'enabled' must be a boolean");
+  }
+  if (typeof raw.routingPriority !== 'number' || !Number.isSafeInteger(raw.routingPriority) || raw.routingPriority < 0) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'routingPriority' must be a nonnegative safe integer");
+  }
+  const projectId = raw.projectId === null ? null : snapshotExactBoundedText(raw.projectId, 'projectId', 256);
+  return Object.freeze({
+    projectId,
+    name: snapshotExactBoundedText(raw.name, 'name', 256),
+    providerId: snapshotExactBoundedText(raw.providerId, 'providerId', 128),
+    modelId: snapshotExactBoundedText(raw.modelId, 'modelId', 512),
+    position: snapshotExactBoundedText(raw.position, 'position', 256),
+    allowedComplexities: snapshotEnumArray(raw.allowedComplexities, 'allowedComplexities', TASK_COMPLEXITIES),
+    allowedRiskLevels: snapshotEnumArray(raw.allowedRiskLevels, 'allowedRiskLevels', TASK_RISKS),
+    capabilities: snapshotUniqueBoundedStringArray(raw.capabilities, 'capabilities', 256, 512),
+    specialties: snapshotUniqueBoundedStringArray(raw.specialties, 'specialties', 256, 512),
+    authority: snapshotExactEnum(raw.authority, 'authority', AGENT_AUTHORITIES),
+    routingPriority: raw.routingPriority,
+    enabled: raw.enabled
+  });
+}
+
+export function snapshotUpdateAgentInput(raw: unknown): UpdateAgentInputDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', 'Update Agent input must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_UPDATE_AGENT_INPUT_KEYS, 'MALFORMED_INPUT', 'update Agent input');
+  if (typeof raw.routingPriority !== 'number' || !Number.isSafeInteger(raw.routingPriority) || raw.routingPriority < 0) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Field 'routingPriority' must be a nonnegative safe integer");
+  }
+  return Object.freeze({
+    name: snapshotExactBoundedText(raw.name, 'name', 256),
+    providerId: snapshotExactBoundedText(raw.providerId, 'providerId', 128),
+    modelId: snapshotExactBoundedText(raw.modelId, 'modelId', 512),
+    position: snapshotExactBoundedText(raw.position, 'position', 256),
+    allowedComplexities: snapshotEnumArray(raw.allowedComplexities, 'allowedComplexities', TASK_COMPLEXITIES),
+    allowedRiskLevels: snapshotEnumArray(raw.allowedRiskLevels, 'allowedRiskLevels', TASK_RISKS),
+    capabilities: snapshotUniqueBoundedStringArray(raw.capabilities, 'capabilities', 256, 512),
+    specialties: snapshotUniqueBoundedStringArray(raw.specialties, 'specialties', 256, 512),
+    authority: snapshotExactEnum(raw.authority, 'authority', AGENT_AUTHORITIES),
+    routingPriority: raw.routingPriority
+  });
+}
+
+export function snapshotCreateAgentRequest(raw: unknown): CreateAgentRequestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', 'Create Agent request must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_CREATE_AGENT_REQUEST_KEYS, 'MALFORMED_REQUEST', 'create Agent request');
+  if (typeof raw.mutationId !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'mutationId' must be a string");
+  }
+  return Object.freeze({
+    mutationId: raw.mutationId,
+    input: snapshotCreateAgentInput(raw.input)
+  });
+}
+
+export function snapshotUpdateAgentRequest(raw: unknown): UpdateAgentRequestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', 'Update Agent request must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_UPDATE_AGENT_REQUEST_KEYS, 'MALFORMED_REQUEST', 'update Agent request');
+  if (typeof raw.mutationId !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'mutationId' must be a string");
+  }
+  return Object.freeze({
+    mutationId: raw.mutationId,
+    agentId: snapshotExactBoundedText(raw.agentId, 'agentId', 256),
+    input: snapshotUpdateAgentInput(raw.input)
+  });
+}
+
+export function snapshotAgentActionRequest(raw: unknown): AgentActionRequestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', 'Agent action request must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_AGENT_ACTION_REQUEST_KEYS, 'MALFORMED_REQUEST', 'Agent action request');
+  if (typeof raw.mutationId !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'mutationId' must be a string");
+  }
+  return Object.freeze({
+    mutationId: raw.mutationId,
+    agentId: snapshotExactBoundedText(raw.agentId, 'agentId', 256)
+  });
+}
+
+export function snapshotAgentDeleteDto(raw: unknown): AgentDeleteDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_AGENT_DELETE', 'Agent delete result must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_AGENT_DELETE_KEYS, 'MALFORMED_AGENT_DELETE', 'Agent delete result');
+  if (raw.deleted !== true) {
+    throw new AgentHubValidationError('MALFORMED_AGENT_DELETE', "Field 'deleted' must be true");
+  }
+  return Object.freeze({
+    agentId: parseRequiredNonBlankString(raw, 'agentId'),
+    deleted: true as const
+  });
 }

@@ -95,6 +95,7 @@ import {
 import { AgentHubConnection } from './agenthub/AgentHubConnection';
 import { AgentHubTaskSubmission } from './agenthub/AgentHubTaskSubmission';
 import { AgentHubTaskExecution } from './agenthub/AgentHubTaskExecution';
+import { AgentHubAgentManagement } from './agenthub/AgentHubAgentManagement';
 import { registerAgentHubIpc } from './agenthub/AgentHubIpc';
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
@@ -344,7 +345,8 @@ const persist = new PersistStore();
 const agentHubConnection = new AgentHubConnection();
 const agentHubTaskSubmission = new AgentHubTaskSubmission(agentHubConnection);
 const agentHubTaskExecution = new AgentHubTaskExecution(agentHubConnection);
-registerAgentHubIpc(agentHubConnection, agentHubTaskSubmission, agentHubTaskExecution);
+const agentHubAgentManagement = new AgentHubAgentManagement(agentHubConnection);
+registerAgentHubIpc(agentHubConnection, agentHubTaskSubmission, agentHubTaskExecution, undefined, agentHubAgentManagement);
 
 /** The PRIMARY window — the one running the hive/god orchestration and the sink
  *  for process-global timer events (missions, breaker, Slack ingestion). It is

@@ -16,6 +16,7 @@ import { MemoryPanel } from '@/components/MemoryPanel';
 import { AgentDetailPanel } from '@/components/AgentDetailPanel';
 import { AgentStrip } from '@/components/AgentStrip';
 import { AddAgentModal } from '@/components/AddAgentModal';
+import { AgentHubAgentManagementModal } from '@/components/AgentHubAgentManagementModal';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { HivePicker } from '@/components/HivePicker';
 import { QuitWarningModal, type ClosingTimeState } from '@/components/QuitWarningModal';
@@ -87,6 +88,7 @@ export function App() {
     return false;
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [agentHubManageOpen, setAgentHubManageOpen] = useState(false);
   /** Which tab Settings opens on. Set by a `cth:open-settings` deep link, reset
    *  to undefined (→ General) whenever the modal is opened the normal way. */
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
@@ -433,8 +435,11 @@ export function App() {
                       No agents are currently registered in AgentHub.
                     </p>
                     <p style={{ margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--cth-ink-500, #888)' }}>
-                      Agent management will be connected in a later milestone.
+                      Create an AgentHub Agent to make it immediately schedulable.
                     </p>
+                    <PixelButton variant="primary" size="md" onClick={() => setAgentHubManageOpen(true)}>
+                      CREATE AGENT
+                    </PixelButton>
                   </div>
                 </PixelPanel>
               </div>
@@ -519,6 +524,11 @@ export function App() {
           onConfigChange={setConfig}
         />
       )}
+
+      <AgentHubAgentManagementModal
+        isOpen={agentHubManageOpen}
+        onClose={() => setAgentHubManageOpen(false)}
+      />
 
       {settingsOpen && (
         <SettingsModal

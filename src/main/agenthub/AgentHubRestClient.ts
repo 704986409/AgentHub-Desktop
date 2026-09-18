@@ -4,7 +4,11 @@ import type {
   AgentHubStateSnapshot,
   AgentHubEventDto,
   TaskDto,
+  AgentDto,
+  AgentDeleteDto,
   CreateTaskInputDto,
+  CreateAgentInputDto,
+  UpdateAgentInputDto,
   ExecuteTaskInputDto,
   ExecuteTaskResultDto,
   ReviewDecisionLifecycleDto
@@ -13,7 +17,11 @@ import {
   snapshotState,
   snapshotEventDto,
   snapshotTaskDto,
+  snapshotAgentDto,
+  snapshotAgentDeleteDto,
   snapshotCreateTaskInput,
+  snapshotCreateAgentInput,
+  snapshotUpdateAgentInput,
   snapshotExecuteTaskInput,
   snapshotExecuteTaskId,
   snapshotExecuteTaskResult,
@@ -301,6 +309,110 @@ export class AgentHubRestClient {
     }
   }
 
+  public async createAgent(
+    input: CreateAgentInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<AgentDto> {
+    const validatedInput = snapshotCreateAgentInput(input);
+    const key = requireIdempotencyKey(idempotencyKey);
+    const bodyString = boundedJson(validatedInput);
+    const data = await this.#post<unknown>('/api/v1/agents', bodyString, key, 201, signal, this.#timeoutMs);
+    return this.#snapshotAgent(data);
+  }
+
+  public async updateAgent(
+    agentId: string,
+    input: UpdateAgentInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<AgentDto> {
+    const validatedId = snapshotAgentPathId(agentId);
+    const validatedInput = snapshotUpdateAgentInput(input);
+    const key = requireIdempotencyKey(idempotencyKey);
+    const bodyString = boundedJson(validatedInput);
+    const data = await this.#mutate<unknown>(
+      'PUT',
+      `/api/v1/agents/${encodeURIComponent(validatedId)}`,
+      bodyString,
+      key,
+      200,
+      signal
+    );
+    return this.#snapshotAgent(data);
+  }
+
+  public async enableAgent(
+    agentId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<AgentDto> {
+    return this.#toggleAgent(agentId, 'enable', idempotencyKey, signal);
+  }
+
+  public async disableAgent(
+    agentId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<AgentDto> {
+    return this.#toggleAgent(agentId, 'disable', idempotencyKey, signal);
+  }
+
+  public async deleteAgent(
+    agentId: string,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<AgentDeleteDto> {
+    const validatedId = snapshotAgentPathId(agentId);
+    const key = requireIdempotencyKey(idempotencyKey);
+    const data = await this.#mutate<unknown>(
+      'DELETE',
+      `/api/v1/agents/${encodeURIComponent(validatedId)}`,
+      undefined,
+      key,
+      200,
+      signal
+    );
+    try {
+      return snapshotAgentDeleteDto(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_AGENT_DELETE', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
+    }
+  }
+
+  async #toggleAgent(
+    agentId: string,
+    action: 'enable' | 'disable',
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<AgentDto> {
+    const validatedId = snapshotAgentPathId(agentId);
+    const key = requireIdempotencyKey(idempotencyKey);
+    const bodyString = boundedJson({});
+    const data = await this.#post<unknown>(
+      `/api/v1/agents/${encodeURIComponent(validatedId)}/${action}`,
+      bodyString,
+      key,
+      200,
+      signal,
+      this.#timeoutMs
+    );
+    return this.#snapshotAgent(data);
+  }
+
+  #snapshotAgent(data: unknown): AgentDto {
+    try {
+      return snapshotAgentDto(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_AGENT', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
+    }
+  }
 
   /**
    * Internal GET-only helper. Strictly rejects any method other than GET.
@@ -323,8 +435,10 @@ export class AgentHubRestClient {
   ): Promise<T> {
     if (
       path !== '/api/v1/tasks' &&
+      path !== '/api/v1/agents' &&
       !/^\/api\/v1\/tasks\/[^/]+\/execute$/.test(path) &&
-      !/^\/api\/v1\/reviews\/[^/]+\/decision$/.test(path)
+      !/^\/api\/v1\/reviews\/[^/]+\/decision$/.test(path) &&
+      !/^\/api\/v1\/agents\/[^/]+\/(?:enable|disable)$/.test(path)
     ) {
       throw new AgentHubContractError('FORBIDDEN_ROUTE', `POST path is not in the mutation allowlist: ${path}`);
     }
@@ -336,8 +450,29 @@ export class AgentHubRestClient {
     return this.#request<T>('POST', path, headers, body, externalSignal, expectedStatus, timeoutMs);
   }
 
+  async #mutate<T>(
+    method: 'PUT' | 'DELETE',
+    path: string,
+    body: string | undefined,
+    idempotencyKey: string,
+    expectedStatus: 200 | 201,
+    externalSignal?: AbortSignal
+  ): Promise<T> {
+    if (!/^\/api\/v1\/agents\/[^/]+$/.test(path)) {
+      throw new AgentHubContractError('FORBIDDEN_ROUTE', `${method} path is not in the mutation allowlist: ${path}`);
+    }
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Idempotency-Key': idempotencyKey
+    };
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+    return this.#request<T>(method, path, headers, body, externalSignal, expectedStatus, this.#timeoutMs);
+  }
+
   async #request<T>(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
     headers: Record<string, string>,
     body: string | undefined,
@@ -518,8 +653,8 @@ export class AgentHubRestClient {
         fail('HTTP_ERROR', `HTTP ${response.status} ${response.statusText}`, 'response-contract');
       }
 
-      if (method === 'POST') {
-        const expected = expectedStatus ?? 201;
+      if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+        const expected = expectedStatus ?? (method === 'POST' ? 201 : 200);
         if (response.status !== expected) {
           fail(
             'HTTP_ERROR',
@@ -554,4 +689,27 @@ export class AgentHubRestClient {
       requestDispatched
     });
   }
+}
+
+function requireIdempotencyKey(idempotencyKey: string): string {
+  const key = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
+  if (!key) {
+    throw new AgentHubContractError('INVALID_IDEMPOTENCY_KEY', 'Idempotency-Key must be a non-empty string');
+  }
+  return key;
+}
+
+function boundedJson(value: unknown): string {
+  const bodyString = JSON.stringify(value);
+  if (new TextEncoder().encode(bodyString).length > 1024 * 1024) {
+    throw new AgentHubContractError('BODY_OVERFLOW', 'Request body exceeds 1 MiB limit');
+  }
+  return bodyString;
+}
+
+function snapshotAgentPathId(agentId: string): string {
+  if (typeof agentId !== 'string' || agentId.trim().length === 0 || agentId.includes('/') || agentId.includes('\0')) {
+    throw new AgentHubContractError('INVALID_AGENT_ID', 'Agent ID is invalid');
+  }
+  return agentId;
 }

@@ -70,6 +70,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
               projectId: null,
               name: 'Bot',
               providerId: 'claude',
+              modelId: 'claude-sonnet-4',
               position: 'dev',
               status: 'idle',
               authority: 'autonomous',

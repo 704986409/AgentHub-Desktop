@@ -1160,12 +1160,17 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
 });
 
 describe('AgentHub V0.8.6 mutation surface allowlist', () => {
-  test('IPC exposes createTask, executeTask, and reviewDecision and no merge transport', { timeout: 5000 }, () => {
+  test('IPC exposes task, review, and agent mutations and no merge transport', { timeout: 5000 }, () => {
     const ipcPath = path.join(process.cwd(), 'src/main/agenthub/AgentHubIpc.ts');
     const source = fs.readFileSync(ipcPath, 'utf8');
     assert.match(source, /CREATE_TASK:\s*'agenthub:createTask'/);
     assert.match(source, /EXECUTE_TASK:\s*'agenthub:executeTask'/);
     assert.match(source, /REVIEW_DECISION:\s*'agenthub:reviewDecision'/);
+    assert.match(source, /CREATE_AGENT:\s*'agenthub:createAgent'/);
+    assert.match(source, /UPDATE_AGENT:\s*'agenthub:updateAgent'/);
+    assert.match(source, /ENABLE_AGENT:\s*'agenthub:enableAgent'/);
+    assert.match(source, /DISABLE_AGENT:\s*'agenthub:disableAgent'/);
+    assert.match(source, /DELETE_AGENT:\s*'agenthub:deleteAgent'/);
     assert.match(source, /GET_STATE:\s*'agenthub:getConnectionState'/);
     assert.match(source, /GET_SNAPSHOT:\s*'agenthub:getSnapshot'/);
     assert.match(source, /REFRESH:\s*'agenthub:refresh'/);
@@ -1180,9 +1185,19 @@ describe('AgentHub V0.8.6 mutation surface allowlist', () => {
     assert.match(source, /createTask:\s*\(request: CreateTaskRequestDto\)/);
     assert.match(source, /executeTask:\s*\(request: ExecuteTaskRequestDto\)/);
     assert.match(source, /reviewDecision:\s*\(request: ReviewDecisionRequestDto\)/);
+    assert.match(source, /createAgent:\s*\(request: CreateAgentRequestDto\)/);
+    assert.match(source, /updateAgent:\s*\(request: UpdateAgentRequestDto\)/);
+    assert.match(source, /enableAgent:\s*\(request: AgentActionRequestDto\)/);
+    assert.match(source, /disableAgent:\s*\(request: AgentActionRequestDto\)/);
+    assert.match(source, /deleteAgent:\s*\(request: AgentActionRequestDto\)/);
     assert.match(source, /ipcRenderer\.invoke\('agenthub:createTask', request\)/);
     assert.match(source, /ipcRenderer\.invoke\('agenthub:executeTask', request\)/);
     assert.match(source, /ipcRenderer\.invoke\('agenthub:reviewDecision', request\)/);
+    assert.match(source, /ipcRenderer\.invoke\('agenthub:createAgent', request\)/);
+    assert.match(source, /ipcRenderer\.invoke\('agenthub:updateAgent', request\)/);
+    assert.match(source, /ipcRenderer\.invoke\('agenthub:enableAgent', request\)/);
+    assert.match(source, /ipcRenderer\.invoke\('agenthub:disableAgent', request\)/);
+    assert.match(source, /ipcRenderer\.invoke\('agenthub:deleteAgent', request\)/);
     assert.equal(source.includes("invoke('agenthub:merge"), false);
     assert.equal(source.includes('Idempotency-Key'), false);
     assert.equal(/exposeInMainWorld\('agentHub'[\s\S]*fetch\s*:/.test(source), false);
@@ -1195,6 +1210,11 @@ describe('AgentHub V0.8.6 mutation surface allowlist', () => {
     assert.match(apiBlock, /createTask:/);
     assert.match(apiBlock, /executeTask:/);
     assert.match(apiBlock, /reviewDecision:/);
+    assert.match(apiBlock, /createAgent:/);
+    assert.match(apiBlock, /updateAgent:/);
+    assert.match(apiBlock, /enableAgent:/);
+    assert.match(apiBlock, /disableAgent:/);
+    assert.match(apiBlock, /deleteAgent:/);
     assert.equal(apiBlock.includes('merge'), false);
   });
 

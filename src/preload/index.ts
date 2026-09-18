@@ -31,7 +31,11 @@ import type {
   TaskExecutionResult,
   TaskSubmissionResult,
   ReviewDecisionRequestDto,
-  ReviewDecisionResult
+  ReviewDecisionResult,
+  CreateAgentRequestDto,
+  UpdateAgentRequestDto,
+  AgentActionRequestDto,
+  AgentMutationResult
 } from '../shared/agenthubTypes';
 export type {
   AgentHubDesktopState,
@@ -42,7 +46,11 @@ export type {
   TaskExecutionResult,
   TaskSubmissionResult,
   ReviewDecisionRequestDto,
-  ReviewDecisionResult
+  ReviewDecisionResult,
+  CreateAgentRequestDto,
+  UpdateAgentRequestDto,
+  AgentActionRequestDto,
+  AgentMutationResult
 } from '../shared/agenthubTypes';
 
 
@@ -1457,6 +1465,11 @@ export interface AgentHubPreloadApi {
   createTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
   executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
   reviewDecision: (request: ReviewDecisionRequestDto) => Promise<ReviewDecisionResult>;
+  createAgent: (request: CreateAgentRequestDto) => Promise<AgentMutationResult>;
+  updateAgent: (request: UpdateAgentRequestDto) => Promise<AgentMutationResult>;
+  enableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
+  disableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
+  deleteAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
 }
 
 const agentHubApi: AgentHubPreloadApi = {
@@ -1474,7 +1487,17 @@ const agentHubApi: AgentHubPreloadApi = {
   executeTask: (request: ExecuteTaskRequestDto): Promise<TaskExecutionResult> =>
     ipcRenderer.invoke('agenthub:executeTask', request),
   reviewDecision: (request: ReviewDecisionRequestDto): Promise<ReviewDecisionResult> =>
-    ipcRenderer.invoke('agenthub:reviewDecision', request)
+    ipcRenderer.invoke('agenthub:reviewDecision', request),
+  createAgent: (request: CreateAgentRequestDto): Promise<AgentMutationResult> =>
+    ipcRenderer.invoke('agenthub:createAgent', request),
+  updateAgent: (request: UpdateAgentRequestDto): Promise<AgentMutationResult> =>
+    ipcRenderer.invoke('agenthub:updateAgent', request),
+  enableAgent: (request: AgentActionRequestDto): Promise<AgentMutationResult> =>
+    ipcRenderer.invoke('agenthub:enableAgent', request),
+  disableAgent: (request: AgentActionRequestDto): Promise<AgentMutationResult> =>
+    ipcRenderer.invoke('agenthub:disableAgent', request),
+  deleteAgent: (request: AgentActionRequestDto): Promise<AgentMutationResult> =>
+    ipcRenderer.invoke('agenthub:deleteAgent', request)
 };
 
 
