@@ -11,7 +11,7 @@ import {
 } from '@shared/agenthubTypes';
 import { useAgentHubReviewActionStore } from '../stores/agentHubReviewActionStore';
 import { useAgentHubStore } from '../stores/agentHubStore';
-import { validateReviewDecisionInput } from './agentHubReviewActionValidation';
+import { validateReviewDecisionInput, utf8ByteLength } from './agentHubReviewActionValidation';
 
 interface AgentHubReviewDecisionSectionProps {
   taskId: string;
@@ -54,6 +54,7 @@ export function AgentHubReviewDecisionSection({
   const setApplied = useAgentHubReviewActionStore((s) => s.setApplied);
   const setFailed = useAgentHubReviewActionStore((s) => s.setFailed);
   const setAmbiguous = useAgentHubReviewActionStore((s) => s.setAmbiguous);
+  const beginNewDecision = useAgentHubReviewActionStore((s) => s.beginNewDecision);
 
   const reviewDecision = useAgentHubStore((s) => s.reviewDecision);
 
@@ -76,14 +77,21 @@ export function AgentHubReviewDecisionSection({
   }
 
   const isValid = validationError === null;
-  const canSubmit = isValid && !isPending && !isHandleUnavailable;
+  const isFormLocked =
+    isHandleUnavailable ||
+    isPending ||
+    session.status === 'applied' ||
+    session.status === 'failed';
+  const canSubmit =
+    isValid &&
+    !isFormLocked &&
+    session.status === 'idle';
 
   const handleAddFinding = () => {
     const newFinding: ReviewFindingInputDto = {
       code: '',
       severity: 'info',
-      message: '',
-      path: ''
+      message: ''
     };
     updateDraftInput(taskId, {
       findings: [...input.findings, newFinding]
@@ -100,9 +108,15 @@ export function AgentHubReviewDecisionSection({
     index: number,
     patch: Partial<ReviewFindingInputDto>
   ) => {
-    const updated = input.findings.map((item, i) =>
-      i === index ? { ...item, ...patch } : item
-    );
+    const updated = input.findings.map((item, i) => {
+      if (i !== index) return item;
+      const next = { ...item, ...patch };
+      if (next.path === undefined || next.path.trim().length === 0) {
+        const { path: _path, ...withoutPath } = next;
+        return withoutPath;
+      }
+      return next;
+    });
     updateDraftInput(taskId, {
       findings: updated
     });
@@ -337,6 +351,25 @@ export function AgentHubReviewDecisionSection({
                   </div>
                 ))}
               </div>
+              {!isHandleUnavailable && (
+                <button
+                  type="button"
+                  onClick={() => beginNewDecision(taskId)}
+                  style={{
+                    marginTop: 12,
+                    padding: '6px 14px',
+                    backgroundColor: 'var(--cth-amber-dark, #d97706)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    borderRadius: 2
+                  }}
+                >
+                  Start New Decision
+                </button>
+              )}
             </div>
           )}
 
@@ -419,6 +452,25 @@ export function AgentHubReviewDecisionSection({
           <div>
             <strong>Message:</strong> {session.error.message}
           </div>
+          {!isHandleUnavailable && (
+            <button
+              type="button"
+              onClick={() => beginNewDecision(taskId)}
+              style={{
+                marginTop: 10,
+                padding: '6px 14px',
+                backgroundColor: 'var(--cth-rose-dark, #be123c)',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: 12,
+                cursor: 'pointer',
+                borderRadius: 2
+              }}
+            >
+              Start New Decision
+            </button>
+          )}
         </div>
       )}
 
@@ -494,7 +546,7 @@ export function AgentHubReviewDecisionSection({
                   gap: 6,
                   fontSize: 12,
                   fontWeight: input.verdict === v ? 600 : 400,
-                  cursor: isHandleUnavailable ? 'not-allowed' : 'pointer'
+                  cursor: isFormLocked ? 'not-allowed' : 'pointer'
                 }}
               >
                 <input
@@ -502,7 +554,7 @@ export function AgentHubReviewDecisionSection({
                   name={`verdict-${taskId}`}
                   value={v}
                   checked={input.verdict === v}
-                  disabled={isHandleUnavailable || isPending}
+                  disabled={isFormLocked}
                   onChange={() => updateDraftInput(taskId, { verdict: v })}
                 />
                 {v}
@@ -525,18 +577,18 @@ export function AgentHubReviewDecisionSection({
               style={{
                 fontSize: 11,
                 color:
-                  input.summary.length > 4000
+                  utf8ByteLength(input.summary) > 16384
                     ? 'var(--cth-rose-dark, #e11d48)'
                     : 'var(--cth-ink-500, #64748b)'
               }}
             >
-              {input.summary.length} / 4000
+              {utf8ByteLength(input.summary)} bytes / 16384
             </span>
           </div>
           <textarea
             rows={3}
             value={input.summary}
-            disabled={isHandleUnavailable || isPending}
+            disabled={isFormLocked}
             onChange={(e) =>
               updateDraftInput(taskId, { summary: e.target.value })
             }
@@ -561,13 +613,16 @@ export function AgentHubReviewDecisionSection({
               alignItems: 'center',
               gap: 6,
               fontSize: 12,
-              cursor: isHandleUnavailable ? 'not-allowed' : 'pointer'
+              cursor: isFormLocked ? 'not-allowed' : 'pointer'
             }}
           >
             <input
               type="checkbox"
               checked={input.allowNoChangeCompletion}
-              disabled={isHandleUnavailable || isPending}
+              disabled={
+                isFormLocked ||
+                input.verdict !== 'ACCEPT'
+              }
               onChange={(e) =>
                 updateDraftInput(taskId, {
                   allowNoChangeCompletion: e.target.checked
@@ -589,12 +644,12 @@ export function AgentHubReviewDecisionSection({
             }}
           >
             <label style={{ fontWeight: 600, fontSize: 12 }}>
-              Findings ({input.findings.length} / 50)
+              Findings ({input.findings.length} / 256)
             </label>
             <button
               type="button"
               disabled={
-                isHandleUnavailable || isPending || input.findings.length >= 50
+                isFormLocked || input.findings.length >= 256
               }
               onClick={handleAddFinding}
               style={{
@@ -605,7 +660,7 @@ export function AgentHubReviewDecisionSection({
                 border: BORDER,
                 color: INK,
                 cursor:
-                  isHandleUnavailable || input.findings.length >= 50
+                  isFormLocked || input.findings.length >= 256
                     ? 'not-allowed'
                     : 'pointer'
               }}
@@ -653,7 +708,7 @@ export function AgentHubReviewDecisionSection({
                     </span>
                     <button
                       type="button"
-                      disabled={isHandleUnavailable || isPending}
+                      disabled={isFormLocked}
                       onClick={() => handleRemoveFinding(idx)}
                       style={{
                         padding: '2px 6px',
@@ -689,7 +744,7 @@ export function AgentHubReviewDecisionSection({
                       <input
                         type="text"
                         value={f.code}
-                        disabled={isHandleUnavailable || isPending}
+                        disabled={isFormLocked}
                         placeholder="e.g. SEC-001"
                         onChange={(e) =>
                           handleUpdateFinding(idx, { code: e.target.value })
@@ -716,7 +771,7 @@ export function AgentHubReviewDecisionSection({
                       </label>
                       <select
                         value={f.severity}
-                        disabled={isHandleUnavailable || isPending}
+                        disabled={isFormLocked}
                         onChange={(e) =>
                           handleUpdateFinding(idx, {
                             severity: e.target.value as ReviewFindingSeverityDto
@@ -753,7 +808,7 @@ export function AgentHubReviewDecisionSection({
                     <input
                       type="text"
                       value={f.message}
-                      disabled={isHandleUnavailable || isPending}
+                      disabled={isFormLocked}
                       placeholder="Detailed finding message..."
                       onChange={(e) =>
                         handleUpdateFinding(idx, { message: e.target.value })
@@ -781,7 +836,7 @@ export function AgentHubReviewDecisionSection({
                     <input
                       type="text"
                       value={f.path ?? ''}
-                      disabled={isHandleUnavailable || isPending}
+                      disabled={isFormLocked}
                       placeholder="e.g. src/utils/format.ts"
                       onChange={(e) =>
                         handleUpdateFinding(idx, { path: e.target.value })

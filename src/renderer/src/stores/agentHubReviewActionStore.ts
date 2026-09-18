@@ -47,6 +47,8 @@ export interface AgentHubReviewActionState {
   ) => void;
   setFailed: (taskId: string, error: { code: string; message: string }) => void;
   setAmbiguous: (taskId: string, error: { code: string; message: string }) => void;
+  /** Start a new logical decision while retaining the currently active handle. */
+  beginNewDecision: (taskId: string) => void;
   rotateDecisionId: (taskId: string) => void;
   markHandleUnavailable: (reviewHandle: string) => void;
   isHandleUnavailable: (reviewHandle: string) => boolean;
@@ -89,14 +91,29 @@ export const useAgentHubReviewActionStore = create<AgentHubReviewActionState>((s
     const nextDecisionId = wasAmbiguous ? generateDecisionId() : existing.decisionId;
     const nextStatus = wasAmbiguous ? 'idle' : existing.status;
 
+    const verdict = inputPartial.verdict ?? existing.input.verdict;
+    const rawFindings = inputPartial.findings !== undefined
+      ? inputPartial.findings
+      : existing.input.findings;
+    const findings = rawFindings.map((finding) => {
+      const { path, ...findingWithoutPath } = finding;
+      if (path === undefined || path.trim().length === 0) {
+        return findingWithoutPath;
+      }
+      return { ...findingWithoutPath, path };
+    });
     const nextInput: ReviewDecisionInputDto = Object.freeze({
-      verdict: inputPartial.verdict ?? existing.input.verdict,
+      verdict,
       summary: inputPartial.summary !== undefined ? inputPartial.summary : existing.input.summary,
-      findings: inputPartial.findings !== undefined ? Object.freeze([...inputPartial.findings]) : existing.input.findings,
+      findings: Object.freeze(findings),
+      // This flag is meaningful only for ACCEPT. Normalize immediately so
+      // Main never receives a stale true value after a verdict change.
       allowNoChangeCompletion:
-        inputPartial.allowNoChangeCompletion !== undefined
+        verdict === 'ACCEPT' && inputPartial.allowNoChangeCompletion !== undefined
           ? inputPartial.allowNoChangeCompletion
-          : existing.input.allowNoChangeCompletion
+          : verdict === 'ACCEPT'
+            ? existing.input.allowNoChangeCompletion
+            : false
     });
 
     const updatedSession: ReviewActionSession = Object.freeze({
@@ -197,6 +214,30 @@ export const useAgentHubReviewActionStore = create<AgentHubReviewActionState>((s
           ...existing,
           status: 'ambiguous',
           error: { code: error.code, message: error.message }
+        })
+      })
+    }));
+  },
+
+  beginNewDecision: (taskId: string) => {
+    const existing = get().sessionsByTaskId[taskId];
+    if (
+      !existing ||
+      existing.status === 'ambiguous' ||
+      get().isHandleUnavailable(existing.reviewHandle)
+    ) return;
+
+    set((state) => ({
+      sessionsByTaskId: Object.freeze({
+        ...state.sessionsByTaskId,
+        [taskId]: Object.freeze({
+          ...existing,
+          decisionId: generateDecisionId(),
+          status: 'idle',
+          result: undefined,
+          error: undefined,
+          stateSynchronized: undefined,
+          warning: undefined
         })
       })
     }));

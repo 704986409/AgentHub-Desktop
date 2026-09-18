@@ -8,6 +8,10 @@ import type {
 const FINDING_CODE_RE = /^[A-Za-z0-9._-]{1,128}$/;
 const VALID_SEVERITIES: readonly ReviewFindingSeverityDto[] = ['info', 'warning', 'error', 'blocker'];
 
+export function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
 export function validateFindingCode(code: string): string | null {
   if (!code || !FINDING_CODE_RE.test(code)) {
     return 'Finding code must match ^[A-Za-z0-9._-]{1,128}$';
@@ -29,7 +33,7 @@ export function validateFindingMessage(message: string): string | null {
   if (message.includes('\0')) {
     return 'Message cannot contain NUL bytes';
   }
-  if (new TextEncoder().encode(message).length > 8192) {
+  if (utf8ByteLength(message) > 8192) {
     return 'Message exceeds maximum length of 8192 UTF-8 bytes';
   }
   return null;
@@ -42,7 +46,7 @@ export function validateFindingPath(path: string | undefined): string | null {
   if (path.includes('\0')) {
     return 'Path cannot contain NUL bytes';
   }
-  if (new TextEncoder().encode(path).length > 4096) {
+  if (utf8ByteLength(path) > 4096) {
     return 'Path exceeds maximum length of 4096 UTF-8 bytes';
   }
   if (path.startsWith('/') || path.startsWith('\\') || /^[A-Za-z]:/.test(path)) {
@@ -64,7 +68,7 @@ export function validateSummary(summary: string): string | null {
   if (summary.includes('\0')) {
     return 'Summary cannot contain NUL bytes';
   }
-  if (new TextEncoder().encode(summary).length > 16384) {
+  if (utf8ByteLength(summary) > 16384) {
     return 'Summary exceeds maximum length of 16384 UTF-8 bytes';
   }
   return null;

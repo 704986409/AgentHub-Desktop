@@ -21,7 +21,10 @@ import {
   type ReviewDecisionMergeDeniedDto,
   type ReviewDecisionTerminalLifecycleDto
 } from '../src/shared/agenthubTypes';
-import { validateReviewDecisionInput } from '../src/renderer/src/components/agentHubReviewActionValidation';
+import {
+  validateReviewDecisionInput,
+  utf8ByteLength
+} from '../src/renderer/src/components/agentHubReviewActionValidation';
 import { useAgentHubReviewActionStore } from '../src/renderer/src/stores/agentHubReviewActionStore';
 import { useAgentHubReviewSessionStore } from '../src/renderer/src/stores/agentHubReviewSessionStore';
 
@@ -877,6 +880,162 @@ describe('AgentHub Review Actions — Action Store Lifecycle & Handle Expiration
     store.setApplied('task-term', makeCompletedDto(), true);
     assert.equal(store.isHandleUnavailable(HEX64), true, 'Handle must be marked unavailable after completion');
   });
+
+  test('store: expired handle cannot start a new decision and ambiguous state cannot bypass retry', { timeout: 5000 }, () => {
+    useAgentHubReviewActionStore.getState().clearSession();
+    const store = useAgentHubReviewActionStore.getState();
+
+    const expired = store.getOrCreateSession('task-expired', HEX64);
+    const expiredDecisionId = expired.decisionId;
+    store.setFailed('task-expired', {
+      code: 'AGENTHUB_API_REVIEW_HANDLE_EXPIRED',
+      message: 'Review handle expired'
+    });
+    store.beginNewDecision('task-expired');
+    const expiredAfter = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-expired'];
+    assert.equal(expiredAfter.decisionId, expiredDecisionId);
+    assert.equal(expiredAfter.status, 'failed');
+
+    const ambiguous = store.getOrCreateSession('task-ambiguous', HEX64_B);
+    const ambiguousDecisionId = ambiguous.decisionId;
+    store.setAmbiguous('task-ambiguous', { code: 'NETWORK_TIMEOUT', message: 'unknown' });
+    store.beginNewDecision('task-ambiguous');
+    const ambiguousAfter = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-ambiguous'];
+    assert.equal(ambiguousAfter.status, 'ambiguous');
+    assert.equal(ambiguousAfter.decisionId, ambiguousDecisionId, 'Only Retry Same Decision may reuse this identity');
+  });
+
+  test('store + Main: merge-denied keeps handle active and Start New Decision causes a new POST', { timeout: 5000 }, async () => {
+    let httpCalls = 0;
+    const idempotencyKeys: string[] = [];
+    const server = http.createServer((req, res) => {
+      httpCalls++;
+      idempotencyKeys.push(String(req.headers['idempotency-key'] ?? ''));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(envelope(makeMergeDeniedDto()));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    const connection = {
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
+      syncAuthoritativeState: async () => ({ disposition: 'committed' })
+    } as unknown as AgentHubConnection;
+    const service = new AgentHubReviewDecision(connection);
+
+    try {
+      useAgentHubReviewActionStore.getState().clearSession();
+      const store = useAgentHubReviewActionStore.getState();
+      const first = store.getOrCreateSession('task-1', HEX64);
+      const firstDecisionId = first.decisionId;
+      const firstRequest: ReviewDecisionRequestDto = {
+        decisionId: firstDecisionId,
+        reviewHandle: HEX64,
+        input: first.input
+      };
+
+      store.setSubmitting('task-1');
+      const firstResult = await service.reviewDecision(firstRequest);
+      assert.equal(firstResult.status, 'applied');
+      if (firstResult.status !== 'applied') throw new Error('expected applied merge-denied result');
+      store.setApplied('task-1', firstResult.result, firstResult.stateSynchronized);
+      assert.equal(store.isHandleUnavailable(HEX64), false);
+
+      store.beginNewDecision('task-1');
+      const second = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-1'];
+      assert.notEqual(second.decisionId, firstDecisionId);
+      assert.equal(second.reviewHandle, HEX64);
+      assert.equal(second.status, 'idle');
+
+      const secondRequest: ReviewDecisionRequestDto = {
+        decisionId: second.decisionId,
+        reviewHandle: second.reviewHandle,
+        input: second.input
+      };
+      store.setSubmitting('task-1');
+      const secondResult = await service.reviewDecision(secondRequest);
+      assert.equal(secondResult.status, 'applied');
+      assert.equal(httpCalls, 2);
+      assert.equal(idempotencyKeys.length, 2);
+      assert.notEqual(idempotencyKeys[0], idempotencyKeys[1]);
+      assert.equal(idempotencyKeys[0], `desktop-review:${firstDecisionId}`);
+      assert.equal(idempotencyKeys[1], `desktop-review:${second.decisionId}`);
+    } finally {
+      service.stop();
+      server.close();
+    }
+  });
+
+  test('store: definitive failure can start a new decision when the handle remains valid', { timeout: 5000 }, () => {
+    useAgentHubReviewActionStore.getState().clearSession();
+    const store = useAgentHubReviewActionStore.getState();
+    const first = store.getOrCreateSession('task-failed', HEX64);
+    store.setFailed('task-failed', { code: 'TASK_STATE_CONFLICT', message: 'not reviewable' });
+    store.beginNewDecision('task-failed');
+    const next = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-failed'];
+    assert.notEqual(next.decisionId, first.decisionId);
+    assert.equal(next.reviewHandle, HEX64);
+    assert.equal(next.status, 'idle');
+    assert.equal(store.isHandleUnavailable(HEX64), false);
+  });
+
+  test('store: canonical form omits blank paths and normalizes no-change completion by verdict', { timeout: 5000 }, () => {
+    useAgentHubReviewActionStore.getState().clearSession();
+    const store = useAgentHubReviewActionStore.getState();
+    store.getOrCreateSession('task-form', HEX64);
+    const baseFinding = { code: 'F1', severity: 'info' as const, message: 'note' };
+
+    store.updateDraftInput('task-form', {
+      findings: [{ ...baseFinding, path: '   ' }],
+      allowNoChangeCompletion: true
+    });
+    let session = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-form'];
+    assert.ok(!('path' in session.input.findings[0]), 'Whitespace-only path must be omitted');
+    assert.doesNotThrow(() => snapshotReviewDecisionInput(session.input));
+
+    store.updateDraftInput('task-form', {
+      findings: [{ ...baseFinding, path: 'src/components/Foo.tsx' }]
+    });
+    session = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-form'];
+    assert.equal(session.input.findings[0].path, 'src/components/Foo.tsx');
+    assert.doesNotThrow(() => snapshotReviewDecisionInput(session.input));
+
+    store.updateDraftInput('task-form', { verdict: 'REQUEST_REVISION' });
+    session = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-form'];
+    assert.equal(session.input.allowNoChangeCompletion, false);
+    store.updateDraftInput('task-form', { verdict: 'BLOCK' });
+    session = useAgentHubReviewActionStore.getState().sessionsByTaskId['task-form'];
+    assert.equal(session.input.allowNoChangeCompletion, false);
+  });
+
+  test('form contracts: UTF-8 summary bytes and 256 finding limit remain authoritative', { timeout: 5000 }, () => {
+    assert.equal(utf8ByteLength('你'), 3);
+    assert.equal(validateReviewDecisionInput({
+      verdict: 'ACCEPT',
+      summary: '你'.repeat(5461),
+      findings: [],
+      allowNoChangeCompletion: false
+    }), null);
+    assert.match(validateReviewDecisionInput({
+      verdict: 'ACCEPT',
+      summary: '你'.repeat(5462),
+      findings: [],
+      allowNoChangeCompletion: false
+    }) ?? '', /16384/);
+
+    const findings256 = Array.from({ length: 256 }, (_, i) => ({
+      code: `F${i}`,
+      severity: 'info' as const,
+      message: 'note'
+    }));
+    assert.equal(validateReviewDecisionInput({ verdict: 'ACCEPT', summary: '', findings: findings256.slice(0, 255), allowNoChangeCompletion: false }), null);
+    assert.equal(validateReviewDecisionInput({ verdict: 'ACCEPT', summary: '', findings: findings256, allowNoChangeCompletion: false }), null);
+    assert.match(validateReviewDecisionInput({ verdict: 'ACCEPT', summary: '', findings: [...findings256, { code: 'F256', severity: 'info', message: 'note' }], allowNoChangeCompletion: false }) ?? '', /256/);
+
+    const component = fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/components/AgentHubReviewDecisionSection.tsx'), 'utf-8');
+    assert.match(component, /session\.status === 'idle'/);
+    assert.match(component, /Findings \(\{input\.findings\.length\} \/ 256\)/);
+    assert.match(component, /bytes \/ 16384/);
+  });
 });
 
 describe('AgentHub Review Actions — Architecture Guards (Sections 97, 98, 99, 100)', () => {
@@ -898,7 +1057,11 @@ describe('AgentHub Review Actions — Architecture Guards (Sections 97, 98, 99, 
       'git apply',
       'git checkout',
       'ipcRenderer',
-      'window.cth'
+      'window.cth',
+      'reviewerId',
+      'idempotency-key',
+      'timeoutMs',
+      'http://'
     ];
 
     for (const relPath of filesToCheck) {
