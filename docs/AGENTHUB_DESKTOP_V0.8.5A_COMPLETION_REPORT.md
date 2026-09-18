@@ -4,7 +4,7 @@
 - Base tag: `V0.8.5`
 - Base SHA: `9c45bcb3e8107a59fa1fe4998e20c2323f6a5a11`
 - Final tag: `V0.8.5A`
-- Final SHA: PENDING_COMMIT_SHA
+- Final SHA: `3dde606ad723adf69456716bab6095fa042c96c9`
 - Backend sealed SHA: `03bc7824d732e740a88f9aa2c0122f3cf5df75ab`
 
 ## Blocker 1 — committedPatch Presence Semantics
@@ -41,10 +41,10 @@
 - Real model calls: 0
 
 ## GitHub
-- Commit: PENDING_COMMIT_SHA
+- Commit: `3dde606ad723adf69456716bab6095fa042c96c9`
 - Tag: `V0.8.5A`
-- Actions Run: PENDING_RUN_ID
-- CI Result: PENDING_CI_RESULT
+- Actions Run: `35363316837`
+- CI Result: `SUCCESS`
 
 ## Final Status
-- PENDING_CI_VERIFICATION
+- SEALED
