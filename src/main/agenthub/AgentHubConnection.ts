@@ -1,7 +1,7 @@
 import { AgentHubRestClient, AgentHubContractError } from './AgentHubRestClient';
 import { AgentHubRealtimeClient } from './AgentHubRealtimeClient';
 import { AgentHubStateCache } from './AgentHubStateCache';
-import type { AgentHubDesktopState, AgentHubStateSnapshot } from './AgentHubTypes';
+import type { AgentHubDesktopState, AgentHubStateSnapshot, ProviderDto } from './AgentHubTypes';
 
 const BACKOFF_DELAYS_MS = [1000, 2000, 5000, 10000];
 const RESYNC_DEBOUNCE_MS = 50;
@@ -39,6 +39,10 @@ export class AgentHubConnection {
   #pendingReconnectGeneration: number | null = null;
   #stateRequestSequence = 0;
   #latestCommittedSequence = 0;
+  #providerCatalog: readonly ProviderDto[] | null = null;
+  #inFlightProvidersPromise: Promise<readonly ProviderDto[]> | null = null;
+  #providerRequestSequence = 0;
+  #latestCommittedProviderSequence = 0;
 
   constructor(options: AgentHubConnectionOptions = {}) {
     this.#cache = options.cache ?? new AgentHubStateCache();
@@ -115,6 +119,8 @@ export class AgentHubConnection {
     this.#syncGeneration = null;
     this.#pendingSyncGeneration = null;
     this.#pendingReconnectGeneration = null;
+    this.#inFlightProvidersPromise = null;
+    this.#providerCatalog = null;
     this.#cache.setConnectionStatus('disconnected');
   }
 
@@ -127,6 +133,51 @@ export class AgentHubConnection {
       return null;
     }
     return this.#doSync(this.#generation);
+  }
+
+  /**
+   * Get cached providers if available.
+   */
+  public getCachedProviders(): readonly ProviderDto[] | null {
+    return this.#providerCatalog;
+  }
+
+  /**
+   * Fetch providers from Backend with request coalescing and generation safety.
+   */
+  public async getProviders(signal?: AbortSignal): Promise<readonly ProviderDto[]> {
+    if (this.#inFlightProvidersPromise) {
+      return this.#inFlightProvidersPromise;
+    }
+
+    const sequence = ++this.#providerRequestSequence;
+    const currentGen = this.#generation;
+
+    const execute = async (): Promise<readonly ProviderDto[]> => {
+      try {
+        const catalog = await this.#restClient.getProviders(signal);
+        if (this.#isStarted && currentGen === this.#generation && sequence >= this.#latestCommittedProviderSequence) {
+          this.#latestCommittedProviderSequence = sequence;
+          this.#providerCatalog = catalog;
+        }
+        return catalog;
+      } finally {
+        if (this.#inFlightProvidersPromise === currentPromise) {
+          this.#inFlightProvidersPromise = null;
+        }
+      }
+    };
+
+    const currentPromise = execute();
+    this.#inFlightProvidersPromise = currentPromise;
+    return currentPromise;
+  }
+
+  /**
+   * Alias for getProviders()
+   */
+  public async refreshProviders(signal?: AbortSignal): Promise<readonly ProviderDto[]> {
+    return this.getProviders(signal);
   }
 
   /**
@@ -213,6 +264,9 @@ export class AgentHubConnection {
         this.#cache.setConnectionStatus('connected');
       }
       this.#scheduleResync(0, gen);
+      void this.getProviders().catch(() => {
+        // Provider catalog failure must not degrade authoritative snapshot or connection
+      });
     });
 
     this.#realtimeClient.on('incompatible_hello', (err: Error) => {

@@ -328,7 +328,9 @@ describe('AgentHub V0.8.7 mutation store and UI authority', () => {
     const form = fs.readFileSync(path.resolve(process.cwd(), 'src/renderer/src/components/AgentHubAgentForm.tsx'), 'utf8');
     assert.match(form, /Claude Code/);
     assert.match(form, /Codex/);
-    assert.match(form, /Runtime adapter planned for V0.8.8/);
+    assert.match(form, /Cursor/);
+    assert.match(form, /Antigravity/);
+    assert.equal(form.includes('planned for V0.8.8'), false);
     assert.match(form, /Manual modelId is preserved exactly/);
     const modal = fs.readFileSync(path.resolve(process.cwd(), 'src/renderer/src/components/AgentHubAgentManagementModal.tsx'), 'utf8');
     assert.match(modal, /Retry Same Mutation/);

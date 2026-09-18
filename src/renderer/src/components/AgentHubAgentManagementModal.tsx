@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAgentHubStore } from '../stores/agentHubStore';
 import { useAgentHubAgentMutationStore } from '../stores/agentHubAgentMutationStore';
-import type { AgentMutationResult, CreateAgentInputDto, UpdateAgentInputDto } from '@shared/agenthubTypes';
-import { ACTIONABLE_AGENT_PROVIDER_IDS } from '@shared/agenthubTypes';
+import type {
+  AgentMutationResult,
+  CreateAgentInputDto,
+  UpdateAgentInputDto,
+  ProviderDto
+} from '@shared/agenthubTypes';
 import {
   AgentHubAgentForm,
   emptyAgentFormValue,
   formFromAgent,
+  formatProviderStatus,
   toCreateInput,
   toUpdateInput,
+  isProviderUsable,
   type AgentHubAgentFormValue
 } from './AgentHubAgentForm';
 
@@ -17,18 +23,19 @@ interface AgentHubAgentManagementModalProps {
   onClose: () => void;
 }
 
-function providerSupported(providerId: string): boolean {
-  return (ACTIONABLE_AGENT_PROVIDER_IDS as readonly string[]).includes(providerId);
-}
-
 export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentManagementModalProps) {
   const snapshot = useAgentHubStore((s) => s.snapshot);
   const connection = useAgentHubStore((s) => s.connection);
+  const providerCatalog = useAgentHubStore((s) => s.providerCatalog);
+  const providerCatalogStatus = useAgentHubStore((s) => s.providerCatalogStatus);
+  const refreshProviderCatalog = useAgentHubStore((s) => s.refreshProviderCatalog);
+
   const createAgent = useAgentHubStore((s) => s.createAgent);
   const updateAgent = useAgentHubStore((s) => s.updateAgent);
   const enableAgent = useAgentHubStore((s) => s.enableAgent);
   const disableAgent = useAgentHubStore((s) => s.disableAgent);
   const deleteAgent = useAgentHubStore((s) => s.deleteAgent);
+
   const agents = snapshot?.agents ?? [];
   const projects = snapshot?.projects ?? [];
   const mutationsUsable = connection === 'connected' || connection === 'degraded';
@@ -49,6 +56,12 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
   const [confirmKind, setConfirmKind] = useState<'create' | 'runtime' | 'disable' | 'delete' | null>(null);
   const [syncWarning, setSyncWarning] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      void refreshProviderCatalog();
+    }
+  }, [isOpen, refreshProviderCatalog]);
+
   const selected = useMemo(
     () => agents.find((agent) => agent.agentId === selectedAgentId) ?? null,
     [agents, selectedAgentId]
@@ -67,6 +80,9 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
   const submitting = session?.status === 'submitting';
   const ambiguous = session?.status === 'ambiguous';
   const formDisabled = submitting || !mutationsUsable;
+
+  const providerSupported = (providerId: string): boolean => isProviderUsable(providerId, providerCatalog);
+  const providerUsable = selected ? providerSupported(selected.providerId) : false;
 
   const canEnable = Boolean(
     selected &&
@@ -175,6 +191,9 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
     await submitAction(session.operation, true);
   };
 
+  const isFormCreateEnabledUsable = isProviderUsable(form.providerId, providerCatalog);
+  const canConfirmCreate = mutationsUsable && !submitting && !ambiguous && (!form.enabled || isFormCreateEnabledUsable);
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(15,23,42,0.35)',
@@ -186,7 +205,17 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <strong>AGENTHUB AGENTS</strong>
-          <button type="button" onClick={onClose}>Close</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              type="button"
+              disabled={providerCatalogStatus === 'loading'}
+              onClick={() => { void refreshProviderCatalog(); }}
+              style={{ fontSize: 12, padding: '2px 8px' }}
+            >
+              {providerCatalogStatus === 'loading' ? 'Refreshing Providers...' : 'Refresh Providers'}
+            </button>
+            <button type="button" onClick={onClose}>Close</button>
+          </div>
         </div>
         {snapshot === null && <div>AGENTHUB STATE UNAVAILABLE</div>}
         {!mutationsUsable && <div>Agent mutations are disabled until AgentHub is usable.</div>}
@@ -253,7 +282,16 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                     <div>Model: {form.modelId}</div>
                     <div>Scope: {form.projectId ?? 'Global'}</div>
                     <div>Enabled: {String(form.enabled)}</div>
-                    <button type="button" disabled={!mutationsUsable || submitting || ambiguous} onClick={() => { void submitCreate(); }}>
+                    {!canConfirmCreate && form.enabled && !isFormCreateEnabledUsable && (
+                      <div style={{ color: '#ea580c', fontWeight: 700, margin: '6px 0' }}>
+                        Cannot create enabled agent: provider is not usable
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      disabled={!canConfirmCreate}
+                      onClick={() => { void submitCreate(); }}
+                    >
                       Confirm Create
                     </button>
                   </div>
@@ -273,8 +311,10 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                   <div>Enabled: {String(selected.enabled)}</div>
                   <div>Created At: {selected.createdAt}</div>
                   <div>Updated At: {selected.updatedAt}</div>
-                  {!providerSupported(selected.providerId) && (
-                    <div style={{ color: '#ea580c', fontWeight: 700 }}>Runtime provider unavailable</div>
+                  {!providerUsable && (
+                    <div style={{ color: '#ea580c', fontWeight: 700 }}>
+                      Runtime provider unavailable{providerCatalog?.find((p) => p.providerId === selected.providerId) ? ` (${formatProviderStatus(providerCatalog.find((p) => p.providerId === selected.providerId)!.status)})` : ''}
+                    </div>
                   )}
                 </div>
                 {mode === 'edit' ? (

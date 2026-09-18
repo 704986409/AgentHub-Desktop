@@ -14,7 +14,8 @@ import type {
   CreateAgentRequestDto,
   UpdateAgentRequestDto,
   AgentActionRequestDto,
-  AgentMutationResult
+  AgentMutationResult,
+  ProviderDto
 } from '@shared/agenthubTypes';
 
 export interface AgentHubStoreState {
@@ -27,8 +28,13 @@ export interface AgentHubStoreState {
   isRefreshing: boolean;
   selectedAgentId: string | null;
 
+  providerCatalog: readonly ProviderDto[] | null;
+  providerCatalogStatus: 'idle' | 'loading' | 'ready' | 'failed';
+  providerCatalogError: { code: string; message: string } | null;
+
   init: () => () => void;
   refresh: () => Promise<void>;
+  refreshProviderCatalog: () => Promise<void>;
   selectAgent: (agentId: string | null) => void;
   submitTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
   executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
@@ -49,6 +55,9 @@ function reconcileSelectedAgent(
   return snapshot.agents.some((a) => a.agentId === prevSelectedId) ? prevSelectedId : null;
 }
 
+let inFlightCatalogPromise: Promise<void> | null = null;
+let catalogGeneration = 0;
+
 export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
   connection: 'disconnected',
   health: null,
@@ -58,6 +67,10 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
   lastError: null,
   isRefreshing: false,
   selectedAgentId: null,
+
+  providerCatalog: null,
+  providerCatalogStatus: 'idle',
+  providerCatalogError: null,
 
   init: () => {
     if (typeof window === 'undefined' || !window.agentHub) {
@@ -76,6 +89,9 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
           lastError: state.lastError,
           selectedAgentId: reconcileSelectedAgent(s.selectedAgentId, state.snapshot)
         }));
+        if (state.connection === 'connected' || state.connection === 'degraded') {
+          void get().refreshProviderCatalog();
+        }
       })
       .catch((err: Error) => {
         set({
@@ -95,6 +111,9 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
         lastError: state.lastError,
         selectedAgentId: reconcileSelectedAgent(s.selectedAgentId, state.snapshot)
       }));
+      if ((state.connection === 'connected' || state.connection === 'degraded') && !get().providerCatalog) {
+        void get().refreshProviderCatalog();
+      }
     });
 
     return cleanup;
@@ -123,6 +142,52 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
     } finally {
       set({ isRefreshing: false });
     }
+  },
+
+  refreshProviderCatalog: async () => {
+    if (inFlightCatalogPromise) {
+      return inFlightCatalogPromise;
+    }
+    if (typeof window === 'undefined' || !window.agentHub?.getProviders) {
+      return;
+    }
+
+    const currentGen = ++catalogGeneration;
+    set({
+      providerCatalogStatus: 'loading',
+      providerCatalogError: null
+    });
+
+    const execute = async (): Promise<void> => {
+      try {
+        const catalog = await window.agentHub.getProviders();
+        if (currentGen === catalogGeneration) {
+          set({
+            providerCatalog: catalog,
+            providerCatalogStatus: 'ready',
+            providerCatalogError: null
+          });
+        }
+      } catch (err) {
+        if (currentGen === catalogGeneration) {
+          set({
+            providerCatalogStatus: 'failed',
+            providerCatalogError: {
+              code: 'CATALOG_REFRESH_FAILED',
+              message: (err as Error).message || 'Failed to refresh provider catalog'
+            }
+          });
+        }
+      } finally {
+        if (inFlightCatalogPromise === currentPromise) {
+          inFlightCatalogPromise = null;
+        }
+      }
+    };
+
+    const currentPromise = execute();
+    inFlightCatalogPromise = currentPromise;
+    return currentPromise;
   },
 
   selectAgent: (agentId: string | null) => {

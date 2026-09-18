@@ -1800,7 +1800,16 @@ export const AGENT_AUTHORITIES: readonly AgentAuthorityDto[] = Object.freeze([
   'ADMIN'
 ]);
 
-export const ACTIONABLE_AGENT_PROVIDER_IDS = Object.freeze(['claude', 'codex'] as const);
+export const KNOWN_AGENT_PROVIDER_IDS = Object.freeze([
+  'claude',
+  'codex',
+  'cursor',
+  'antigravity'
+] as const);
+
+export type KnownAgentProviderId = (typeof KNOWN_AGENT_PROVIDER_IDS)[number];
+
+export const ACTIONABLE_AGENT_PROVIDER_IDS = KNOWN_AGENT_PROVIDER_IDS;
 
 export interface CreateAgentInputDto {
   readonly projectId: string | null;
@@ -2066,4 +2075,216 @@ export function snapshotAgentDeleteDto(raw: unknown): AgentDeleteDto {
     agentId: parseRequiredNonBlankString(raw, 'agentId'),
     deleted: true as const
   });
+}
+
+export type ProviderRuntimeStatus =
+  | 'READY'
+  | 'EXECUTABLE_NOT_FOUND'
+  | 'AUTH_REQUIRED'
+  | 'PROBE_FAILED'
+  | 'PROBE_TIMEOUT';
+
+export const PROVIDER_RUNTIME_STATUSES: readonly ProviderRuntimeStatus[] = Object.freeze([
+  'READY',
+  'EXECUTABLE_NOT_FOUND',
+  'AUTH_REQUIRED',
+  'PROBE_FAILED',
+  'PROBE_TIMEOUT'
+]);
+
+export interface ProviderModelDto {
+  readonly modelId: string;
+  readonly label: string;
+}
+
+export interface ProviderCapabilitiesDto {
+  readonly outputProtocols: readonly ('manager-directive' | 'worker-result')[];
+  readonly sessionContinuation: boolean;
+}
+
+export interface ProviderDto {
+  readonly providerId: string;
+  readonly supported: true;
+  readonly usable: boolean;
+  readonly installed: boolean;
+  readonly authenticated: boolean | null;
+  readonly version: string | null;
+  readonly status: ProviderRuntimeStatus;
+  readonly capabilities: ProviderCapabilitiesDto;
+  readonly modelDiscovery: 'native' | 'unavailable';
+  readonly models: readonly ProviderModelDto[];
+  readonly checkedAt: string;
+}
+
+const ALLOWED_PROVIDER_KEYS: ReadonlySet<string> = new Set([
+  'providerId',
+  'supported',
+  'usable',
+  'installed',
+  'authenticated',
+  'version',
+  'status',
+  'capabilities',
+  'modelDiscovery',
+  'models',
+  'checkedAt'
+]);
+
+const ALLOWED_PROVIDER_CAPABILITY_KEYS: ReadonlySet<string> = new Set([
+  'outputProtocols',
+  'sessionContinuation'
+]);
+
+const ALLOWED_PROVIDER_MODEL_KEYS: ReadonlySet<string> = new Set([
+  'modelId',
+  'label'
+]);
+
+const FORBIDDEN_PRIVATE_KEYS = Object.freeze(new Set([
+  'env',
+  'environment',
+  'filepath',
+  'executablepath',
+  'command',
+  'args',
+  'token',
+  'secret',
+  'credential',
+  'key',
+  'apikey',
+  'session',
+  'sessionid',
+  'conversationid',
+  'rawerror',
+  'stderr',
+  'stdout'
+]));
+
+function assertNoForbiddenPrivateKeys(record: Record<string, unknown>, context: string): void {
+  for (const key of Object.keys(record)) {
+    if (FORBIDDEN_PRIVATE_KEYS.has(key.toLowerCase())) {
+      throw new AgentHubValidationError('FORBIDDEN_PROVIDER_DATA', `Forbidden private field '${key}' detected in ${context}`);
+    }
+  }
+}
+
+export function snapshotProviderModelDto(raw: unknown): ProviderModelDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER_MODEL', 'Provider model must be an object');
+  }
+  assertNoForbiddenPrivateKeys(raw, 'provider model');
+  rejectUnexpectedKeys(raw, ALLOWED_PROVIDER_MODEL_KEYS, 'MALFORMED_PROVIDER_MODEL', 'Provider model');
+  return Object.freeze({
+    modelId: snapshotExactBoundedText(raw.modelId, 'modelId', 512),
+    label: snapshotExactBoundedText(raw.label, 'label', 512)
+  });
+}
+
+export function snapshotProviderDto(raw: unknown): ProviderDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', 'Provider entry must be an object');
+  }
+  assertNoForbiddenPrivateKeys(raw, 'provider entry');
+  rejectUnexpectedKeys(raw, ALLOWED_PROVIDER_KEYS, 'MALFORMED_PROVIDER', 'Provider entry');
+
+  const providerId = parseRequiredNonBlankString(raw, 'providerId');
+  if (raw.supported !== true) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'supported' must be true");
+  }
+  if (typeof raw.usable !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'usable' must be boolean");
+  }
+  if (typeof raw.installed !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'installed' must be boolean");
+  }
+  if (raw.authenticated !== null && typeof raw.authenticated !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'authenticated' must be boolean or null");
+  }
+  const version = raw.version === null ? null : snapshotExactBoundedText(raw.version, 'version', 64);
+
+  if (typeof raw.status !== 'string' || !(PROVIDER_RUNTIME_STATUSES as readonly string[]).includes(raw.status)) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', `Unknown provider status '${String(raw.status)}'`);
+  }
+  const status = raw.status as ProviderRuntimeStatus;
+
+  if (!isRecord(raw.capabilities)) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'capabilities' must be an object");
+  }
+  assertNoForbiddenPrivateKeys(raw.capabilities, 'provider capabilities');
+  rejectUnexpectedKeys(raw.capabilities, ALLOWED_PROVIDER_CAPABILITY_KEYS, 'MALFORMED_PROVIDER', 'Provider capabilities');
+
+  if (!Array.isArray(raw.capabilities.outputProtocols)) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'capabilities.outputProtocols' must be an array");
+  }
+  const allowedProtocols = ['manager-directive', 'worker-result'] as const;
+  const outputProtocols = raw.capabilities.outputProtocols.map((p) => {
+    if (typeof p !== 'string' || !(allowedProtocols as readonly string[]).includes(p)) {
+      throw new AgentHubValidationError('MALFORMED_PROVIDER', `Unknown output protocol '${String(p)}'`);
+    }
+    return p as (typeof allowedProtocols)[number];
+  });
+  if (typeof raw.capabilities.sessionContinuation !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'capabilities.sessionContinuation' must be boolean");
+  }
+  const capabilities: ProviderCapabilitiesDto = Object.freeze({
+    outputProtocols: Object.freeze(outputProtocols),
+    sessionContinuation: raw.capabilities.sessionContinuation
+  });
+
+  if (raw.modelDiscovery !== 'native' && raw.modelDiscovery !== 'unavailable') {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'modelDiscovery' must be 'native' or 'unavailable'");
+  }
+
+  if (!Array.isArray(raw.models) || raw.models.length > 512) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER', "Provider 'models' must be an array with at most 512 entries");
+  }
+  const models = Object.freeze(raw.models.map((m) => snapshotProviderModelDto(m)));
+
+  const checkedAt = parseRequiredNonBlankString(raw, 'checkedAt');
+
+  return Object.freeze({
+    providerId,
+    supported: true as const,
+    usable: raw.usable,
+    installed: raw.installed,
+    authenticated: raw.authenticated,
+    version,
+    status,
+    capabilities,
+    modelDiscovery: raw.modelDiscovery,
+    models,
+    checkedAt
+  });
+}
+
+export function snapshotProviderCatalog(raw: unknown): readonly ProviderDto[] {
+  if (!Array.isArray(raw)) {
+    throw new AgentHubValidationError('MALFORMED_PROVIDER_CATALOG', 'Provider catalog must be an array');
+  }
+  return Object.freeze(raw.map((item) => snapshotProviderDto(item)));
+}
+
+export function formatProviderStatus(status: ProviderRuntimeStatus): string {
+  switch (status) {
+    case 'READY':
+      return 'Ready';
+    case 'EXECUTABLE_NOT_FOUND':
+      return 'CLI Not Found';
+    case 'AUTH_REQUIRED':
+      return 'Login Required';
+    case 'PROBE_FAILED':
+      return 'Probe Failed';
+    case 'PROBE_TIMEOUT':
+      return 'Probe Timed Out';
+    default:
+      return status;
+  }
+}
+
+export function isProviderUsable(providerId: string, catalog: readonly ProviderDto[] | null): boolean {
+  if (!catalog) {
+    return providerId === 'claude' || providerId === 'codex';
+  }
+  const entry = catalog.find((p) => p.providerId === providerId);
+  return Boolean(entry?.usable && entry?.status === 'READY');
 }

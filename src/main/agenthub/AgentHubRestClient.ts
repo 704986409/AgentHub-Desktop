@@ -11,7 +11,8 @@ import type {
   UpdateAgentInputDto,
   ExecuteTaskInputDto,
   ExecuteTaskResultDto,
-  ReviewDecisionLifecycleDto
+  ReviewDecisionLifecycleDto,
+  ProviderDto
 } from './AgentHubTypes';
 import {
   snapshotState,
@@ -26,6 +27,7 @@ import {
   snapshotExecuteTaskId,
   snapshotExecuteTaskResult,
   snapshotReviewDecisionLifecycleResult,
+  snapshotProviderCatalog,
   AgentHubValidationError
 } from './AgentHubTypes';
 
@@ -207,6 +209,29 @@ export class AgentHubRestClient {
       }
       throw new AgentHubContractError('MALFORMED_EVENTS', (err as Error).message);
     }
+  }
+
+  /**
+   * GET /api/v1/providers
+   * Read-only provider catalog endpoint.
+   */
+  public async getProviders(signal?: AbortSignal): Promise<readonly ProviderDto[]> {
+    const data = await this.#get<unknown>('/api/v1/providers', signal);
+    try {
+      return snapshotProviderCatalog(data);
+    } catch (err) {
+      if (err instanceof AgentHubValidationError) {
+        throw new AgentHubContractError(err.code, err.message, { phase: 'response-contract', requestDispatched: true });
+      }
+      throw new AgentHubContractError('MALFORMED_PROVIDER_CATALOG', (err as Error).message, { phase: 'response-contract', requestDispatched: true });
+    }
+  }
+
+  /**
+   * Alias for getProviders()
+   */
+  public async providers(signal?: AbortSignal): Promise<readonly ProviderDto[]> {
+    return this.getProviders(signal);
   }
 
   /**

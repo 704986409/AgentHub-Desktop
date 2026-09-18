@@ -35,7 +35,8 @@ import type {
   CreateAgentRequestDto,
   UpdateAgentRequestDto,
   AgentActionRequestDto,
-  AgentMutationResult
+  AgentMutationResult,
+  ProviderDto
 } from '../shared/agenthubTypes';
 export type {
   AgentHubDesktopState,
@@ -50,7 +51,8 @@ export type {
   CreateAgentRequestDto,
   UpdateAgentRequestDto,
   AgentActionRequestDto,
-  AgentMutationResult
+  AgentMutationResult,
+  ProviderDto
 } from '../shared/agenthubTypes';
 
 
@@ -1470,6 +1472,7 @@ export interface AgentHubPreloadApi {
   enableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   disableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   deleteAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
+  getProviders: () => Promise<readonly ProviderDto[]>;
 }
 
 const agentHubApi: AgentHubPreloadApi = {
@@ -1497,7 +1500,9 @@ const agentHubApi: AgentHubPreloadApi = {
   disableAgent: (request: AgentActionRequestDto): Promise<AgentMutationResult> =>
     ipcRenderer.invoke('agenthub:disableAgent', request),
   deleteAgent: (request: AgentActionRequestDto): Promise<AgentMutationResult> =>
-    ipcRenderer.invoke('agenthub:deleteAgent', request)
+    ipcRenderer.invoke('agenthub:deleteAgent', request),
+  getProviders: (): Promise<readonly ProviderDto[]> =>
+    ipcRenderer.invoke('agenthub:getProviders')
 };
 
 

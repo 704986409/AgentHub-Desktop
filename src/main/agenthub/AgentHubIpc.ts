@@ -6,7 +6,8 @@ import type {
   TaskExecutionResult,
   TaskSubmissionResult,
   ReviewDecisionResult,
-  AgentMutationResult
+  AgentMutationResult,
+  ProviderDto
 } from './AgentHubTypes';
 import { AgentHubTaskSubmission } from './AgentHubTaskSubmission';
 import { AgentHubTaskExecution } from './AgentHubTaskExecution';
@@ -25,7 +26,8 @@ export const AGENTHUB_IPC_CHANNELS = {
   UPDATE_AGENT: 'agenthub:updateAgent',
   ENABLE_AGENT: 'agenthub:enableAgent',
   DISABLE_AGENT: 'agenthub:disableAgent',
-  DELETE_AGENT: 'agenthub:deleteAgent'
+  DELETE_AGENT: 'agenthub:deleteAgent',
+  GET_PROVIDERS: 'agenthub:getProviders'
 } as const;
 
 export function registerAgentHubIpc(
@@ -95,6 +97,10 @@ export function registerAgentHubIpc(
     AGENTHUB_IPC_CHANNELS.DELETE_AGENT,
     async (_event, request: unknown): Promise<AgentMutationResult> => management.deleteAgent(request)
   );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.GET_PROVIDERS,
+    async (): Promise<readonly ProviderDto[]> => connection.getProviders()
+  );
 
   const handleChange = (state: AgentHubDesktopState): void => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -127,6 +133,7 @@ export function registerAgentHubIpc(
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.ENABLE_AGENT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.DISABLE_AGENT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.DELETE_AGENT);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_PROVIDERS);
   };
 
 }

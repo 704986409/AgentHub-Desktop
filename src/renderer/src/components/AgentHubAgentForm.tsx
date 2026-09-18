@@ -6,22 +6,30 @@ import type {
   ProjectDto,
   TaskComplexity,
   TaskRisk,
-  UpdateAgentInputDto
+  UpdateAgentInputDto,
+  ProviderRuntimeStatus
 } from '@shared/agenthubTypes';
 import {
   AGENT_AUTHORITIES,
-  ACTIONABLE_AGENT_PROVIDER_IDS,
+  KNOWN_AGENT_PROVIDER_IDS,
   TASK_COMPLEXITIES,
-  TASK_RISKS
+  TASK_RISKS,
+  formatProviderStatus,
+  isProviderUsable
 } from '@shared/agenthubTypes';
 import modelCatalog from '@shared/modelCatalog.json';
 import { ProviderLogo } from './ProviderLogo';
 import type { AgentProvider } from '@/store/config';
+import { useAgentHubStore } from '../stores/agentHubStore';
 
-const PLANNED_PROVIDERS = [
-  { id: 'cursor', label: 'Cursor' },
-  { id: 'antigravity', label: 'Antigravity' }
-] as const;
+export const PROVIDER_LABELS: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  antigravity: 'Antigravity'
+};
+
+export { formatProviderStatus, isProviderUsable };
 
 export interface AgentHubAgentFormValue {
   projectId: string | null;
@@ -136,8 +144,29 @@ export function AgentHubAgentForm({
   onChange
 }: AgentHubAgentFormProps) {
   const [manualModel, setManualModel] = useState(true);
-  const suggestions = useMemo(() => catalogModels(value.providerId), [value.providerId]);
-  const actionable = (ACTIONABLE_AGENT_PROVIDER_IDS as readonly string[]).includes(value.providerId);
+  const providerCatalog = useAgentHubStore((s) => s.providerCatalog);
+
+  const currentProviderDto = useMemo(
+    () => providerCatalog?.find((p) => p.providerId === value.providerId) ?? null,
+    [providerCatalog, value.providerId]
+  );
+
+  const { modelSuggestions, isOfflineFallback } = useMemo(() => {
+    if (currentProviderDto && currentProviderDto.modelDiscovery === 'native' && currentProviderDto.models.length > 0) {
+      return {
+        modelSuggestions: currentProviderDto.models.map((m) => ({ id: m.modelId, label: m.label })),
+        isOfflineFallback: false
+      };
+    }
+    const fallback = catalogModels(value.providerId);
+    return {
+      modelSuggestions: fallback,
+      isOfflineFallback: true
+    };
+  }, [currentProviderDto, value.providerId]);
+
+  const isCurrentProviderUsable = currentProviderDto?.usable ?? false;
+  const isKnownProvider = (KNOWN_AGENT_PROVIDER_IDS as readonly string[]).includes(value.providerId);
 
   const field = (label: string, children: ReactNode) => (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
@@ -180,46 +209,61 @@ export function AgentHubAgentForm({
       {field('Provider', (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {ACTIONABLE_AGENT_PROVIDER_IDS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                disabled={disabled}
-                onClick={() => onChange({ ...value, providerId: id, modelId: '' })}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '4px 8px',
-                  border: value.providerId === id ? '2px solid #0f172a' : '1px solid #cbd5e1',
-                  background: value.providerId === id ? '#d0f0e0' : '#fff'
-                }}
-              >
-                <ProviderLogo provider={id as AgentProvider} size={14} />
-                {id === 'claude' ? 'Claude Code' : 'Codex'}
-              </button>
-            ))}
+            {KNOWN_AGENT_PROVIDER_IDS.map((id) => {
+              const pDto = providerCatalog?.find((p) => p.providerId === id);
+              const isSelected = value.providerId === id;
+              const statusText = pDto ? formatProviderStatus(pDto.status) : null;
+              const isUsable = pDto?.usable ?? false;
+
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onChange({ ...value, providerId: id, modelId: '' })}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 8px',
+                    border: isSelected ? '2px solid #0f172a' : '1px solid #cbd5e1',
+                    background: isSelected ? '#d0f0e0' : '#fff',
+                    cursor: disabled ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <ProviderLogo provider={id as AgentProvider} size={14} />
+                  <span>{PROVIDER_LABELS[id] ?? id}</span>
+                  {statusText && (
+                    <span style={{
+                      fontSize: 10,
+                      padding: '1px 4px',
+                      borderRadius: 3,
+                      background: isUsable ? '#e2e8f0' : '#fed7aa',
+                      color: isUsable ? '#334155' : '#9a3412'
+                    }}>
+                      {statusText}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-          {PLANNED_PROVIDERS.map((provider) => (
-            <button
-              key={provider.id}
-              type="button"
-              disabled
-              title="Runtime adapter planned for V0.8.8"
-              style={{ opacity: 0.55, textAlign: 'left', padding: '4px 8px' }}
-            >
-              {provider.label} — Runtime adapter planned for V0.8.8
-            </button>
-          ))}
-          {!actionable && (
-            <div style={{ color: '#ea580c', fontWeight: 700 }}>Runtime provider unavailable</div>
+          {!isKnownProvider && (
+            <div style={{ color: '#ea580c', fontWeight: 700, fontSize: 12 }}>
+              Unsupported legacy provider — please migrate to Claude, Codex, Cursor, or Antigravity
+            </div>
+          )}
+          {isKnownProvider && !isCurrentProviderUsable && (
+            <div style={{ color: '#ea580c', fontWeight: 700, fontSize: 12 }}>
+              Runtime provider unavailable{currentProviderDto ? ` (${formatProviderStatus(currentProviderDto.status)})` : ''}
+            </div>
           )}
         </div>
       ))}
       {field('Model', (
         <div style={{ display: 'grid', gap: 6 }}>
           <select
-            value={suggestions.some((item) => item.id === value.modelId) ? value.modelId : ''}
+            value={modelSuggestions.some((item) => item.id === value.modelId) ? value.modelId : ''}
             disabled={disabled}
             onChange={(event) => {
               setManualModel(event.target.value === '');
@@ -227,7 +271,7 @@ export function AgentHubAgentForm({
             }}
           >
             <option value="">Manual modelId</option>
-            {suggestions.filter((item) => item.id).map((item) => (
+            {modelSuggestions.filter((item) => item.id).map((item) => (
               <option key={item.id} value={item.id}>{item.label} ({item.id})</option>
             ))}
           </select>
@@ -240,7 +284,14 @@ export function AgentHubAgentForm({
               onChange({ ...value, modelId: event.target.value });
             }}
           />
-          {manualModel && <span style={{ color: '#64748b' }}>Manual modelId is preserved exactly. Catalog rows are suggestions only.</span>}
+          {isOfflineFallback && modelSuggestions.length > 0 && (
+            <span style={{ color: '#ea580c', fontSize: 11 }}>Offline fallback — may be stale</span>
+          )}
+          {manualModel && (
+            <span style={{ color: '#64748b', fontSize: 11 }}>
+              Manual modelId is preserved exactly. Catalog rows are suggestions only.
+            </span>
+          )}
         </div>
       ))}
       {field('Position', (
@@ -316,12 +367,22 @@ export function AgentHubAgentForm({
         />
       ))}
       {mode === 'create' && field('Enabled', (
-        <input
-          type="checkbox"
-          checked={value.enabled}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, enabled: event.target.checked })}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={value.enabled && isCurrentProviderUsable}
+              disabled={disabled || !isCurrentProviderUsable}
+              onChange={(event) => onChange({ ...value, enabled: event.target.checked })}
+            />
+            <span>Enable immediately</span>
+          </label>
+          {!isCurrentProviderUsable && (
+            <span style={{ color: '#ea580c', fontSize: 11 }}>
+              Provider is not usable — cannot create enabled agent
+            </span>
+          )}
+        </div>
       ))}
     </div>
   );
