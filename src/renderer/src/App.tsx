@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore, selectedAgent } from '@/store/store';
 import { useAgentHubStore } from '@/stores/agentHubStore';
 import { projectAgentHubOffice } from '@/scene/office/agentHubOfficeProjection';
+import { deriveAgentHubOfficeShellState } from '@/scene/office/agentHubOfficeShell';
 import { startMockLoop, stopMockLoop } from '@/store/mockEvents';
 import type { HarnessConfig } from '@/store/config';
 import { DEFAULT_ORG_TRIGGER } from '@shared/triggers';
@@ -15,7 +16,6 @@ import { MemoryPanel } from '@/components/MemoryPanel';
 import { AgentDetailPanel } from '@/components/AgentDetailPanel';
 import { AgentStrip } from '@/components/AgentStrip';
 import { AddAgentModal } from '@/components/AddAgentModal';
-import { MichaelBooting } from '@/components/MichaelBooting';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { HivePicker } from '@/components/HivePicker';
 import { QuitWarningModal, type ClosingTimeState } from '@/components/QuitWarningModal';
@@ -48,7 +48,6 @@ export function App() {
   useArabicTerminalSync();
   const agent = useStore(selectedAgent);
   const agents = useStore(s => s.agents);
-  const agentCount = agents.length;
   const bootingGodName = useResolvedGodName();
   const addAgentOpen = useStore(s => s.addAgentOpen);
   const setAddAgentOpen = useStore(s => s.setAddAgentOpen);
@@ -66,6 +65,10 @@ export function App() {
   const hubSelectAgent = useAgentHubStore((s) => s.selectAgent);
   const officeProjection = useMemo(
     () => projectAgentHubOffice(hubSnapshot),
+    [hubSnapshot]
+  );
+  const hubOfficeShellState = useMemo(
+    () => deriveAgentHubOfficeShellState(hubSnapshot),
     [hubSnapshot]
   );
 
@@ -417,24 +420,38 @@ export function App() {
             onSelectAgent={hubSelectAgent}
           />
           <MemoryPanel />
-          {agentCount === 0 && godStatus === 'booting' && <MichaelBooting />}
-          {agentCount === 0 && godStatus !== 'booting' && (
+          {hubOfficeShellState.kind === 'empty' && (
             <div style={{
               position: 'absolute', inset: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               pointerEvents: 'none'
             }}>
-              <div style={{ pointerEvents: 'auto', width: 360 }}>
-                <PixelPanel variant="dialog" title="EMPTY FLOOR" noPadding>
+              <div style={{ pointerEvents: 'auto', width: 380 }}>
+                <PixelPanel variant="dialog" title="NO AGENTHUB AGENTS" noPadding>
                   <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <p style={{ margin: 0, fontSize: 13, lineHeight: '20px' }}>
-                      No agents on the floor yet. Spawn one to see real claude output stream in here.
+                      No agents are currently registered in AgentHub.
                     </p>
-                    <PixelButton variant="primary" size="md" onClick={() => setAddAgentOpen(true)}>
-                      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                        <Icon name="plus" /> add agent
-                      </span>
-                    </PixelButton>
+                    <p style={{ margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--cth-ink-500, #888)' }}>
+                      Agent management will be connected in a later milestone.
+                    </p>
+                  </div>
+                </PixelPanel>
+              </div>
+            </div>
+          )}
+          {hubOfficeShellState.kind === 'unavailable' && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              pointerEvents: 'none'
+            }}>
+              <div style={{ pointerEvents: 'auto', width: 380 }}>
+                <PixelPanel variant="dialog" title="AGENTHUB STATE UNAVAILABLE" noPadding>
+                  <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <p style={{ margin: 0, fontSize: 13, lineHeight: '20px' }}>
+                      Waiting for an authoritative AgentHub snapshot.
+                    </p>
                   </div>
                 </PixelPanel>
               </div>

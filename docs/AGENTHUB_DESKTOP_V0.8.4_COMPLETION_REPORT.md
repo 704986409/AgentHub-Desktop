@@ -22,7 +22,7 @@ In this milestone:
 | Desktop Repository | `704986409/AgentHub-Desktop` |
 | Desktop Base Commit | `78ebd31543e300a8abc6ec8d13313678240a642b` |
 | Desktop Base Tag | `V0.8.3D` (sealed + unchanged) |
-| Desktop Commit | `71bc15900aa77656d940649b2e64cc5b86039066` |
+| Desktop Commit | `7f631b000f1ba420a9a92a1cff6a2ea3a7043fb6` (canonical tagged commit; earlier draft recorded candidate `71bc15900aa77656d940649b2e64cc5b86039066`) |
 | Target Tag | `V0.8.4` |
 | Main / Tag Same SHA | YES |
 | Target Commit Message | `feat(desktop): project AgentHub state into office` |
@@ -30,6 +30,10 @@ In this milestone:
 | Backend Baseline Tag | `0.7.0G` |
 | Backend Pinned Commit | `03bc7824d732e740a88f9aa2c0122f3cf5df75ab` (sealed, 0 changes) |
 | Real Model / Provider Calls | 0 |
+
+> [!NOTE]
+> **Audit Provenance Correction Note (V0.8.4A)**:
+> The canonical release commit pushed and tagged as `V0.8.4` on `origin/main` is `7f631b000f1ba420a9a92a1cff6a2ea3a7043fb6`. Historical tag `V0.8.4` remains sealed and untouched.
 
 ---
 

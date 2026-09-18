@@ -44,16 +44,13 @@ describe('AgentHub Office State Projection', () => {
   const baseProject: ProjectDto = {
     projectId: 'proj-1',
     name: 'Alpha Project',
-    rootPath: '/path/to/alpha',
-    canonicalPath: '/path/to/alpha',
-    metadata: {},
+    description: null,
     createdAt: '2026-09-18T10:00:00.000Z',
     updatedAt: '2026-09-18T10:00:00.000Z'
   };
 
   test('all snapshot agents are projected into view models', { timeout: 5000 }, () => {
     const snapshot: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:00:00.000Z',
       agents: [
         { ...baseAgent, agentId: 'agent-1', name: 'Agent One' },
         { ...baseAgent, agentId: 'agent-2', name: 'Agent Two' }
@@ -82,7 +79,6 @@ describe('AgentHub Office State Projection', () => {
 
   test('legacy Munder roster is irrelevant and not merged', { timeout: 5000 }, () => {
     const snapshot: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:00:00.000Z',
       agents: [{ ...baseAgent, agentId: 'hub-agent-1', name: 'Hub Agent' }],
       projects: [],
       assignments: [],
@@ -152,6 +148,7 @@ describe('AgentHub Office State Projection', () => {
         assignmentId: 'asg-term-1',
         agentId: 'agent-1',
         taskId: 'task-1',
+        specVersion: 'v1',
         status: 'COMPLETED',
         createdAt: '2026-09-18T10:00:00.000Z',
         updatedAt: '2026-09-18T10:00:00.000Z'
@@ -160,6 +157,7 @@ describe('AgentHub Office State Projection', () => {
         assignmentId: 'asg-term-2',
         agentId: 'agent-1',
         taskId: 'task-2',
+        specVersion: 'v1',
         status: 'RELEASED',
         createdAt: '2026-09-18T10:01:00.000Z',
         updatedAt: '2026-09-18T10:01:00.000Z'
@@ -168,6 +166,7 @@ describe('AgentHub Office State Projection', () => {
         assignmentId: 'asg-active',
         agentId: 'agent-1',
         taskId: 'task-active',
+        specVersion: 'v1',
         status: 'ACTIVE',
         createdAt: '2026-09-18T10:02:00.000Z',
         updatedAt: '2026-09-18T10:02:00.000Z'
@@ -184,6 +183,7 @@ describe('AgentHub Office State Projection', () => {
       assignmentId: 'asg-1',
       agentId: 'agent-1',
       taskId: 'task-1',
+      specVersion: 'v1',
       status: 'PENDING',
       createdAt: '2026-09-18T10:10:00.000Z',
       updatedAt: '2026-09-18T10:10:00.000Z'
@@ -192,6 +192,7 @@ describe('AgentHub Office State Projection', () => {
       assignmentId: 'asg-2',
       agentId: 'agent-1',
       taskId: 'task-2',
+      specVersion: 'v1',
       status: 'ACCEPTED',
       createdAt: '2026-09-18T10:05:00.000Z',
       updatedAt: '2026-09-18T10:05:00.000Z'
@@ -200,6 +201,7 @@ describe('AgentHub Office State Projection', () => {
       assignmentId: 'asg-b',
       agentId: 'agent-1',
       taskId: 'task-3',
+      specVersion: 'v1',
       status: 'ACTIVE',
       createdAt: '2026-09-18T10:00:00.000Z',
       updatedAt: '2026-09-18T10:00:00.000Z'
@@ -208,6 +210,7 @@ describe('AgentHub Office State Projection', () => {
       assignmentId: 'asg-a',
       agentId: 'agent-1',
       taskId: 'task-4',
+      specVersion: 'v1',
       status: 'ACTIVE',
       createdAt: '2026-09-18T10:01:00.000Z',
       updatedAt: '2026-09-18T10:01:00.000Z'
@@ -235,13 +238,14 @@ describe('AgentHub Office State Projection', () => {
         projectId: 'proj-1',
         title: 'Fix authentication leak',
         description: 'Detail',
-        status: 'IN_PROGRESS',
-        complexity: 'MEDIUM',
-        risk: 'LOW',
         requiredCapabilities: [],
         requiredSpecialties: [],
         acceptanceCriteria: [],
-        metadata: {},
+        complexity: 'MEDIUM',
+        risk: 'LOW',
+        status: 'IN_PROGRESS',
+        assignedAgentId: 'agent-1',
+        assignmentId: 'asg-1',
         createdAt: '2026-09-18T10:00:00.000Z',
         updatedAt: '2026-09-18T10:00:00.000Z'
       }
@@ -251,6 +255,7 @@ describe('AgentHub Office State Projection', () => {
       assignmentId: 'asg-1',
       agentId: 'agent-1',
       taskId: 'task-100',
+      specVersion: 'v1',
       status: 'ACTIVE',
       createdAt: '2026-09-18T10:00:00.000Z',
       updatedAt: '2026-09-18T10:00:00.000Z'
@@ -282,7 +287,6 @@ describe('AgentHub Office State Projection', () => {
 
   test('providerId preserved for known and arbitrary future providers', { timeout: 5000 }, () => {
     const snapshot: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:00:00.000Z',
       agents: [
         { ...baseAgent, agentId: 'a-1', providerId: 'claude' },
         { ...baseAgent, agentId: 'a-2', providerId: 'codex' },
@@ -308,7 +312,6 @@ describe('AgentHub Office State Projection', () => {
 
   test('strict model rule: model is NOT public in AgentDto and NEVER synthesized', { timeout: 5000 }, () => {
     const snapshot: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:00:00.000Z',
       agents: [{ ...baseAgent, agentId: 'a-nomodel' }],
       projects: [],
       assignments: [],
@@ -327,7 +330,6 @@ describe('AgentHub Office State Projection', () => {
     assert.deepEqual(deco1, deco2);
 
     const snapshot1: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:00:00.000Z',
       agents: [
         { ...baseAgent, agentId: 'agent-z' },
         { ...baseAgent, agentId: 'agent-a' }
@@ -338,7 +340,6 @@ describe('AgentHub Office State Projection', () => {
     };
 
     const snapshot2: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:00:00.000Z',
       agents: [
         { ...baseAgent, agentId: 'agent-a' },
         { ...baseAgent, agentId: 'agent-z' }
@@ -439,7 +440,6 @@ describe('AgentHub Office State Projection', () => {
 
   test('selection: selectAgent stores AgentHub ID without mutating snapshot or legacy roster', { timeout: 5000 }, () => {
     const initialSnapshot: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:00:00.000Z',
       agents: [
         { ...baseAgent, agentId: 'hub-1' },
         { ...baseAgent, agentId: 'hub-2' }
@@ -463,7 +463,6 @@ describe('AgentHub Office State Projection', () => {
 
     // If new snapshot arrives without hub-1, selectedAgentId is cleared
     const updatedSnapshot: AgentHubStateSnapshot = {
-      serverTime: '2026-09-18T10:05:00.000Z',
       agents: [{ ...baseAgent, agentId: 'hub-2' }],
       projects: [],
       assignments: [],
