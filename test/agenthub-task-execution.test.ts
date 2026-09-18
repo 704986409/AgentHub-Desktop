@@ -1401,7 +1401,7 @@ describe('AgentHub Task Execution ownership and UI allowlist', () => {
     assert.equal(src.includes('worktree'), false);
     assert.match(restSrc, /createTask\(/);
     assert.match(restSrc, /executeTask\(/);
-    assert.equal(restSrc.includes('/api/v1/reviews/'), false);
+    assert.match(restSrc, /reviewDecision\(/);
     assert.equal(restSrc.includes('/merge'), false);
   });
 

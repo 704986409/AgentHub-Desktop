@@ -99,6 +99,28 @@ function cloneAndDetachRecord(
 }
 
 /**
+ * Pure reducer function for capturing a review-ready DTO into session review records.
+ * Used by both initial execution results and subsequent review decision revision results.
+ */
+export function captureReviewReadyDto(
+  current: Readonly<Record<string, AgentHubReviewSessionRecord>>,
+  review: ExecuteReviewReadyDto,
+  stateSynchronized: boolean,
+  warning: { code: string; message: string } | null = null
+): Readonly<Record<string, AgentHubReviewSessionRecord>> {
+  const record = cloneAndDetachRecord(
+    review,
+    stateSynchronized,
+    warning
+  );
+
+  return Object.freeze({
+    ...current,
+    [review.taskId]: record
+  });
+}
+
+/**
  * Pure reducer function for capturing execution results into session review records.
  * 
  * Rules:
@@ -117,16 +139,12 @@ export function captureReviewReadyResult(
 
   const review = result.result;
   const warning = !result.stateSynchronized ? result.warning : null;
-  const record = cloneAndDetachRecord(
+  return captureReviewReadyDto(
+    current,
     review,
     result.stateSynchronized,
     warning
   );
-
-  return Object.freeze({
-    ...current,
-    [review.taskId]: record
-  });
 }
 
 export interface AgentHubReviewSessionState {
@@ -135,6 +153,11 @@ export interface AgentHubReviewSessionState {
   readonly isModalOpen: boolean;
 
   captureExecutionResult: (result: TaskExecutionResult) => void;
+  captureReviewReady: (
+    review: ExecuteReviewReadyDto,
+    stateSynchronized: boolean,
+    warning?: { code: string; message: string } | null
+  ) => void;
   selectReviewTask: (taskId: string | null) => void;
   openModal: (taskId?: string) => void;
   closeModal: () => void;
@@ -160,6 +183,20 @@ export const useAgentHubReviewSessionStore = create<AgentHubReviewSessionState>(
           : null)
     }));
   },
+
+  captureReviewReady: (
+    review: ExecuteReviewReadyDto,
+    stateSynchronized: boolean,
+    warning: { code: string; message: string } | null = null
+  ) => {
+    const prev = get().reviewReadyByTaskId;
+    const next = captureReviewReadyDto(prev, review, stateSynchronized, warning);
+    set((state) => ({
+      reviewReadyByTaskId: next,
+      selectedReviewTaskId: state.selectedReviewTaskId ?? review.taskId
+    }));
+  },
+
 
   selectReviewTask: (taskId: string | null) => {
     set({ selectedReviewTaskId: taskId });

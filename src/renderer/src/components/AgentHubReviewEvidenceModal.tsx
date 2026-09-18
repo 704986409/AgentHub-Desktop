@@ -6,6 +6,7 @@ import {
   formatDisplayPreview,
   formatExitCode
 } from './agentHubReviewPresentation';
+import { AgentHubReviewDecisionSection } from './AgentHubReviewDecisionSection';
 
 interface AgentHubReviewEvidenceModalProps {
   isOpen?: boolean;
@@ -800,6 +801,15 @@ export function AgentHubReviewEvidenceModal({
                 </div>
               )}
             </div>
+
+            {/* Human Review Decision Section */}
+            {activeTaskId && activeRecord.review.reviewHandle && (
+              <AgentHubReviewDecisionSection
+                taskId={activeTaskId}
+                reviewHandle={activeRecord.review.reviewHandle}
+                stateSynchronized={activeRecord.stateSynchronized}
+              />
+            )}
 
             {/* Footer */}
             <div

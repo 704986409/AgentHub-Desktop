@@ -29,7 +29,9 @@ import type {
   CreateTaskRequestDto,
   ExecuteTaskRequestDto,
   TaskExecutionResult,
-  TaskSubmissionResult
+  TaskSubmissionResult,
+  ReviewDecisionRequestDto,
+  ReviewDecisionResult
 } from '../shared/agenthubTypes';
 export type {
   AgentHubDesktopState,
@@ -38,8 +40,11 @@ export type {
   CreateTaskRequestDto,
   ExecuteTaskRequestDto,
   TaskExecutionResult,
-  TaskSubmissionResult
+  TaskSubmissionResult,
+  ReviewDecisionRequestDto,
+  ReviewDecisionResult
 } from '../shared/agenthubTypes';
+
 
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
@@ -1451,6 +1456,7 @@ export interface AgentHubPreloadApi {
   onChanged: (cb: (state: AgentHubDesktopState) => void) => () => void;
   createTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
   executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
+  reviewDecision: (request: ReviewDecisionRequestDto) => Promise<ReviewDecisionResult>;
 }
 
 const agentHubApi: AgentHubPreloadApi = {
@@ -1466,8 +1472,11 @@ const agentHubApi: AgentHubPreloadApi = {
   createTask: (request: CreateTaskRequestDto): Promise<TaskSubmissionResult> =>
     ipcRenderer.invoke('agenthub:createTask', request),
   executeTask: (request: ExecuteTaskRequestDto): Promise<TaskExecutionResult> =>
-    ipcRenderer.invoke('agenthub:executeTask', request)
+    ipcRenderer.invoke('agenthub:executeTask', request),
+  reviewDecision: (request: ReviewDecisionRequestDto): Promise<ReviewDecisionResult> =>
+    ipcRenderer.invoke('agenthub:reviewDecision', request)
 };
+
 
 contextBridge.exposeInMainWorld('cth', api);
 contextBridge.exposeInMainWorld('agentHub', agentHubApi);

@@ -4,10 +4,12 @@ import type {
   AgentHubDesktopState,
   AgentHubStateSnapshot,
   TaskExecutionResult,
-  TaskSubmissionResult
+  TaskSubmissionResult,
+  ReviewDecisionResult
 } from './AgentHubTypes';
 import { AgentHubTaskSubmission } from './AgentHubTaskSubmission';
 import { AgentHubTaskExecution } from './AgentHubTaskExecution';
+import { AgentHubReviewDecision } from './AgentHubReviewDecision';
 
 export const AGENTHUB_IPC_CHANNELS = {
   GET_STATE: 'agenthub:getConnectionState',
@@ -15,16 +17,20 @@ export const AGENTHUB_IPC_CHANNELS = {
   REFRESH: 'agenthub:refresh',
   CHANGED: 'agenthub:changed',
   CREATE_TASK: 'agenthub:createTask',
-  EXECUTE_TASK: 'agenthub:executeTask'
+  EXECUTE_TASK: 'agenthub:executeTask',
+  REVIEW_DECISION: 'agenthub:reviewDecision'
 } as const;
 
 export function registerAgentHubIpc(
   connection: AgentHubConnection,
   taskSubmission?: AgentHubTaskSubmission,
-  taskExecution?: AgentHubTaskExecution
+  taskExecution?: AgentHubTaskExecution,
+  reviewDecision?: AgentHubReviewDecision
 ): () => void {
   const submission = taskSubmission ?? new AgentHubTaskSubmission(connection);
   const execution = taskExecution ?? new AgentHubTaskExecution(connection);
+  const decision = reviewDecision ?? new AgentHubReviewDecision(connection);
+
 
   ipcMain.handle(AGENTHUB_IPC_CHANNELS.GET_STATE, (): AgentHubDesktopState => {
     return connection.getState();
@@ -53,6 +59,13 @@ export function registerAgentHubIpc(
     }
   );
 
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.REVIEW_DECISION,
+    async (_event, request: unknown): Promise<ReviewDecisionResult> => {
+      return decision.applyDecision(request);
+    }
+  );
+
   const handleChange = (state: AgentHubDesktopState): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed() && win.webContents) {
@@ -68,6 +81,7 @@ export function registerAgentHubIpc(
   connection.cache.on('change', handleChange);
 
   return () => {
+    decision.stop();
     execution.stop();
     submission.stop();
     connection.cache.off('change', handleChange);
@@ -76,5 +90,7 @@ export function registerAgentHubIpc(
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.REFRESH);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.CREATE_TASK);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.EXECUTE_TASK);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.REVIEW_DECISION);
   };
+
 }

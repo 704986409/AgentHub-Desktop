@@ -6,7 +6,8 @@ import type {
   TaskDto,
   CreateTaskInputDto,
   ExecuteTaskInputDto,
-  ExecuteTaskResultDto
+  ExecuteTaskResultDto,
+  ReviewDecisionLifecycleDto
 } from './AgentHubTypes';
 import {
   snapshotState,
@@ -16,8 +17,10 @@ import {
   snapshotExecuteTaskInput,
   snapshotExecuteTaskId,
   snapshotExecuteTaskResult,
+  snapshotReviewDecisionLifecycleResult,
   AgentHubValidationError
 } from './AgentHubTypes';
+
 
 export const DEFAULT_AGENTHUB_BASE_URL = 'http://127.0.0.1:3210';
 export const DEFAULT_TIMEOUT_MS = 5000;
@@ -264,6 +267,42 @@ export class AgentHubRestClient {
   }
 
   /**
+   * POST /api/v1/reviews/:reviewHandle/decision
+   * Strictly bounded review decision endpoint.
+   */
+  public async reviewDecision(
+    reviewHandle: string,
+    backendBody: unknown,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<ReviewDecisionLifecycleDto> {
+    if (typeof reviewHandle !== 'string' || !/^[a-f0-9]{64}$/.test(reviewHandle)) {
+      throw new AgentHubContractError('INVALID_REVIEW_HANDLE', 'reviewHandle must be 64 lowercase hex characters');
+    }
+    const key = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : '';
+    if (!key) {
+      throw new AgentHubContractError('INVALID_IDEMPOTENCY_KEY', 'Idempotency-Key must be a non-empty string');
+    }
+
+    const bodyString = typeof backendBody === 'string' ? backendBody : JSON.stringify(backendBody);
+    if (new TextEncoder().encode(bodyString).length > 1024 * 1024) {
+      throw new AgentHubContractError('BODY_OVERFLOW', 'Request body exceeds 1 MiB limit');
+    }
+
+    const path = `/api/v1/reviews/${encodeURIComponent(reviewHandle)}/decision`;
+    const data = await this.#post<unknown>(path, bodyString, key, 200, signal, this.#executeTimeoutMs);
+    try {
+      return snapshotReviewDecisionLifecycleResult(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_REVIEW_DECISION_RESULT', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
+    }
+  }
+
+
+  /**
    * Internal GET-only helper. Strictly rejects any method other than GET.
    * Enforces streaming byte bounds, timeouts, and exact envelope validation.
    */
@@ -282,7 +321,11 @@ export class AgentHubRestClient {
     externalSignal?: AbortSignal,
     timeoutMs: number = this.#timeoutMs
   ): Promise<T> {
-    if (path !== '/api/v1/tasks' && !/^\/api\/v1\/tasks\/[^/]+\/execute$/.test(path)) {
+    if (
+      path !== '/api/v1/tasks' &&
+      !/^\/api\/v1\/tasks\/[^/]+\/execute$/.test(path) &&
+      !/^\/api\/v1\/reviews\/[^/]+\/decision$/.test(path)
+    ) {
       throw new AgentHubContractError('FORBIDDEN_ROUTE', `POST path is not in the mutation allowlist: ${path}`);
     }
     const headers = {

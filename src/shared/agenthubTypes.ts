@@ -1246,3 +1246,544 @@ export function snapshotExecuteTaskResult(raw: unknown): ExecuteTaskResultDto {
   }
   throw new AgentHubValidationError('MALFORMED_EXECUTE_RESULT', `Unknown execute outcome '${raw.outcome}'`);
 }
+
+// ============================================================================
+// Review Decision Actions & Lifecycle DTOs (V0.8.6)
+// ============================================================================
+
+export type ReviewVerdictDto = 'ACCEPT' | 'REQUEST_REVISION' | 'BLOCK';
+export const REVIEW_VERDICTS: readonly ReviewVerdictDto[] = Object.freeze(['ACCEPT', 'REQUEST_REVISION', 'BLOCK']);
+
+export type ReviewFindingSeverityDto = 'info' | 'warning' | 'error' | 'blocker';
+export const REVIEW_FINDING_SEVERITIES: readonly ReviewFindingSeverityDto[] = Object.freeze(['info', 'warning', 'error', 'blocker']);
+
+export interface ReviewFindingInputDto {
+  readonly code: string;
+  readonly severity: ReviewFindingSeverityDto;
+  readonly message: string;
+  readonly path?: string;
+}
+
+export interface ReviewDecisionInputDto {
+  readonly verdict: ReviewVerdictDto;
+  readonly summary: string;
+  readonly findings: readonly ReviewFindingInputDto[];
+  readonly allowNoChangeCompletion: boolean;
+}
+
+export interface ReviewDecisionRequestDto {
+  readonly decisionId: string;
+  readonly reviewHandle: string;
+  readonly input: ReviewDecisionInputDto;
+}
+
+export interface ReviewDecisionTerminalLifecycleDto {
+  readonly outcome: 'blocked' | 'waiting-input' | 'failed';
+  readonly taskId: string;
+  readonly assignmentId: string;
+  readonly lifecycleSha256: string;
+  readonly reviewEvidenceSha256?: string;
+}
+
+export interface ReviewDecisionCompletedNoChangeDto {
+  readonly outcome: 'completed-no-change';
+  readonly taskId: string;
+  readonly lifecycleSha256: string;
+  readonly reviewEvidenceSha256: string;
+}
+
+export type MergeGateReasonDto =
+  | 'BUILD_EVIDENCE_INVALID'
+  | 'BUILD_EVIDENCE_NOT_PASSED'
+  | 'REQUIRED_PHASE_NOT_PASSED'
+  | 'REQUIRED_COMMAND_NOT_PASSED'
+  | 'REVIEW_EVIDENCE_INVALID'
+  | 'REVIEW_BINDING_MISMATCH'
+  | 'REVIEW_NOT_ACCEPTED'
+  | 'STALE_SOURCE'
+  | 'STALE_VISIBILITY'
+  | 'UNCOMMITTED_SOURCE'
+  | 'CONFLICTS'
+  | 'NO_COMMITTED_CHANGES';
+
+export const MERGE_GATE_REASONS: readonly MergeGateReasonDto[] = Object.freeze([
+  'BUILD_EVIDENCE_INVALID',
+  'BUILD_EVIDENCE_NOT_PASSED',
+  'REQUIRED_PHASE_NOT_PASSED',
+  'REQUIRED_COMMAND_NOT_PASSED',
+  'REVIEW_EVIDENCE_INVALID',
+  'REVIEW_BINDING_MISMATCH',
+  'REVIEW_NOT_ACCEPTED',
+  'STALE_SOURCE',
+  'STALE_VISIBILITY',
+  'UNCOMMITTED_SOURCE',
+  'CONFLICTS',
+  'NO_COMMITTED_CHANGES'
+]);
+
+export interface MergeGateDto {
+  readonly version: 1;
+  readonly taskId: string;
+  readonly branchName: string;
+  readonly baseCommit: string;
+  readonly headCommit: string;
+  readonly changeSetSha256: string;
+  readonly sourceVisibilitySha256: string;
+  readonly buildTestEvidenceSha256: string;
+  readonly reviewEvidenceSha256: string;
+  readonly eligible: boolean;
+  readonly reasons: readonly MergeGateReasonDto[];
+  readonly mergeGateSha256: string;
+}
+
+export type TaskMergeOutcomeDto = 'merged' | 'already-merged';
+export const TASK_MERGE_OUTCOMES: readonly TaskMergeOutcomeDto[] = Object.freeze(['merged', 'already-merged']);
+
+export interface TaskMergeResultDto {
+  readonly version: 1;
+  readonly taskId: string;
+  readonly targetBranch: string;
+  readonly baseCommit: string;
+  readonly taskHeadCommit: string;
+  readonly targetHeadBefore: string;
+  readonly targetHeadAfter: string;
+  readonly changeSetSha256: string;
+  readonly sourceVisibilitySha256: string;
+  readonly buildTestEvidenceSha256: string;
+  readonly reviewEvidenceSha256: string;
+  readonly mergeGateSha256: string;
+  readonly outcome: TaskMergeOutcomeDto;
+  readonly mergeResultSha256: string;
+}
+
+export interface ReviewDecisionMergeDeniedDto {
+  readonly outcome: 'merge-denied';
+  readonly taskId: string;
+  readonly lifecycleSha256: string;
+  readonly reviewEvidenceSha256: string;
+  readonly mergeGate: MergeGateDto;
+}
+
+export interface ReviewDecisionCompletedDto {
+  readonly outcome: 'completed';
+  readonly taskId: string;
+  readonly lifecycleSha256: string;
+  readonly reviewEvidenceSha256: string;
+  readonly mergeGate: MergeGateDto;
+  readonly merge: TaskMergeResultDto;
+}
+
+export type ReviewDecisionLifecycleDto =
+  | ExecuteReviewReadyDto
+  | ReviewDecisionTerminalLifecycleDto
+  | ReviewDecisionCompletedNoChangeDto
+  | ReviewDecisionMergeDeniedDto
+  | ReviewDecisionCompletedDto;
+
+export type ReviewDecisionResult =
+  | {
+      readonly status: 'applied';
+      readonly result: ReviewDecisionLifecycleDto;
+      readonly stateSynchronized: true;
+    }
+  | {
+      readonly status: 'applied';
+      readonly result: ReviewDecisionLifecycleDto;
+      readonly stateSynchronized: false;
+      readonly warning: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'failed';
+      readonly retryable: false;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'ambiguous';
+      readonly retryable: true;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    };
+
+const FINDING_CODE_RE = /^[A-Za-z0-9._-]{1,128}$/;
+const REVIEW_HANDLE_RE = /^[a-f0-9]{64}$/;
+const DECISION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+const ALLOWED_FINDING_KEYS = new Set(['code', 'severity', 'message', 'path']);
+const ALLOWED_DECISION_INPUT_KEYS = new Set(['verdict', 'summary', 'findings', 'allowNoChangeCompletion']);
+const ALLOWED_DECISION_REQUEST_KEYS = new Set(['decisionId', 'reviewHandle', 'input']);
+
+const ALLOWED_REVIEW_TERMINAL_KEYS = new Set(['outcome', 'taskId', 'assignmentId', 'lifecycleSha256', 'reviewEvidenceSha256']);
+const ALLOWED_COMPLETED_NO_CHANGE_KEYS = new Set(['outcome', 'taskId', 'lifecycleSha256', 'reviewEvidenceSha256']);
+const ALLOWED_MERGE_DENIED_KEYS = new Set(['outcome', 'taskId', 'lifecycleSha256', 'reviewEvidenceSha256', 'mergeGate']);
+const ALLOWED_COMPLETED_KEYS = new Set(['outcome', 'taskId', 'lifecycleSha256', 'reviewEvidenceSha256', 'mergeGate', 'merge']);
+const ALLOWED_MERGE_GATE_KEYS = new Set([
+  'version',
+  'taskId',
+  'branchName',
+  'baseCommit',
+  'headCommit',
+  'changeSetSha256',
+  'sourceVisibilitySha256',
+  'buildTestEvidenceSha256',
+  'reviewEvidenceSha256',
+  'eligible',
+  'reasons',
+  'mergeGateSha256'
+]);
+const ALLOWED_MERGE_RESULT_KEYS = new Set([
+  'version',
+  'taskId',
+  'targetBranch',
+  'baseCommit',
+  'taskHeadCommit',
+  'targetHeadBefore',
+  'targetHeadAfter',
+  'changeSetSha256',
+  'sourceVisibilitySha256',
+  'buildTestEvidenceSha256',
+  'reviewEvidenceSha256',
+  'mergeGateSha256',
+  'outcome',
+  'mergeResultSha256'
+]);
+
+function snapshotFindingPath(pathVal: unknown, fieldName: string, code: string): string {
+  if (typeof pathVal !== 'string') {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a string`);
+  }
+  if (!pathVal.trim() || pathVal.length === 0) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be nonblank`);
+  }
+  rejectIfContainsNul(pathVal, fieldName, code);
+  if (new TextEncoder().encode(pathVal).length > 4096) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' exceeds 4096 bytes`);
+  }
+  if (pathVal.startsWith('/') || pathVal.startsWith('\\') || /^[A-Za-z]:/.test(pathVal)) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a relative path`);
+  }
+  const segments = pathVal.split(/[/\\]/);
+  for (const seg of segments) {
+    if (seg === '' || seg === '.' || seg === '..') {
+      throw new AgentHubValidationError(code, `Field '${fieldName}' contains invalid path segment '${seg}'`);
+    }
+  }
+  return pathVal;
+}
+
+export function snapshotReviewFindingInput(raw: unknown): ReviewFindingInputDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', 'finding must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_FINDING_KEYS, 'MALFORMED_REVIEW_DECISION_REQUEST', 'finding');
+  if (typeof raw.code !== 'string' || !FINDING_CODE_RE.test(raw.code)) {
+    throw new AgentHubValidationError(
+      'MALFORMED_REVIEW_DECISION_REQUEST',
+      "Field 'code' must match ^[A-Za-z0-9._-]{1,128}$"
+    );
+  }
+  if (typeof raw.severity !== 'string' || !REVIEW_FINDING_SEVERITIES.includes(raw.severity as ReviewFindingSeverityDto)) {
+    throw new AgentHubValidationError(
+      'MALFORMED_REVIEW_DECISION_REQUEST',
+      "Field 'severity' must be one of: info, warning, error, blocker"
+    );
+  }
+  if (typeof raw.message !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'message' must be a string");
+  }
+  rejectIfContainsNul(raw.message, 'finding.message', 'MALFORMED_REVIEW_DECISION_REQUEST');
+  if (new TextEncoder().encode(raw.message).length > 8192) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'message' exceeds 8192 bytes");
+  }
+
+  const finding: {
+    code: string;
+    severity: ReviewFindingSeverityDto;
+    message: string;
+    path?: string;
+  } = {
+    code: raw.code,
+    severity: raw.severity as ReviewFindingSeverityDto,
+    message: raw.message
+  };
+
+  if ('path' in raw && raw.path !== undefined) {
+    finding.path = snapshotFindingPath(raw.path, 'finding.path', 'MALFORMED_REVIEW_DECISION_REQUEST');
+  }
+
+  return Object.freeze(finding);
+}
+
+export function snapshotReviewDecisionInput(raw: unknown): ReviewDecisionInputDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', 'decision input must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_DECISION_INPUT_KEYS, 'MALFORMED_REVIEW_DECISION_REQUEST', 'decision input');
+  if (typeof raw.verdict !== 'string' || !REVIEW_VERDICTS.includes(raw.verdict as ReviewVerdictDto)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'verdict' must be ACCEPT, REQUEST_REVISION, or BLOCK");
+  }
+  if (typeof raw.summary !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'summary' must be a string");
+  }
+  rejectIfContainsNul(raw.summary, 'summary', 'MALFORMED_REVIEW_DECISION_REQUEST');
+  if (new TextEncoder().encode(raw.summary).length > 16384) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'summary' exceeds 16384 bytes limit");
+  }
+  if (!Array.isArray(raw.findings)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'findings' must be an array");
+  }
+  if (raw.findings.length > 256) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'findings' exceeds 256 items limit");
+  }
+  const findings = Object.freeze(raw.findings.map(snapshotReviewFindingInput));
+  if (typeof raw.allowNoChangeCompletion !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'allowNoChangeCompletion' must be a boolean");
+  }
+
+  // Verdict / findings semantic checks
+  const verdict = raw.verdict as ReviewVerdictDto;
+  if (verdict === 'ACCEPT') {
+    for (const f of findings) {
+      if (f.severity === 'error' || f.severity === 'blocker') {
+        throw new AgentHubValidationError('INVALID_VERDICT_FINDINGS', `ACCEPT verdict cannot contain '${f.severity}' findings`);
+      }
+    }
+  } else if (verdict === 'BLOCK') {
+    const hasBlocker = findings.some((f) => f.severity === 'blocker');
+    if (!hasBlocker) {
+      throw new AgentHubValidationError('INVALID_VERDICT_FINDINGS', "BLOCK verdict requires at least one finding with severity 'blocker'");
+    }
+  }
+
+  return Object.freeze({
+    verdict,
+    summary: raw.summary,
+    findings,
+    allowNoChangeCompletion: raw.allowNoChangeCompletion
+  });
+}
+
+export function snapshotReviewDecisionRequest(raw: unknown): ReviewDecisionRequestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', 'decision request must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_DECISION_REQUEST_KEYS, 'MALFORMED_REVIEW_DECISION_REQUEST', 'decision request');
+  if (typeof raw.decisionId !== 'string' || !DECISION_ID_RE.test(raw.decisionId)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'decisionId' must match ^[A-Za-z0-9_-]{1,128}$");
+  }
+  if (typeof raw.reviewHandle !== 'string' || !REVIEW_HANDLE_RE.test(raw.reviewHandle)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_REQUEST', "Field 'reviewHandle' must be 64 lowercase hex characters");
+  }
+  const input = snapshotReviewDecisionInput(raw.input);
+  return Object.freeze({
+    decisionId: raw.decisionId,
+    reviewHandle: raw.reviewHandle,
+    input
+  });
+}
+
+export function toBackendReviewDecisionBody(
+  decisionId: string,
+  input: ReviewDecisionInputDto
+): {
+  reviewId: string;
+  reviewerId: 'desktop-human';
+  verdict: ReviewVerdictDto;
+  summary: string;
+  findings: readonly ReviewFindingInputDto[];
+  allowNoChangeCompletion: boolean;
+} {
+  return Object.freeze({
+    reviewId: decisionId,
+    reviewerId: 'desktop-human' as const,
+    verdict: input.verdict,
+    summary: input.summary,
+    findings: Object.freeze(input.findings.map((f) => Object.freeze({
+      code: f.code,
+      severity: f.severity,
+      message: f.message,
+      ...(f.path !== undefined ? { path: f.path } : {})
+    }))),
+    allowNoChangeCompletion: input.allowNoChangeCompletion
+  });
+}
+
+export function snapshotMergeGateDto(raw: unknown): MergeGateDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', 'mergeGate must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_MERGE_GATE_KEYS, 'MALFORMED_REVIEW_DECISION_RESULT', 'mergeGate');
+  if (raw.version !== 1) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', "Field 'mergeGate.version' must equal 1");
+  }
+  const taskId = snapshotManagedExecuteTaskId(raw.taskId, 'mergeGate.taskId');
+  const branchName = snapshotBoundedText(raw.branchName, 'mergeGate.branchName', BRANCH_NAME_MAX_BYTES, 'MALFORMED_REVIEW_DECISION_RESULT', true);
+  const baseCommit = snapshotGitOid(raw.baseCommit, 'mergeGate.baseCommit', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const headCommit = snapshotGitOid(raw.headCommit, 'mergeGate.headCommit', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const changeSetSha256 = snapshotSha256(raw.changeSetSha256, 'mergeGate.changeSetSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const sourceVisibilitySha256 = snapshotSha256(raw.sourceVisibilitySha256, 'mergeGate.sourceVisibilitySha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const buildTestEvidenceSha256 = snapshotSha256(raw.buildTestEvidenceSha256, 'mergeGate.buildTestEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const reviewEvidenceSha256 = snapshotSha256(raw.reviewEvidenceSha256, 'mergeGate.reviewEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+
+  if (!Array.isArray(raw.reasons)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', "Field 'mergeGate.reasons' must be an array");
+  }
+
+  const reasons: MergeGateReasonDto[] = [];
+  const seenReasons = new Set<string>();
+  let lastCanonicalIndex = -1;
+
+  for (const reason of raw.reasons) {
+    if (typeof reason !== 'string' || !MERGE_GATE_REASONS.includes(reason as MergeGateReasonDto)) {
+      throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', `Invalid mergeGate reason '${String(reason)}'`);
+    }
+    if (seenReasons.has(reason)) {
+      throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', `Duplicate reason '${reason}' in mergeGate.reasons`);
+    }
+    const canonicalIndex = MERGE_GATE_REASONS.indexOf(reason as MergeGateReasonDto);
+    if (canonicalIndex < lastCanonicalIndex) {
+      throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', 'reasons in mergeGate must be in backend canonical order');
+    }
+    lastCanonicalIndex = canonicalIndex;
+    seenReasons.add(reason);
+    reasons.push(reason as MergeGateReasonDto);
+  }
+
+  if (typeof raw.eligible !== 'boolean') {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', "Field 'mergeGate.eligible' must be a boolean");
+  }
+  if (raw.eligible !== (reasons.length === 0)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', 'mergeGate.eligible must match reasons.length === 0');
+  }
+
+  const mergeGateSha256 = snapshotSha256(raw.mergeGateSha256, 'mergeGate.mergeGateSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+
+  return Object.freeze({
+    version: 1,
+    taskId,
+    branchName,
+    baseCommit,
+    headCommit,
+    changeSetSha256,
+    sourceVisibilitySha256,
+    buildTestEvidenceSha256,
+    reviewEvidenceSha256,
+    eligible: raw.eligible,
+    reasons: Object.freeze(reasons),
+    mergeGateSha256
+  });
+}
+
+export function snapshotTaskMergeResultDto(raw: unknown): TaskMergeResultDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', 'merge must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_MERGE_RESULT_KEYS, 'MALFORMED_REVIEW_DECISION_RESULT', 'merge');
+  if (raw.version !== 1) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', "Field 'merge.version' must equal 1");
+  }
+  const taskId = snapshotManagedExecuteTaskId(raw.taskId, 'merge.taskId');
+  const targetBranch = snapshotBoundedText(raw.targetBranch, 'merge.targetBranch', BRANCH_NAME_MAX_BYTES, 'MALFORMED_REVIEW_DECISION_RESULT', true);
+  const baseCommit = snapshotGitOid(raw.baseCommit, 'merge.baseCommit', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const taskHeadCommit = snapshotGitOid(raw.taskHeadCommit, 'merge.taskHeadCommit', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const targetHeadBefore = snapshotGitOid(raw.targetHeadBefore, 'merge.targetHeadBefore', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const targetHeadAfter = snapshotGitOid(raw.targetHeadAfter, 'merge.targetHeadAfter', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const changeSetSha256 = snapshotSha256(raw.changeSetSha256, 'merge.changeSetSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const sourceVisibilitySha256 = snapshotSha256(raw.sourceVisibilitySha256, 'merge.sourceVisibilitySha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const buildTestEvidenceSha256 = snapshotSha256(raw.buildTestEvidenceSha256, 'merge.buildTestEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const reviewEvidenceSha256 = snapshotSha256(raw.reviewEvidenceSha256, 'merge.reviewEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  const mergeGateSha256 = snapshotSha256(raw.mergeGateSha256, 'merge.mergeGateSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+  if (typeof raw.outcome !== 'string' || !TASK_MERGE_OUTCOMES.includes(raw.outcome as TaskMergeOutcomeDto)) {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', "Field 'merge.outcome' must be 'merged' or 'already-merged'");
+  }
+  const mergeResultSha256 = snapshotSha256(raw.mergeResultSha256, 'merge.mergeResultSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+
+  return Object.freeze({
+    version: 1,
+    taskId,
+    targetBranch,
+    baseCommit,
+    taskHeadCommit,
+    targetHeadBefore,
+    targetHeadAfter,
+    changeSetSha256,
+    sourceVisibilitySha256,
+    buildTestEvidenceSha256,
+    reviewEvidenceSha256,
+    mergeGateSha256,
+    outcome: raw.outcome as TaskMergeOutcomeDto,
+    mergeResultSha256
+  });
+}
+
+export function snapshotReviewDecisionLifecycleResult(raw: unknown): ReviewDecisionLifecycleDto {
+  if (!isRecord(raw) || typeof raw.outcome !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', 'Review decision result must be an object with an outcome discriminator');
+  }
+
+  if (raw.outcome === 'review-ready') {
+    return snapshotExecuteReviewReadyDto(raw);
+  }
+
+  if (raw.outcome === 'blocked' || raw.outcome === 'waiting-input' || raw.outcome === 'failed') {
+    rejectUnexpectedKeys(raw, ALLOWED_REVIEW_TERMINAL_KEYS, 'MALFORMED_REVIEW_DECISION_RESULT', 'terminal outcome');
+    const result: {
+      outcome: 'blocked' | 'waiting-input' | 'failed';
+      taskId: string;
+      assignmentId: string;
+      lifecycleSha256: string;
+      reviewEvidenceSha256?: string;
+    } = {
+      outcome: raw.outcome,
+      taskId: snapshotManagedExecuteTaskId(raw.taskId, 'taskId'),
+      assignmentId: snapshotBoundedText(raw.assignmentId, 'assignmentId', EXECUTE_ID_MAX_BYTES, 'MALFORMED_REVIEW_DECISION_RESULT', true),
+      lifecycleSha256: snapshotSha256(raw.lifecycleSha256, 'lifecycleSha256', 'MALFORMED_REVIEW_DECISION_RESULT')
+    };
+    if ('reviewEvidenceSha256' in raw && raw.reviewEvidenceSha256 !== undefined) {
+      result.reviewEvidenceSha256 = snapshotSha256(raw.reviewEvidenceSha256, 'reviewEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT');
+    }
+    return Object.freeze(result);
+  }
+
+  if (raw.outcome === 'completed-no-change') {
+    rejectUnexpectedKeys(raw, ALLOWED_COMPLETED_NO_CHANGE_KEYS, 'MALFORMED_REVIEW_DECISION_RESULT', 'completed-no-change');
+    return Object.freeze({
+      outcome: 'completed-no-change' as const,
+      taskId: snapshotManagedExecuteTaskId(raw.taskId, 'taskId'),
+      lifecycleSha256: snapshotSha256(raw.lifecycleSha256, 'lifecycleSha256', 'MALFORMED_REVIEW_DECISION_RESULT'),
+      reviewEvidenceSha256: snapshotSha256(raw.reviewEvidenceSha256, 'reviewEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT')
+    });
+  }
+
+  if (raw.outcome === 'merge-denied') {
+    rejectUnexpectedKeys(raw, ALLOWED_MERGE_DENIED_KEYS, 'MALFORMED_REVIEW_DECISION_RESULT', 'merge-denied');
+    return Object.freeze({
+      outcome: 'merge-denied' as const,
+      taskId: snapshotManagedExecuteTaskId(raw.taskId, 'taskId'),
+      lifecycleSha256: snapshotSha256(raw.lifecycleSha256, 'lifecycleSha256', 'MALFORMED_REVIEW_DECISION_RESULT'),
+      reviewEvidenceSha256: snapshotSha256(raw.reviewEvidenceSha256, 'reviewEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT'),
+      mergeGate: snapshotMergeGateDto(raw.mergeGate)
+    });
+  }
+
+  if (raw.outcome === 'completed') {
+    rejectUnexpectedKeys(raw, ALLOWED_COMPLETED_KEYS, 'MALFORMED_REVIEW_DECISION_RESULT', 'completed');
+    return Object.freeze({
+      outcome: 'completed' as const,
+      taskId: snapshotManagedExecuteTaskId(raw.taskId, 'taskId'),
+      lifecycleSha256: snapshotSha256(raw.lifecycleSha256, 'lifecycleSha256', 'MALFORMED_REVIEW_DECISION_RESULT'),
+      reviewEvidenceSha256: snapshotSha256(raw.reviewEvidenceSha256, 'reviewEvidenceSha256', 'MALFORMED_REVIEW_DECISION_RESULT'),
+      mergeGate: snapshotMergeGateDto(raw.mergeGate),
+      merge: snapshotTaskMergeResultDto(raw.merge)
+    });
+  }
+
+  throw new AgentHubValidationError('MALFORMED_REVIEW_DECISION_RESULT', `Unknown review decision outcome '${raw.outcome}'`);
+}

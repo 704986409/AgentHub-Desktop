@@ -454,21 +454,23 @@ describe('AgentHub Review Evidence Read-Only', () => {
     }
   });
 
-  test('architecture guard: Mutation allowlist remains createTask + executeTask only', { timeout: 5000 }, () => {
+  test('architecture guard: Mutation allowlist remains createTask + executeTask + reviewDecision only', { timeout: 5000 }, () => {
     const ipcPath = path.resolve(__dirname, '../src/main/agenthub/AgentHubIpc.ts');
     const ipcSource = fs.readFileSync(ipcPath, 'utf-8');
 
     const preloadPath = path.resolve(__dirname, '../src/preload/index.ts');
     const preloadSource = fs.readFileSync(preloadPath, 'utf-8');
 
+    assert.match(ipcSource, /reviewDecision/);
+    assert.match(preloadSource, /reviewDecision/);
+
     const forbiddenMutations = [
-      'reviewDecision',
       'approveReview',
       'rejectReview',
       'requestRevision',
-      '/decision',
-      'agenthub:review',
-      'agenthub:merge'
+      'agenthub:merge',
+      'git merge',
+      'git apply'
     ];
 
     for (const mutation of forbiddenMutations) {

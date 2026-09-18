@@ -8,7 +8,9 @@ import type {
   CreateTaskRequestDto,
   ExecuteTaskRequestDto,
   TaskExecutionResult,
-  TaskSubmissionResult
+  TaskSubmissionResult,
+  ReviewDecisionRequestDto,
+  ReviewDecisionResult
 } from '@shared/agenthubTypes';
 
 export interface AgentHubStoreState {
@@ -26,7 +28,9 @@ export interface AgentHubStoreState {
   selectAgent: (agentId: string | null) => void;
   submitTask: (request: CreateTaskRequestDto) => Promise<TaskSubmissionResult>;
   executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
+  reviewDecision: (request: ReviewDecisionRequestDto) => Promise<ReviewDecisionResult>;
 }
+
 
 function reconcileSelectedAgent(
   prevSelectedId: string | null,
@@ -163,6 +167,37 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
         error: {
           code: 'IPC_LOST',
           message: (err as Error).message || 'Task execution IPC result was lost'
+        }
+      };
+    }
+  },
+
+  reviewDecision: async (request: ReviewDecisionRequestDto): Promise<ReviewDecisionResult> => {
+    if (typeof window === 'undefined' || !window.agentHub) {
+      return {
+        status: 'failed',
+        retryable: false,
+        error: { code: 'NO_PRELOAD', message: 'AgentHub preload bridge is unavailable' }
+      };
+    }
+    try {
+      const result = await window.agentHub.reviewDecision(request);
+      if (result.status === 'applied' && result.result.outcome === 'review-ready') {
+        const warning = !result.stateSynchronized ? result.warning : null;
+        useAgentHubReviewSessionStore.getState().captureReviewReady(
+          result.result,
+          result.stateSynchronized,
+          warning
+        );
+      }
+      return result;
+    } catch (err) {
+      return {
+        status: 'ambiguous',
+        retryable: true,
+        error: {
+          code: 'IPC_LOST',
+          message: (err as Error).message || 'Review decision IPC result was lost'
         }
       };
     }
