@@ -6,7 +6,7 @@
 - Sealed V0.8.5A tag: `V0.8.5A`
 - V0.8.5A SHA: `3dde606ad723adf69456716bab6095fa042c96c9`
 - Final V0.8.6 tag: `V0.8.6`
-- Final V0.8.6 SHA: `PENDING_COMMIT`
+- Final V0.8.6 SHA: `80b9f4ec7dbb0b5fb4d644713d8c397572b07084`
 - Backend sealed SHA: `03bc7824d732e740a88f9aa2c0122f3cf5df75ab`
 
 ## Review Contract
@@ -51,10 +51,10 @@
 - Real provider/model calls: 0
 
 ## GitHub
-- Commit: `feat(desktop): add safe review decision actions`
+- Commit: `feat(desktop): add safe review decision actions` (`80b9f4ec7dbb0b5fb4d644713d8c397572b07084`)
 - Tag: `V0.8.6`
-- Actions Run: PENDING_PUSH
-- CI Result: PENDING_CI
+- Actions Run: `35367948584`
+- CI Result: `SUCCESS`
 
 ## Final Status
 - PENDING INDEPENDENT AUDIT
@@ -115,7 +115,7 @@
 | check:links PASS | PASS |
 | build PASS | PASS |
 | git diff --check PASS | PASS |
-| GitHub CI PASS | PENDING_CI |
+| GitHub CI PASS | PASS |
 
 ---
 
