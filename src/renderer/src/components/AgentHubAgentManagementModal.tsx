@@ -34,9 +34,9 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
   const mutationsUsable = connection === 'connected' || connection === 'degraded';
 
   const session = useAgentHubAgentMutationStore((s) => s.session);
-  const beginCreate = useAgentHubAgentMutationStore((s) => s.beginCreate);
-  const beginUpdate = useAgentHubAgentMutationStore((s) => s.beginUpdate);
-  const beginAction = useAgentHubAgentMutationStore((s) => s.beginAction);
+  const startFreshCreate = useAgentHubAgentMutationStore((s) => s.startFreshCreate);
+  const startFreshUpdate = useAgentHubAgentMutationStore((s) => s.startFreshUpdate);
+  const startFreshAction = useAgentHubAgentMutationStore((s) => s.startFreshAction);
   const markSubmitting = useAgentHubAgentMutationStore((s) => s.markSubmitting);
   const markAmbiguous = useAgentHubAgentMutationStore((s) => s.markAmbiguous);
   const markApplied = useAgentHubAgentMutationStore((s) => s.markApplied);
@@ -68,6 +68,39 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
   const ambiguous = session?.status === 'ambiguous';
   const formDisabled = submitting || !mutationsUsable;
 
+  const canEnable = Boolean(
+    selected &&
+    mutationsUsable &&
+    !submitting &&
+    !busy &&
+    !selected.enabled &&
+    providerSupported(selected.providerId)
+  );
+
+  const canDisable = Boolean(
+    selected &&
+    mutationsUsable &&
+    !submitting &&
+    !busy &&
+    selected.enabled
+  );
+
+  const canDelete = Boolean(
+    selected &&
+    mutationsUsable &&
+    !submitting &&
+    !busy
+  );
+
+  const canEdit = Boolean(
+    selected &&
+    mutationsUsable &&
+    !submitting &&
+    !busy
+  );
+
+  const isReconciliation = Boolean(session?.error?.code?.includes('RECONCILIATION'));
+
   const applyResult = (mutationId: string, result: AgentMutationResult): void => {
     if (result.status === 'applied') {
       markApplied(mutationId);
@@ -95,26 +128,30 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
     setForm(next);
   };
 
-  const submitCreate = async (): Promise<void> => {
+  const submitCreate = async (isRetry = false): Promise<void> => {
     const input: CreateAgentInputDto = toCreateInput(form);
-    const mutationId = session?.operation === 'create' ? session.mutationId : beginCreate();
+    const mutationId = isRetry && session?.operation === 'create' && session.status === 'ambiguous'
+      ? session.mutationId
+      : startFreshCreate();
     markSubmitting(mutationId);
     applyResult(mutationId, await createAgent({ mutationId, input }));
   };
 
-  const submitUpdate = async (): Promise<void> => {
+  const submitUpdate = async (isRetry = false): Promise<void> => {
     if (!selected) return;
     const input: UpdateAgentInputDto = toUpdateInput(form);
-    const mutationId = session?.operation === 'update' ? session.mutationId : beginUpdate(selected.agentId, input);
+    const mutationId = isRetry && session?.operation === 'update' && session.status === 'ambiguous'
+      ? session.mutationId
+      : startFreshUpdate(selected.agentId, input);
     markSubmitting(mutationId);
     applyResult(mutationId, await updateAgent({ mutationId, agentId: selected.agentId, input }));
   };
 
-  const submitAction = async (operation: 'enable' | 'disable' | 'delete'): Promise<void> => {
+  const submitAction = async (operation: 'enable' | 'disable' | 'delete', isRetry = false): Promise<void> => {
     if (!selected) return;
-    const mutationId = session?.operation === operation && session.agentId === selected.agentId
+    const mutationId = isRetry && session?.operation === operation && session.agentId === selected.agentId && session.status === 'ambiguous'
       ? session.mutationId
-      : beginAction(operation, selected.agentId);
+      : startFreshAction(operation, selected.agentId);
     markSubmitting(mutationId);
     const request = { mutationId, agentId: selected.agentId };
     const result = operation === 'enable'
@@ -128,14 +165,14 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
   const retrySame = async (): Promise<void> => {
     if (!session || session.status !== 'ambiguous') return;
     if (session.operation === 'create') {
-      await submitCreate();
+      await submitCreate(true);
       return;
     }
     if (session.operation === 'update') {
-      await submitUpdate();
+      await submitUpdate(true);
       return;
     }
-    await submitAction(session.operation);
+    await submitAction(session.operation, true);
   };
 
   return (
@@ -158,11 +195,12 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontWeight: 700 }}>AGENT MUTATION OUTCOME UNKNOWN</div>
             <div>{session?.error?.code}: {session?.error?.message}</div>
-            <button type="button" onClick={() => { void retrySame(); }} disabled={!mutationsUsable || submitting}>
-              Retry Same Mutation
-            </button>
-            {session?.error?.code?.includes('RECONCILIATION') && (
+            {isReconciliation ? (
               <div>Refresh or restart AgentHub before another Agent mutation.</div>
+            ) : (
+              <button type="button" onClick={() => { void retrySame(); }} disabled={!mutationsUsable || submitting}>
+                Retry Same Mutation
+              </button>
             )}
           </div>
         )}
@@ -195,7 +233,7 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
               type="button"
               disabled={!mutationsUsable || submitting}
               onClick={() => {
-                beginCreate();
+                startFreshCreate();
                 setMode('create');
                 setForm(emptyAgentFormValue());
                 setConfirmKind(null);
@@ -207,7 +245,7 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
           <div>
             {mode === 'create' && (
               <>
-                <AgentHubAgentForm mode="create" value={form} projects={projects} disabled={formDisabled || ambiguous} onChange={changeForm} />
+                <AgentHubAgentForm mode="create" value={form} projects={projects} disabled={formDisabled} onChange={changeForm} />
                 {confirmKind === 'create' ? (
                   <div style={{ marginTop: 12 }}>
                     <div>Name: {form.name}</div>
@@ -241,7 +279,7 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                 </div>
                 {mode === 'edit' ? (
                   <>
-                    <AgentHubAgentForm mode="edit" value={form} projects={projects} disabled={formDisabled || ambiguous || busy} onChange={changeForm} />
+                    <AgentHubAgentForm mode="edit" value={form} projects={projects} disabled={formDisabled || busy} onChange={changeForm} />
                     {confirmKind === 'runtime' ? (
                       <div>
                         This changes the runtime provider/model used for future assignments. The Agent must be idle.
@@ -265,12 +303,12 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                   </>
                 ) : (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button type="button" disabled={busy || !mutationsUsable} onClick={() => { setMode('edit'); setForm(formFromAgent(selected)); }}>
+                    <button type="button" disabled={!canEdit} onClick={() => { setMode('edit'); setForm(formFromAgent(selected)); setConfirmKind(null); }}>
                       Edit
                     </button>
                     <button
                       type="button"
-                      disabled={!mutationsUsable || submitting || (selected.enabled && !providerSupported(selected.providerId))}
+                      disabled={!canEnable}
                       onClick={() => { void submitAction('enable'); }}
                     >
                       Enable
@@ -278,18 +316,18 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                     {confirmKind === 'disable' ? (
                       <div>
                         Disabling removes this Agent from future scheduling. It does not delete Agent history.
-                        <button type="button" disabled={busy || submitting} onClick={() => { void submitAction('disable'); }}>Confirm Disable</button>
+                        <button type="button" disabled={!canDisable} onClick={() => { void submitAction('disable'); }}>Confirm Disable</button>
                       </div>
                     ) : (
-                      <button type="button" disabled={busy || !mutationsUsable} onClick={() => setConfirmKind('disable')}>Disable</button>
+                      <button type="button" disabled={!canDisable} onClick={() => setConfirmKind('disable')}>Disable</button>
                     )}
                     {confirmKind === 'delete' ? (
                       <div>
                         Only Agents with no Assignment history can be deleted. Use Disable for Agents that have history.
-                        <button type="button" disabled={busy || submitting} onClick={() => { void submitAction('delete'); }}>Confirm Delete</button>
+                        <button type="button" disabled={!canDelete} onClick={() => { void submitAction('delete'); }}>Confirm Delete</button>
                       </div>
                     ) : (
-                      <button type="button" disabled={busy || !mutationsUsable} onClick={() => setConfirmKind('delete')}>Delete</button>
+                      <button type="button" disabled={!canDelete} onClick={() => setConfirmKind('delete')}>Delete</button>
                     )}
                   </div>
                 )}

@@ -354,3 +354,209 @@ describe('AgentHub V0.8.7 mutation store and UI authority', () => {
     assert.equal(JSON.stringify(dto).includes('"model"'), false);
   });
 });
+
+describe('AgentHub V0.8.7A Closure Fix — Mutation Lifecycle and Guards', () => {
+  test('definitive failed Delete generates fresh mutationId on next logical attempt', { timeout: TIMEOUT }, async () => {
+    let callCount = 0;
+    const seenKeys: string[] = [];
+    const { server, baseUrl } = await listen((req, res) => {
+      seenKeys.push(String(req.headers['idempotency-key'] ?? ''));
+      callCount += 1;
+      if (callCount === 1) {
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: false,
+          requestId: 'req-fail',
+          error: { code: 'AGENTHUB_API_CONFLICT', message: 'Agent runtime is busy' }
+        }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(envelope({ agentId: 'agent-1', deleted: true }));
+    });
+
+    const connection = {
+      restClient: new AgentHubRestClient({ baseUrl, timeoutMs: 3000 }),
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection;
+    const service = new AgentHubAgentManagement(connection);
+
+    try {
+      const store = useAgentHubAgentMutationStore.getState();
+      store.clearSession();
+
+      // First logical delete attempt
+      const idA = store.startFreshAction('delete', 'agent-1');
+      store.markSubmitting(idA);
+      const res1 = await service.deleteAgent({ mutationId: idA, agentId: 'agent-1' });
+      assert.equal(res1.status, 'failed');
+      store.markFailed(idA, res1.error!);
+
+      // actionRequest prevents reusing settled failed session
+      assert.equal(store.actionRequest(idA, 'agent-1'), null);
+
+      // Second logical delete attempt: fresh ID
+      const idB = store.startFreshAction('delete', 'agent-1');
+      assert.notEqual(idB, idA);
+      store.markSubmitting(idB);
+      const res2 = await service.deleteAgent({ mutationId: idB, agentId: 'agent-1' });
+      assert.equal(res2.status, 'applied');
+      store.markApplied(idB);
+
+      assert.equal(callCount, 2);
+      assert.notEqual(seenKeys[0], seenKeys[1]);
+    } finally {
+      service.stop();
+      server.close();
+    }
+  });
+
+  test('definitive failed Update generates fresh mutationId on next logical attempt', { timeout: TIMEOUT }, async () => {
+    let callCount = 0;
+    const seenKeys: string[] = [];
+    const updateInput = {
+      name: 'Worker Renamed', providerId: 'claude', modelId: 'claude-sonnet-4', position: 'Developer',
+      allowedComplexities: ['SIMPLE'] as const, allowedRiskLevels: ['LOW'] as const,
+      capabilities: ['coding'], specialties: ['ts'], authority: 'STANDARD' as const, routingPriority: 1
+    };
+    const { server, baseUrl } = await listen((req, res) => {
+      seenKeys.push(String(req.headers['idempotency-key'] ?? ''));
+      callCount += 1;
+      if (callCount === 1) {
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: false,
+          requestId: 'req-fail',
+          error: { code: 'AGENTHUB_API_CONFLICT', message: 'Agent runtime is busy' }
+        }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(envelope({ ...validAgent, name: 'Worker Renamed' }));
+    });
+
+    const connection = {
+      restClient: new AgentHubRestClient({ baseUrl, timeoutMs: 3000 }),
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection;
+    const service = new AgentHubAgentManagement(connection);
+
+    try {
+      const store = useAgentHubAgentMutationStore.getState();
+      store.clearSession();
+
+      const idA = store.startFreshUpdate('agent-1', updateInput);
+      store.markSubmitting(idA);
+      const res1 = await service.updateAgent({ mutationId: idA, agentId: 'agent-1', input: updateInput });
+      assert.equal(res1.status, 'failed');
+      store.markFailed(idA, res1.error!);
+
+      assert.equal(store.updateRequest(idA, 'agent-1', updateInput), null);
+
+      const idB = store.startFreshUpdate('agent-1', updateInput);
+      assert.notEqual(idB, idA);
+      store.markSubmitting(idB);
+      const res2 = await service.updateAgent({ mutationId: idB, agentId: 'agent-1', input: updateInput });
+      assert.equal(res2.status, 'applied');
+      store.markApplied(idB);
+
+      assert.equal(callCount, 2);
+      assert.notEqual(seenKeys[0], seenKeys[1]);
+    } finally {
+      service.stop();
+      server.close();
+    }
+  });
+
+  test('ambiguous session reuses ID on retrySame, but rotates and clears on edit', { timeout: 5000 }, () => {
+    useAgentHubAgentMutationStore.getState().clearSession();
+
+    const idA = useAgentHubAgentMutationStore.getState().startFreshCreate();
+    useAgentHubAgentMutationStore.getState().markSubmitting(idA);
+    useAgentHubAgentMutationStore.getState().markAmbiguous(idA, { code: 'NETWORK_TIMEOUT', message: 'timeout' });
+    assert.equal(useAgentHubAgentMutationStore.getState().session?.status, 'ambiguous');
+    assert.equal(useAgentHubAgentMutationStore.getState().session?.mutationId, idA);
+
+    // retrySame keeps the exact same mutationId
+    const sameId = useAgentHubAgentMutationStore.getState().session?.mutationId;
+    assert.equal(sameId, idA);
+
+    // User edits form in ambiguous state: rotateAfterEdit generates idB, clears error and restores idle
+    const idB = useAgentHubAgentMutationStore.getState().rotateAfterEdit(idA, { ...validCreate, name: 'Renamed Worker' });
+    assert.notEqual(idB, idA);
+    assert.equal(useAgentHubAgentMutationStore.getState().session?.status, 'idle');
+    assert.equal(useAgentHubAgentMutationStore.getState().session?.error, undefined);
+    assert.equal(useAgentHubAgentMutationStore.getState().session?.mutationId, idB);
+  });
+
+  test('Enable guard logic is fail-closed across supported, unsupported, already-enabled, and BUSY agents', { timeout: 5000 }, () => {
+    const supportedProviders = ['claude', 'codex'];
+    function checkCanEnable(selected: { enabled: boolean; status: string; providerId: string } | null, mutationsUsable: boolean, submitting: boolean): boolean {
+      if (!selected) return false;
+      const busy = selected.status === 'BUSY';
+      return (
+        mutationsUsable &&
+        !submitting &&
+        !busy &&
+        !selected.enabled &&
+        supportedProviders.includes(selected.providerId)
+      );
+    }
+
+    function checkCanDisable(selected: { enabled: boolean; status: string; providerId: string } | null, mutationsUsable: boolean, submitting: boolean): boolean {
+      if (!selected) return false;
+      const busy = selected.status === 'BUSY';
+      return (
+        mutationsUsable &&
+        !submitting &&
+        !busy &&
+        selected.enabled
+      );
+    }
+
+    // supported + disabled + IDLE -> canEnable = true
+    assert.equal(checkCanEnable({ enabled: false, status: 'DISABLED', providerId: 'claude' }, true, false), true);
+
+    // unsupported + disabled -> canEnable = false
+    assert.equal(checkCanEnable({ enabled: false, status: 'DISABLED', providerId: 'cursor' }, true, false), false);
+    assert.equal(checkCanEnable({ enabled: false, status: 'DISABLED', providerId: 'antigravity' }, true, false), false);
+
+    // already enabled -> canEnable = false
+    assert.equal(checkCanEnable({ enabled: true, status: 'IDLE', providerId: 'claude' }, true, false), false);
+
+    // BUSY -> canEnable = false, canDisable = false
+    assert.equal(checkCanEnable({ enabled: false, status: 'BUSY', providerId: 'claude' }, true, false), false);
+    assert.equal(checkCanDisable({ enabled: true, status: 'BUSY', providerId: 'claude' }, true, false), false);
+
+    // already disabled -> canDisable = false
+    assert.equal(checkCanDisable({ enabled: false, status: 'DISABLED', providerId: 'claude' }, true, false), false);
+
+    // enabled + IDLE -> canDisable = true
+    assert.equal(checkCanDisable({ enabled: true, status: 'IDLE', providerId: 'claude' }, true, false), true);
+  });
+
+  test('Modal UI enforces ambiguous form edit reachability, reconciliation guard, and fail-closed buttons', { timeout: 5000 }, () => {
+    const modal = fs.readFileSync(path.resolve(process.cwd(), 'src/renderer/src/components/AgentHubAgentManagementModal.tsx'), 'utf8');
+
+    // Ambiguous form is not globally disabled
+    assert.equal(modal.includes('disabled={formDisabled || ambiguous}'), false, 'Create form should not disable on ambiguous');
+    assert.equal(modal.includes('disabled={formDisabled || ambiguous || busy}'), false, 'Edit form should not disable on ambiguous');
+    assert.match(modal, /disabled=\{formDisabled\}/, 'Create form disabled depends only on formDisabled');
+    assert.match(modal, /disabled=\{formDisabled \|\| busy\}/, 'Edit form disabled depends on formDisabled || busy');
+
+    // Reconciliation disables Retry Same Mutation
+    assert.match(modal, /isReconciliation/);
+    assert.match(modal, /Refresh or restart AgentHub before another Agent mutation\./);
+
+    // Fail-closed guards for Enable and Disable
+    assert.match(modal, /canEnable/);
+    assert.match(modal, /canDisable/);
+    assert.match(modal, /!selected\.enabled/);
+    assert.match(modal, /providerSupported\(selected\.providerId\)/);
+
+    // Fresh mutation lifecycle used on modal open/create
+    assert.match(modal, /startFreshCreate/);
+    assert.match(modal, /startFreshUpdate/);
+    assert.match(modal, /startFreshAction/);
+  });
+});

@@ -27,6 +27,10 @@ interface AgentHubAgentMutationStore {
   beginCreate: () => string;
   beginUpdate: (agentId: string, input: UpdateAgentInputDto) => string;
   beginAction: (operation: 'enable' | 'disable' | 'delete', agentId: string) => string;
+  startFreshCreate: () => string;
+  startFreshUpdate: (agentId: string, input: UpdateAgentInputDto) => string;
+  startFreshAction: (operation: 'enable' | 'disable' | 'delete', agentId: string) => string;
+  abandonAmbiguous: () => void;
   markSubmitting: (mutationId: string) => void;
   markAmbiguous: (mutationId: string, error: { code: string; message: string }) => void;
   markApplied: (mutationId: string) => void;
@@ -46,6 +50,18 @@ export const useAgentHubAgentMutationStore = create<AgentHubAgentMutationStore>(
   session: null,
 
   beginCreate: () => {
+    return get().startFreshCreate();
+  },
+
+  beginUpdate: (agentId, input) => {
+    return get().startFreshUpdate(agentId, input);
+  },
+
+  beginAction: (operation, agentId) => {
+    return get().startFreshAction(operation, agentId);
+  },
+
+  startFreshCreate: () => {
     const mutationId = newMutationId();
     set({
       session: {
@@ -57,7 +73,7 @@ export const useAgentHubAgentMutationStore = create<AgentHubAgentMutationStore>(
     return mutationId;
   },
 
-  beginUpdate: (agentId, input) => {
+  startFreshUpdate: (agentId, input) => {
     const mutationId = newMutationId();
     set({
       session: {
@@ -71,7 +87,7 @@ export const useAgentHubAgentMutationStore = create<AgentHubAgentMutationStore>(
     return mutationId;
   },
 
-  beginAction: (operation, agentId) => {
+  startFreshAction: (operation, agentId) => {
     const mutationId = newMutationId();
     set({
       session: {
@@ -82,6 +98,10 @@ export const useAgentHubAgentMutationStore = create<AgentHubAgentMutationStore>(
       }
     });
     return mutationId;
+  },
+
+  abandonAmbiguous: () => {
+    set({ session: null });
   },
 
   markSubmitting: (mutationId) => {
@@ -133,12 +153,14 @@ export const useAgentHubAgentMutationStore = create<AgentHubAgentMutationStore>(
   createRequest: (mutationId, input) => {
     const session = get().session;
     if (!session || session.mutationId !== mutationId || session.operation !== 'create') return null;
+    if (session.status === 'applied' || session.status === 'failed') return null;
     return { mutationId, input };
   },
 
   updateRequest: (mutationId, agentId, input) => {
     const session = get().session;
     if (!session || session.mutationId !== mutationId || session.operation !== 'update') return null;
+    if (session.status === 'applied' || session.status === 'failed') return null;
     return { mutationId, agentId, input };
   },
 
@@ -146,6 +168,7 @@ export const useAgentHubAgentMutationStore = create<AgentHubAgentMutationStore>(
     const session = get().session;
     if (!session || session.mutationId !== mutationId || !session.agentId) return null;
     if (session.agentId !== agentId) return null;
+    if (session.status === 'applied' || session.status === 'failed') return null;
     return { mutationId, agentId };
   }
 }));
