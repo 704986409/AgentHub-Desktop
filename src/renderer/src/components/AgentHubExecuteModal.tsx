@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAgentHubStore } from '../stores/agentHubStore';
+import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionStore';
 import type { ExecuteTaskInputDto, ExecuteTaskResultDto, TaskDto } from '@shared/agenthubTypes';
 import { TaskExecutionIdLifecycle } from '@shared/agenthubExecutionLifecycle';
 
@@ -262,6 +263,29 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
             {warningMessage && (
               <div style={{ color: 'var(--cth-amber-dark, #ca8a04)', marginTop: 4 }}>
                 {warningMessage}
+              </div>
+            )}
+            {executeResult.outcome === 'review-ready' && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    useAgentHubReviewSessionStore.getState().openModal(executeResult.taskId);
+                    onClose();
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    backgroundColor: 'var(--cth-paper-100, #ffffff)',
+                    border: '1px solid var(--cth-mint-dark, #16a34a)',
+                    color: 'var(--cth-mint-dark, #16a34a)',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    borderRadius: 2
+                  }}
+                >
+                  View Review Evidence
+                </button>
               </div>
             )}
           </div>

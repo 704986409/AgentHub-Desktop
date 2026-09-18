@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useAgentHubReviewSessionStore } from './agentHubReviewSessionStore';
 import type {
   AgentHubConnectionStatus,
   AgentHubDesktopState,
@@ -152,7 +153,9 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
       };
     }
     try {
-      return await window.agentHub.executeTask(request);
+      const result = await window.agentHub.executeTask(request);
+      useAgentHubReviewSessionStore.getState().captureExecutionResult(result);
+      return result;
     } catch (err) {
       return {
         status: 'ambiguous',

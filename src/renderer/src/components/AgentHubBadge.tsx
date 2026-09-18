@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAgentHubStore } from '../stores/agentHubStore';
+import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionStore';
 import { AgentHubTaskModal } from './AgentHubTaskModal';
 import { AgentHubExecuteModal } from './AgentHubExecuteModal';
+import { AgentHubReviewEvidenceModal } from './AgentHubReviewEvidenceModal';
 
 export function AgentHubBadge() {
   const {
@@ -19,6 +21,13 @@ export function AgentHubBadge() {
   const [hover, setHover] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
+
+  const reviewRecordCount = Object.keys(
+    useAgentHubReviewSessionStore((s) => s.reviewReadyByTaskId)
+  ).length;
+  const isReviewModalOpen = useAgentHubReviewSessionStore((s) => s.isModalOpen);
+  const openReviewModal = useAgentHubReviewSessionStore((s) => s.openModal);
+  const closeReviewModal = useAgentHubReviewSessionStore((s) => s.closeModal);
 
   useEffect(() => {
     const cleanup = init();
@@ -192,6 +201,27 @@ export function AgentHubBadge() {
                 </button>
               </>
             )}
+            <button
+              type="button"
+              onClick={() => {
+                setHover(false);
+                openReviewModal();
+              }}
+              style={{
+                marginTop: 6,
+                width: '100%',
+                padding: '5px 8px',
+                background: 'var(--cth-paper-100, #ffffff)',
+                border: '1px solid var(--cth-ink-900, #0f172a)',
+                color: 'var(--cth-ink-900, #0f172a)',
+                fontWeight: 600,
+                fontSize: 12,
+                cursor: 'pointer',
+                borderRadius: 2
+              }}
+            >
+              Review Evidence ({reviewRecordCount})
+            </button>
           </div>
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--cth-ink-500, #64748b)' }}>
             Click badge to refresh snapshot
@@ -206,6 +236,10 @@ export function AgentHubBadge() {
       <AgentHubExecuteModal
         isOpen={isExecuteModalOpen}
         onClose={() => setIsExecuteModalOpen(false)}
+      />
+      <AgentHubReviewEvidenceModal
+        isOpen={isReviewModalOpen}
+        onClose={closeReviewModal}
       />
     </span>
   );
