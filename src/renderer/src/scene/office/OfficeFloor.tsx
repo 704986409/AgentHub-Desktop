@@ -34,6 +34,10 @@ export interface OfficeFloorProps {
   onSelectAgent?: (id: string | null) => void;
 }
 
+/** Pixi Office is a projection of AgentHub state. Sit/walk/cheer are visual
+ *  only and must not mutate Backend Agent/Task/Assignment. Human Presence is
+ *  not an Agent and is not seated through this planner. */
+
 /** A cafeteria break in progress for one agent — set by the coffee-break
  *  director, cleared when the agent leaves or gets pulled back to work. */
 interface CafeChat {

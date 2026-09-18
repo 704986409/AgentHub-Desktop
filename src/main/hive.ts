@@ -2421,7 +2421,9 @@ export class HiveManager {
     try { writeFileSync(join(root, 'fleet.json'), JSON.stringify(snapshot, null, 2), 'utf8'); } catch { /* noop */ }
   }
 
-  /** Is this agent the hive's god/orchestrator? */
+  /** Is this agent the hive's god/orchestrator?
+   *  V0.8.9: visual/compatibility only. Authority = none for AgentHub.
+   *  Human Boss is `HumanPresenceActor`, not this flag. */
   isGod(agentId: string): boolean {
     try {
       const reg = this.registry();

@@ -1,5 +1,6 @@
-/** God's identity before anyone has customized it — the app's own default,
- *  not a magic string sprinkled at every spawn call site. */
+/** God's display name for the legacy Munder visual orchestrator avatar.
+ *  V0.8.9: this is presentation/compatibility only. Human Boss is a human
+ *  user (`HumanPresenceActor`) and is NOT GOD, Michael, Hive, or a Lead Agent. */
 export const DEFAULT_GOD_NAME = 'Michael';
 
 /**

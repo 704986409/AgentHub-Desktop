@@ -5,6 +5,12 @@ import type {
   ProjectDto,
   TaskDto
 } from '@shared/agenthubTypes';
+import {
+  composeOfficeActors,
+  HUMAN_BOSS_PRESENCE,
+  type HumanPresenceActor,
+  type OfficeActor
+} from '../../../../shared/officeActors';
 
 export type OfficeCharacterName =
   | 'michael' | 'jim' | 'pam' | 'dwight' | 'kevin' | 'angela'
@@ -35,6 +41,8 @@ export interface OfficeAgentViewModel {
 }
 
 export interface AgentHubOfficeProjection {
+  readonly human: HumanPresenceActor;
+  readonly actors: readonly OfficeActor[];
   readonly agents: readonly OfficeAgentViewModel[];
   readonly visibleAgents: readonly OfficeAgentViewModel[];
   readonly overflowAgents: readonly OfficeAgentViewModel[];
@@ -214,8 +222,11 @@ export function projectAgentHubOffice(
   snapshot: AgentHubStateSnapshot | null,
   options?: { seatCapacity?: number }
 ): AgentHubOfficeProjection {
+  const human = HUMAN_BOSS_PRESENCE;
   if (!snapshot || !snapshot.agents || !Array.isArray(snapshot.agents)) {
     return Object.freeze({
+      human,
+      actors: composeOfficeActors([]),
       agents: Object.freeze([]),
       visibleAgents: Object.freeze([]),
       overflowAgents: Object.freeze([]),
@@ -268,6 +279,8 @@ export function projectAgentHubOffice(
   );
 
   return Object.freeze({
+    human,
+    actors: composeOfficeActors(snapshot.agents),
     agents: sortedViewModels,
     visibleAgents,
     overflowAgents,

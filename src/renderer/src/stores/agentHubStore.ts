@@ -19,6 +19,7 @@ import type {
 } from '@shared/agenthubTypes';
 
 export interface AgentHubStoreState {
+  /** Cache / projection of Backend /state. Not business authority. */
   connection: AgentHubConnectionStatus;
   health: AgentHubHealthDto | null;
   snapshot: AgentHubStateSnapshot | null;

@@ -1,7 +1,7 @@
 /**
- * How a god-hired worker's spawn request becomes an executable + argv, as a
- * pure function: this exact translation silently killed real workers for days
- * while reporting success, which is what earned it a unit test.
+ * How a legacy Munder worker spawn request becomes an executable + argv.
+ * V0.8.9: this is compatibility-only. AgentHub provider execution is Backend
+ * WorkerSession via `agentHub.executeTask`, never this helper.
  */
 import { autoModeFlagForProvider, hasAutoModeStance, inferAgentProvider } from '../shared/agentProvider';
 import { tokenizeCommand } from '../shared/commandLine';
