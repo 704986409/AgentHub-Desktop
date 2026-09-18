@@ -4,7 +4,7 @@
 
 - Baseline commit: `4dab83a24f221734f2988f80dacc29f2f6db4c0f`
 - Release tag: `V0.8.7A`
-- Backend paired fix SHA: `b57914bdbe319e075c327299042b5883dcf8c0bc` (Tag `0.7.1A`)
+- Backend paired fix SHA: `2c245205d385bc5ea5e2df14ddc6011a3c5a246a` (Tag `0.7.1A`)
 - Target: Desktop Agent Management Closure Fix (Blockers 1, 2, 3, 4)
 
 ## Audit Blockers Closed
