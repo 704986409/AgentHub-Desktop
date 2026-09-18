@@ -4,7 +4,11 @@ import http from 'node:http';
 import {
   AgentHubRestClient,
   AgentHubContractError,
-  validateAgentHubBaseUrl
+  validateAgentHubBaseUrl,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_EXECUTE_TIMEOUT_MS,
+  MAX_TIMEOUT_MS,
+  validateTimeoutMs
 } from '../src/main/agenthub/AgentHubRestClient';
 import {
   snapshotAgentDto,
@@ -1401,6 +1405,154 @@ describe('AgentHubRestClient Mutation POST /api/v1/tasks/:taskId/execute', () =>
       );
     } finally {
       exact.close();
+    }
+  });
+});
+
+describe('AgentHubRestClient V0.8.3D execute transport timeout separation', () => {
+  const sampleInput = { baseRef: 'main', prompt: 'Implement the change' };
+  const HEX64 = 'c'.repeat(64);
+  const OID40 = 'd'.repeat(40);
+  const sampleReviewReady = {
+    outcome: 'review-ready',
+    reviewHandle: HEX64,
+    reviewBundleSha256: HEX64,
+    taskId: 'task-1',
+    assignmentId: 'asg-1',
+    agentId: 'agent-1',
+    providerId: 'codex',
+    workerResult: { summary: 'done', blockers: [], questions: [], risks: [], notes: [] },
+    source: {
+      branchName: 'agenthub/task-1',
+      baseCommit: OID40,
+      headCommit: HEX64,
+      changedPaths: ['src/a.ts'],
+      changeSetSha256: HEX64
+    },
+    buildTest: {
+      build: 'passed',
+      test: 'not-run',
+      outcome: 'passed',
+      commands: [{
+        id: 'cmd-1',
+        phase: 'build',
+        outcome: 'passed',
+        stdoutPreview: '',
+        stderrPreview: ''
+      }]
+    },
+    evidenceSha256: HEX64
+  };
+
+  test('validateTimeoutMs enforces positive safe integer <= 24h', { timeout: 5000 }, () => {
+    assert.equal(validateTimeoutMs(undefined, 'timeoutMs', 5000), 5000);
+    assert.equal(validateTimeoutMs(100, 'timeoutMs', 5000), 100);
+    assert.equal(validateTimeoutMs(MAX_TIMEOUT_MS, 'timeoutMs', 5000), MAX_TIMEOUT_MS);
+
+    const invalids = [0, -1, 1.5, NaN, Infinity, -Infinity, '5000', null, {}, MAX_TIMEOUT_MS + 1];
+    for (const val of invalids) {
+      assert.throws(
+        () => validateTimeoutMs(val, 'timeoutMs', 5000),
+        (err: AgentHubContractError) => err.code === 'INVALID_TIMEOUT'
+      );
+    }
+  });
+
+  test('AgentHubRestClient options validate and expose timeout getters', { timeout: 5000 }, () => {
+    const defaultClient = new AgentHubRestClient();
+    assert.equal(defaultClient.timeoutMs, DEFAULT_TIMEOUT_MS);
+    assert.equal(defaultClient.executeTimeoutMs, DEFAULT_EXECUTE_TIMEOUT_MS);
+
+    const customClient = new AgentHubRestClient({ timeoutMs: 1000, executeTimeoutMs: 60000 });
+    assert.equal(customClient.timeoutMs, 1000);
+    assert.equal(customClient.executeTimeoutMs, 60000);
+
+    assert.throws(
+      () => new AgentHubRestClient({ timeoutMs: 0 }),
+      (err: AgentHubContractError) => err.code === 'INVALID_TIMEOUT'
+    );
+    assert.throws(
+      () => new AgentHubRestClient({ executeTimeoutMs: -1 }),
+      (err: AgentHubContractError) => err.code === 'INVALID_TIMEOUT'
+    );
+  });
+
+  test('executeTimeoutMs separate from generic timeoutMs: execute succeeds at 50ms while health times out at 20ms', { timeout: 5000 }, async () => {
+    const server = http.createServer((req, res) => {
+      setTimeout(() => {
+        if (req.url === '/api/v1/health') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, requestId: 'req-h', data: { status: 'ok', version: '0.7.0' } }));
+          return;
+        }
+        if (req.url?.includes('/execute')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, requestId: 'req-ex', data: sampleReviewReady }));
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      }, 50);
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({
+      baseUrl: `http://127.0.0.1:${addr.port}`,
+      timeoutMs: 20,
+      executeTimeoutMs: 200
+    });
+
+    try {
+      const result = await client.executeTask('task-1', sampleInput, 'key-sep-1');
+      assert.equal(result.outcome, 'review-ready');
+
+      await assert.rejects(
+        () => client.health(),
+        (err: AgentHubContractError) => err.code === 'TIMEOUT' && err.phase === 'transport'
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  test('inverted timeoutMs: execute times out at 20ms while health succeeds at 50ms', { timeout: 5000 }, async () => {
+    const server = http.createServer((req, res) => {
+      setTimeout(() => {
+        if (req.url === '/api/v1/health') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, requestId: 'req-h2', data: { status: 'ok', version: '0.7.0' } }));
+          return;
+        }
+        if (req.url?.includes('/execute')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, requestId: 'req-ex2', data: sampleReviewReady }));
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      }, 50);
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+    const client = new AgentHubRestClient({
+      baseUrl: `http://127.0.0.1:${addr.port}`,
+      timeoutMs: 200,
+      executeTimeoutMs: 20
+    });
+
+    try {
+      await assert.rejects(
+        () => client.executeTask('task-1', sampleInput, 'key-sep-2'),
+        (err: AgentHubContractError) =>
+          err.code === 'TIMEOUT' && err.phase === 'transport' && err.requestDispatched === true
+      );
+
+      const health = await client.health();
+      assert.equal(health.status, 'ok');
+    } finally {
+      server.close();
     }
   });
 });

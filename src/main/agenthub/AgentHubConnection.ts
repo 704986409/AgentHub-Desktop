@@ -13,6 +13,8 @@ export type StateCommitResult =
 
 export interface AgentHubConnectionOptions {
   readonly baseUrl?: string;
+  readonly timeoutMs?: number;
+  readonly executeTimeoutMs?: number;
   readonly helloTimeoutMs?: number;
   readonly restClient?: AgentHubRestClient;
   readonly realtimeClient?: AgentHubRealtimeClient;
@@ -40,7 +42,13 @@ export class AgentHubConnection {
 
   constructor(options: AgentHubConnectionOptions = {}) {
     this.#cache = options.cache ?? new AgentHubStateCache();
-    this.#restClient = options.restClient ?? new AgentHubRestClient({ baseUrl: options.baseUrl });
+    this.#restClient =
+      options.restClient ??
+      new AgentHubRestClient({
+        baseUrl: options.baseUrl,
+        timeoutMs: options.timeoutMs,
+        executeTimeoutMs: options.executeTimeoutMs
+      });
     this.#realtimeClient =
       options.realtimeClient ??
       new AgentHubRealtimeClient({

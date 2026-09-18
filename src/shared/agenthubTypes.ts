@@ -813,6 +813,21 @@ function snapshotBoundedText(
   return value;
 }
 
+export function snapshotCommandPreviewText(
+  value: unknown,
+  fieldName: string,
+  maxBytes: number,
+  code: string
+): string {
+  if (typeof value !== 'string') {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' must be a string`);
+  }
+  if (getUtf8Bytes(value) > maxBytes) {
+    throw new AgentHubValidationError(code, `Field '${fieldName}' exceeds maximum length (${maxBytes} bytes)`);
+  }
+  return value;
+}
+
 function snapshotBoundedChars(
   value: unknown,
   fieldName: string,
@@ -1101,8 +1116,8 @@ function snapshotExecuteCommand(raw: unknown): ExecuteBuildTestCommandDto {
     id: snapshotExecuteCommandId(raw.id),
     phase: raw.phase as ExecuteCommandPhase,
     outcome: raw.outcome as ExecuteCommandOutcome,
-    stdoutPreview: snapshotBoundedText(raw.stdoutPreview, 'command.stdoutPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false),
-    stderrPreview: snapshotBoundedText(raw.stderrPreview, 'command.stderrPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT', false)
+    stdoutPreview: snapshotCommandPreviewText(raw.stdoutPreview, 'command.stdoutPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT'),
+    stderrPreview: snapshotCommandPreviewText(raw.stderrPreview, 'command.stderrPreview', COMMAND_PREVIEW_MAX_BYTES, 'MALFORMED_EXECUTE_RESULT')
   };
   if ('exitCode' in raw) {
     if (

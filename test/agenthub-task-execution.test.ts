@@ -13,6 +13,7 @@ import {
   snapshotExecuteTaskResult,
   snapshotExecuteReviewReadyDto,
   snapshotExecuteTerminalLifecycleDto,
+  snapshotCommandPreviewText,
   AgentHubValidationError,
   type ExecuteTaskInputDto
 } from '../src/shared/agenthubTypes';
@@ -834,7 +835,7 @@ describe('AgentHub Task Execution service', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
     const addr = server.address() as { port: number };
     const slow = new AgentHubTaskExecution({
-      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}`, timeoutMs: 20 }),
+      restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}`, timeoutMs: 20, executeTimeoutMs: 20 }),
       syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
     } as unknown as AgentHubConnection);
     try {
@@ -1417,5 +1418,213 @@ describe('AgentHub Task Execution ownership and UI allowlist', () => {
     assert.equal(ui.includes('Request Revision'), false);
     assert.equal(ui.includes('Approve'), false);
     assert.equal(ui.includes('Merge'), false);
+  });
+});
+
+describe('AgentHub V0.8.3D execute transport timeout and ambiguous retry', () => {
+  test('execute-specific timeout after dispatch is ambiguous and Retry reuses same executionId/key', { timeout: 5000 }, async () => {
+    let delayMs = 50;
+    const capturedKeys: string[] = [];
+
+    const server = http.createServer((req, res) => {
+      const key = req.headers['idempotency-key'] as string;
+      capturedKeys.push(key);
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(envelope(validReviewReady()));
+      }, delayMs);
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+
+    const client = new AgentHubRestClient({
+      baseUrl: `http://127.0.0.1:${addr.port}`,
+      timeoutMs: 200,
+      executeTimeoutMs: 20
+    });
+    const execution = new AgentHubTaskExecution({
+      restClient: client,
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection);
+
+    try {
+      const executionId = 'exec-timeout-retry-1';
+      // Attempt 1: 50ms server delay > 20ms executeTimeoutMs -> timeout after dispatch
+      const res1 = await execution.executeTask({ executionId, taskId: 'task-1', input: validInput });
+      assert.equal(res1.status, 'ambiguous');
+      if (res1.status === 'ambiguous') {
+        assert.equal(res1.retryable, true);
+        assert.equal(res1.error.code, 'TIMEOUT');
+      }
+      assert.equal(capturedKeys.length, 1);
+      assert.equal(capturedKeys[0], `desktop-execute:${executionId}`);
+
+      // Attempt 2: Server now responds immediately (0ms) -> Retry reuses SAME executionId and key
+      delayMs = 0;
+      const res2 = await execution.executeTask({ executionId, taskId: 'task-1', input: validInput });
+      assert.equal(res2.status, 'executed');
+      if (res2.status === 'executed') {
+        assert.equal(res2.stateSynchronized, true);
+        assert.equal(res2.result.outcome, 'review-ready');
+      }
+      assert.equal(capturedKeys.length, 2);
+      assert.equal(capturedKeys[1], `desktop-execute:${executionId}`);
+
+      // Attempt 3: Changing body with same executionId is rejected locally with IDEMPOTENCY_CONFLICT
+      const res3 = await execution.executeTask({
+        executionId,
+        taskId: 'task-1',
+        input: { ...validInput, prompt: 'Different prompt' }
+      });
+      assert.equal(res3.status, 'failed');
+      if (res3.status === 'failed') {
+        assert.equal(res3.error.code, 'IDEMPOTENCY_CONFLICT');
+      }
+      // Zero HTTP sent for conflict
+      assert.equal(capturedKeys.length, 2);
+    } finally {
+      execution.stop();
+      server.close();
+    }
+  });
+});
+
+describe('AgentHub V0.8.3D preview NUL semantics', () => {
+  test('snapshotCommandPreviewText accepts and preserves NUL exactly', { timeout: 5000 }, () => {
+    // string with embedded NUL accepted and preserved
+    assert.strictEqual(snapshotCommandPreviewText('a\0b', 'stdoutPreview', 1024, 'MALFORMED_EXECUTE_RESULT'), 'a\0b');
+    // string with only NUL accepted and preserved
+    assert.strictEqual(snapshotCommandPreviewText('\0', 'stderrPreview', 1024, 'MALFORMED_EXECUTE_RESULT'), '\0');
+    // empty string accepted
+    assert.strictEqual(snapshotCommandPreviewText('', 'stdoutPreview', 1024, 'MALFORMED_EXECUTE_RESULT'), '');
+
+    // non-string rejected
+    const nonStrings = [123, null, undefined, true, false, {}, []];
+    for (const val of nonStrings) {
+      assert.throws(
+        () => snapshotCommandPreviewText(val, 'stdoutPreview', 1024, 'MALFORMED_EXECUTE_RESULT'),
+        (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+      );
+    }
+
+    // byte length exceeding limit rejected
+    const over1Mb = 'x'.repeat(1024 * 1024 + 1);
+    assert.throws(
+      () => snapshotCommandPreviewText(over1Mb, 'stdoutPreview', 1024 * 1024, 'MALFORMED_EXECUTE_RESULT'),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+  });
+
+  test('review-ready snapshot accepts and preserves preview NUL', { timeout: 5000 }, () => {
+    const raw = validReviewReady({
+      buildTest: {
+        build: 'passed',
+        test: 'not-run',
+        outcome: 'passed',
+        commands: [{
+          id: 'cmd-1',
+          phase: 'build',
+          outcome: 'passed',
+          stdoutPreview: 'before\0after',
+          stderrPreview: '\0'
+        }]
+      }
+    });
+
+    const parsed = snapshotExecuteReviewReadyDto(raw);
+    assert.strictEqual(parsed.buildTest.commands[0].stdoutPreview, 'before\0after');
+    assert.strictEqual(parsed.buildTest.commands[0].stderrPreview, '\0');
+  });
+
+  test('mutation-boundary mock response with NUL preview results in executed status and exact values', { timeout: 5000 }, async () => {
+    const mockReviewReady = validReviewReady({
+      buildTest: {
+        build: 'passed',
+        test: 'not-run',
+        outcome: 'passed',
+        commands: [{
+          id: 'cmd-1',
+          phase: 'build',
+          outcome: 'passed',
+          stdoutPreview: 'before\0after',
+          stderrPreview: '\0'
+        }]
+      }
+    });
+
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(envelope(mockReviewReady));
+    });
+
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const addr = server.address() as { port: number };
+
+    const client = new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` });
+    const execution = new AgentHubTaskExecution({
+      restClient: client,
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: null })
+    } as unknown as AgentHubConnection);
+
+    try {
+      const res = await execution.executeTask({
+        executionId: 'exec-preview-nul-1',
+        taskId: 'task-1',
+        input: validInput
+      });
+
+      assert.equal(res.status, 'executed');
+      if (res.status === 'executed') {
+        assert.equal(res.stateSynchronized, true);
+        assert.equal(res.result.outcome, 'review-ready');
+        if (res.result.outcome === 'review-ready') {
+          assert.strictEqual(res.result.buildTest.commands[0].stdoutPreview, 'before\0after');
+          assert.strictEqual(res.result.buildTest.commands[0].stderrPreview, '\0');
+        }
+      }
+    } finally {
+      execution.stop();
+      server.close();
+    }
+  });
+
+  test('input and path fields still strictly reject NUL', { timeout: 5000 }, () => {
+    assert.throws(
+      () => snapshotExecuteTaskInput({ baseRef: 'main\0', prompt: 'prompt' }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+    assert.throws(
+      () => snapshotExecuteTaskInput({ baseRef: 'main', prompt: 'prompt\0' }),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_INPUT'
+    );
+
+    const badBranch = validReviewReady({
+      source: {
+        branchName: 'agenthub/task-1\0',
+        baseCommit: OID40,
+        headCommit: HEX64,
+        changedPaths: ['src/a.ts'],
+        changeSetSha256: HEX64
+      }
+    });
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(badBranch),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
+
+    const badPath = validReviewReady({
+      source: {
+        branchName: 'agenthub/task-1',
+        baseCommit: OID40,
+        headCommit: HEX64,
+        changedPaths: ['src/a.ts\0'],
+        changeSetSha256: HEX64
+      }
+    });
+    assert.throws(
+      () => snapshotExecuteReviewReadyDto(badPath),
+      (err: AgentHubValidationError) => err.code === 'MALFORMED_EXECUTE_RESULT'
+    );
   });
 });

@@ -20,7 +20,29 @@ import {
 } from './AgentHubTypes';
 
 export const DEFAULT_AGENTHUB_BASE_URL = 'http://127.0.0.1:3210';
-const DEFAULT_TIMEOUT_MS = 5000;
+export const DEFAULT_TIMEOUT_MS = 5000;
+export const DEFAULT_EXECUTE_TIMEOUT_MS = 5 * 60_000; // 300,000 ms (5 minutes)
+export const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export interface AgentHubRestClientOptions {
+  readonly baseUrl?: string;
+  readonly timeoutMs?: number;
+  readonly executeTimeoutMs?: number;
+}
+
+export function validateTimeoutMs(val: unknown, fieldName: string, defaultVal: number): number {
+  if (val === undefined) {
+    return defaultVal;
+  }
+  if (typeof val !== 'number' || !Number.isSafeInteger(val) || val <= 0 || val > MAX_TIMEOUT_MS) {
+    throw new AgentHubContractError(
+      'INVALID_TIMEOUT',
+      `${fieldName} must be a positive safe integer <= ${MAX_TIMEOUT_MS} ms, got ${String(val)}`
+    );
+  }
+  return val;
+}
+
 const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8 MiB
 
 export type AgentHubContractPhase = 'preflight' | 'transport' | 'response-contract' | 'backend';
@@ -96,14 +118,24 @@ export function validateAgentHubBaseUrl(rawUrl: string): string {
 export class AgentHubRestClient {
   readonly #baseUrl: string;
   readonly #timeoutMs: number;
+  readonly #executeTimeoutMs: number;
 
-  constructor(options: { baseUrl?: string; timeoutMs?: number } = {}) {
+  constructor(options: AgentHubRestClientOptions = {}) {
     this.#baseUrl = validateAgentHubBaseUrl(options.baseUrl ?? DEFAULT_AGENTHUB_BASE_URL);
-    this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#timeoutMs = validateTimeoutMs(options.timeoutMs, 'timeoutMs', DEFAULT_TIMEOUT_MS);
+    this.#executeTimeoutMs = validateTimeoutMs(options.executeTimeoutMs, 'executeTimeoutMs', DEFAULT_EXECUTE_TIMEOUT_MS);
   }
 
   public get baseUrl(): string {
     return this.#baseUrl;
+  }
+
+  public get timeoutMs(): number {
+    return this.#timeoutMs;
+  }
+
+  public get executeTimeoutMs(): number {
+    return this.#executeTimeoutMs;
   }
 
   /**
@@ -186,7 +218,7 @@ export class AgentHubRestClient {
       throw new AgentHubContractError('BODY_OVERFLOW', 'Request body exceeds 1 MiB limit');
     }
 
-    const data = await this.#post<unknown>('/api/v1/tasks', bodyString, key, 201, signal);
+    const data = await this.#post<unknown>('/api/v1/tasks', bodyString, key, 201, signal, this.#timeoutMs);
     try {
       return snapshotTaskDto(data);
     } catch (err) {
@@ -220,7 +252,7 @@ export class AgentHubRestClient {
     }
 
     const path = `/api/v1/tasks/${encodeURIComponent(validatedTaskId)}/execute`;
-    const data = await this.#post<unknown>(path, bodyString, key, 200, signal);
+    const data = await this.#post<unknown>(path, bodyString, key, 200, signal, this.#executeTimeoutMs);
     try {
       return snapshotExecuteTaskResult(data);
     } catch (err) {
@@ -236,7 +268,7 @@ export class AgentHubRestClient {
    * Enforces streaming byte bounds, timeouts, and exact envelope validation.
    */
   async #get<T>(path: string, externalSignal?: AbortSignal): Promise<T> {
-    return this.#request<T>('GET', path, { 'Accept': 'application/json' }, undefined, externalSignal);
+    return this.#request<T>('GET', path, { 'Accept': 'application/json' }, undefined, externalSignal, undefined, this.#timeoutMs);
   }
 
   /**
@@ -247,7 +279,8 @@ export class AgentHubRestClient {
     body: string,
     idempotencyKey: string,
     expectedStatus: 200 | 201,
-    externalSignal?: AbortSignal
+    externalSignal?: AbortSignal,
+    timeoutMs: number = this.#timeoutMs
   ): Promise<T> {
     if (path !== '/api/v1/tasks' && !/^\/api\/v1\/tasks\/[^/]+\/execute$/.test(path)) {
       throw new AgentHubContractError('FORBIDDEN_ROUTE', `POST path is not in the mutation allowlist: ${path}`);
@@ -257,7 +290,7 @@ export class AgentHubRestClient {
       'Accept': 'application/json',
       'Idempotency-Key': idempotencyKey
     };
-    return this.#request<T>('POST', path, headers, body, externalSignal, expectedStatus);
+    return this.#request<T>('POST', path, headers, body, externalSignal, expectedStatus, timeoutMs);
   }
 
   async #request<T>(
@@ -266,7 +299,8 @@ export class AgentHubRestClient {
     headers: Record<string, string>,
     body: string | undefined,
     externalSignal?: AbortSignal,
-    expectedStatus?: 200 | 201
+    expectedStatus?: 200 | 201,
+    timeoutMs: number = this.#timeoutMs
   ): Promise<T> {
     if (externalSignal?.aborted) {
       throw new AgentHubContractError('ABORTED', 'Request aborted by caller', {
@@ -277,7 +311,7 @@ export class AgentHubRestClient {
 
     const url = `${this.#baseUrl}${path}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     let requestDispatched = false;
 
     function fail(
@@ -463,7 +497,7 @@ export class AgentHubRestClient {
         if (externalSignal?.aborted) {
           fail('ABORTED', 'Request aborted by caller', 'transport');
         }
-        fail('TIMEOUT', `Request timed out after ${this.#timeoutMs}ms`, 'transport');
+        fail('TIMEOUT', `Request timed out after ${timeoutMs}ms`, 'transport');
       }
       fail('NETWORK_ERROR', (err as Error).message || 'Network request failed', 'transport');
     } finally {
