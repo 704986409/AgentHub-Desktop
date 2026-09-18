@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore, selectedAgent } from '@/store/store';
+import { useAgentHubStore } from '@/stores/agentHubStore';
+import { projectAgentHubOffice } from '@/scene/office/agentHubOfficeProjection';
 import { startMockLoop, stopMockLoop } from '@/store/mockEvents';
 import type { HarnessConfig } from '@/store/config';
 import { DEFAULT_ORG_TRIGGER } from '@shared/triggers';
@@ -58,6 +60,14 @@ export function App() {
   const setSidebarWidth = useStore(s => s.setSidebarWidth);
   const ideOpen = useStore(s => s.ideOpen);
   const setIdeOpen = useStore(s => s.setIdeOpen);
+
+  const hubSnapshot = useAgentHubStore((s) => s.snapshot);
+  const hubSelectedAgentId = useAgentHubStore((s) => s.selectedAgentId);
+  const hubSelectAgent = useAgentHubStore((s) => s.selectAgent);
+  const officeProjection = useMemo(
+    () => projectAgentHubOffice(hubSnapshot),
+    [hubSnapshot]
+  );
 
   const [config, setConfig] = useState<HarnessConfig | null>(null);
   // Whether the user has passed the launch-time hive picker this session. Starts
@@ -401,7 +411,11 @@ export function App() {
         gap: 0
       }}>
         <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative' }}>
-          <OfficeFloor />
+          <OfficeFloor
+            agents={officeProjection.visibleAgents}
+            selectedAgentId={hubSelectedAgentId}
+            onSelectAgent={hubSelectAgent}
+          />
           <MemoryPanel />
           {agentCount === 0 && godStatus === 'booting' && <MichaelBooting />}
           {agentCount === 0 && godStatus !== 'booting' && (
