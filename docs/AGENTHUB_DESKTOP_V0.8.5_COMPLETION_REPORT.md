@@ -8,7 +8,7 @@
 | Base Release | `V0.8.4A` |
 | Base Commit SHA | `8ce590b3d67bb49591b837992865a6d690e812c5` (sealed + unchanged) |
 | Target Release Ref | `V0.8.5` |
-| Target Release SHA | VERIFY FROM TAG AFTER PUSH |
+| Target Release SHA | `9c45bcb3e8107a59fa1fe4998e20c2323f6a5a11` |
 | Target Commit Message | `feat(desktop): add read-only review evidence view` |
 | Backend Repository | `704986409/AgentHub` |
 | Backend Baseline Tag | `0.7.0G` |
@@ -102,7 +102,7 @@ AgentHub Desktop `V0.8.5` delivers a dedicated, read-only Review and Evidence in
 | check:links PASS | PASS | PASS | Release links consistent |
 | build PASS | PASS | PASS | `electron-vite build` passes |
 | git diff --check PASS | PASS | PASS | Passes with zero whitespace or line break errors |
-| GitHub CI PASS | PASS | PASS | Verified locally; will run on push to GitHub |
+| GitHub CI PASS | PASS | PASS | PASS (Run `35361653873` SUCCESS); V0.8.5A corrective CI pending on push |
 
 ---
 

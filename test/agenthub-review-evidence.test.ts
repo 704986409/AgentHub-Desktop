@@ -12,60 +12,71 @@ import {
   formatExitCode,
   formatCommittedPatch
 } from '../src/renderer/src/components/agentHubReviewPresentation';
-import type {
-  ExecuteReviewReadyDto,
-  TaskExecutionResult
+import {
+  snapshotExecuteReviewReadyDto,
+  type ExecuteReviewReadyDto,
+  type TaskExecutionResult
 } from '../src/shared/agenthubTypes';
 
 describe('AgentHub Review Evidence Read-Only', () => {
-  const sampleReviewReadyDto: ExecuteReviewReadyDto = {
-    outcome: 'review-ready',
-    reviewHandle: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
-    reviewBundleSha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
-    taskId: 'task-100',
-    assignmentId: 'asg-200',
-    agentId: 'agent-300',
-    providerId: 'claude',
-    workerResult: {
-      summary: 'Completed compiler optimization pass',
-      blockers: [],
-      questions: [],
-      risks: ['Cache invalidation edge case'],
-      notes: ['Refactored hot loop']
-    },
-    source: {
-      branchName: 'task/compiler-opt',
-      baseCommit: '1111111111111111111111111111111111111111',
-      headCommit: '2222222222222222222222222222222222222222',
-      changedPaths: ['src/compiler/opt.ts', 'test/compiler/opt.test.ts'],
-      changeSetSha256: '3333333333333333333333333333333333333333333333333333333333333333',
-      committedPatch: 'diff --git a/src/opt.ts b/src/opt.ts\n+optimized()'
-    },
-    buildTest: {
-      build: 'passed',
-      test: 'passed',
-      outcome: 'passed',
-      commands: [
-        {
-          id: 'cmd-build',
-          phase: 'build',
-          outcome: 'passed',
-          exitCode: 0,
-          stdoutPreview: 'Build succeeded in 1.2s',
-          stderrPreview: ''
-        },
-        {
-          id: 'cmd-test',
-          phase: 'test',
-          outcome: 'passed',
-          exitCode: 0,
-          stdoutPreview: 'All 42 tests passed',
-          stderrPreview: ''
-        }
-      ]
-    },
-    evidenceSha256: '4444444444444444444444444444444444444444444444444444444444444444'
-  };
+  function makeValidReviewReady(overrides: Partial<Record<string, any>> = {}): ExecuteReviewReadyDto {
+    const taskId = (overrides.taskId as string) ?? 'task-100';
+    const bundleSha = (overrides.reviewBundleSha256 as string) ?? 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0';
+    const sourceOverride = (overrides.source as Record<string, any>) ?? {};
+
+    const raw: Record<string, unknown> = {
+      outcome: 'review-ready',
+      reviewHandle: overrides.reviewHandle ?? bundleSha,
+      reviewBundleSha256: bundleSha,
+      taskId,
+      assignmentId: overrides.assignmentId ?? 'asg-200',
+      agentId: overrides.agentId ?? 'agent-300',
+      providerId: overrides.providerId ?? 'claude',
+      workerResult: overrides.workerResult ?? {
+        summary: 'Completed compiler optimization pass',
+        blockers: [],
+        questions: [],
+        risks: ['Cache invalidation edge case'],
+        notes: ['Refactored hot loop']
+      },
+      source: {
+        branchName: sourceOverride.branchName ?? `agenthub/${taskId}`,
+        baseCommit: sourceOverride.baseCommit ?? '1111111111111111111111111111111111111111',
+        headCommit: sourceOverride.headCommit ?? '2222222222222222222222222222222222222222',
+        changedPaths: sourceOverride.changedPaths ?? ['src/compiler/opt.ts', 'test/compiler/opt.test.ts'],
+        changeSetSha256: sourceOverride.changeSetSha256 ?? '3333333333333333333333333333333333333333333333333333333333333333',
+        ...('committedPatch' in sourceOverride ? { committedPatch: sourceOverride.committedPatch } : { committedPatch: 'diff --git a/src/opt.ts b/src/opt.ts\n+optimized()' })
+      },
+      buildTest: overrides.buildTest ?? {
+        build: 'passed',
+        test: 'passed',
+        outcome: 'passed',
+        commands: [
+          {
+            id: 'cmd-build',
+            phase: 'build',
+            outcome: 'passed',
+            exitCode: 0,
+            stdoutPreview: 'Build succeeded in 1.2s',
+            stderrPreview: ''
+          },
+          {
+            id: 'cmd-test',
+            phase: 'test',
+            outcome: 'passed',
+            exitCode: 0,
+            stdoutPreview: 'All 42 tests passed',
+            stderrPreview: ''
+          }
+        ]
+      },
+      evidenceSha256: overrides.evidenceSha256 ?? '4444444444444444444444444444444444444444444444444444444444444444'
+    };
+
+    return snapshotExecuteReviewReadyDto(raw);
+  }
+
+  const sampleReviewReadyDto: ExecuteReviewReadyDto = makeValidReviewReady();
 
   test('capture gate: executed + review-ready is captured into session store', { timeout: 5000 }, () => {
     const initial: Record<string, AgentHubReviewSessionRecord> = {};
@@ -204,35 +215,41 @@ describe('AgentHub Review Evidence Read-Only', () => {
 
   test('latest confirmed result for same task replaces earlier record; distinct tasks remain independent', { timeout: 5000 }, () => {
     const initial: Record<string, AgentHubReviewSessionRecord> = {};
+    const sha1A = 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0';
+    const sha2A = 'a2b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0';
+    const sha1B = 'b1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0';
 
     // Task 1, Rev A
+    const review1A = makeValidReviewReady({ taskId: 'task-1', reviewBundleSha256: sha1A, reviewHandle: sha1A });
     const res1A: TaskExecutionResult = {
       status: 'executed',
-      result: { ...sampleReviewReadyDto, taskId: 'task-1', reviewHandle: 'handle-1A' },
+      result: review1A,
       stateSynchronized: true
     };
     const state1 = captureReviewReadyResult(initial, res1A);
-    assert.equal(state1['task-1'].review.reviewHandle, 'handle-1A');
+    assert.equal(state1['task-1'].review.reviewHandle, sha1A);
 
     // Task 2, Rev A
+    const review2A = makeValidReviewReady({ taskId: 'task-2', reviewBundleSha256: sha2A, reviewHandle: sha2A });
     const res2A: TaskExecutionResult = {
       status: 'executed',
-      result: { ...sampleReviewReadyDto, taskId: 'task-2', reviewHandle: 'handle-2A' },
+      result: review2A,
       stateSynchronized: true
     };
     const state2 = captureReviewReadyResult(state1, res2A);
-    assert.equal(state2['task-1'].review.reviewHandle, 'handle-1A');
-    assert.equal(state2['task-2'].review.reviewHandle, 'handle-2A');
+    assert.equal(state2['task-1'].review.reviewHandle, sha1A);
+    assert.equal(state2['task-2'].review.reviewHandle, sha2A);
 
     // Task 1, Rev B (replaces Task 1)
+    const review1B = makeValidReviewReady({ taskId: 'task-1', reviewBundleSha256: sha1B, reviewHandle: sha1B });
     const res1B: TaskExecutionResult = {
       status: 'executed',
-      result: { ...sampleReviewReadyDto, taskId: 'task-1', reviewHandle: 'handle-1B' },
+      result: review1B,
       stateSynchronized: true
     };
     const state3 = captureReviewReadyResult(state2, res1B);
-    assert.equal(state3['task-1'].review.reviewHandle, 'handle-1B', 'Newer confirmed review must replace earlier record');
-    assert.equal(state3['task-2'].review.reviewHandle, 'handle-2A', 'Different task record must remain intact');
+    assert.equal(state3['task-1'].review.reviewHandle, sha1B, 'Newer confirmed review must replace earlier record');
+    assert.equal(state3['task-2'].review.reviewHandle, sha2A, 'Different task record must remain intact');
   });
 
   test('exact DTO preservation: identity, workerResult, source, buildTest, commands, and hashes', { timeout: 5000 }, () => {
@@ -259,14 +276,16 @@ describe('AgentHub Review Evidence Read-Only', () => {
   });
 
   test('4096 changed paths: capture retains exact length and ordering', { timeout: 5000 }, () => {
-    const paths4096 = Array.from({ length: 4096 }, (_, i) => `src/file_${i}.ts`);
-    const customReview: ExecuteReviewReadyDto = {
-      ...sampleReviewReadyDto,
+    const paths4096 = Array.from(
+      { length: 4096 },
+      (_, i) => `src/file_${String(i).padStart(4, '0')}.ts`
+    );
+    const customReview = makeValidReviewReady({
       source: {
         ...sampleReviewReadyDto.source,
         changedPaths: paths4096
       }
-    };
+    });
 
     const next = captureReviewReadyResult({}, {
       status: 'executed',
@@ -276,7 +295,7 @@ describe('AgentHub Review Evidence Read-Only', () => {
 
     const stored = next['task-100'].review.source.changedPaths;
     assert.equal(stored.length, 4096);
-    assert.equal(stored[0], 'src/file_0.ts');
+    assert.equal(stored[0], 'src/file_0000.ts');
     assert.equal(stored[4095], 'src/file_4095.ts');
   });
 
@@ -284,8 +303,7 @@ describe('AgentHub Review Evidence Read-Only', () => {
     const rawStdout = 'before\0after';
     const rawStderr = '\0error\0';
 
-    const customReview: ExecuteReviewReadyDto = {
-      ...sampleReviewReadyDto,
+    const customReview = makeValidReviewReady({
       buildTest: {
         ...sampleReviewReadyDto.buildTest,
         commands: [
@@ -298,7 +316,7 @@ describe('AgentHub Review Evidence Read-Only', () => {
           }
         ]
       }
-    };
+    });
 
     const next = captureReviewReadyResult({}, {
       status: 'executed',
@@ -319,13 +337,12 @@ describe('AgentHub Review Evidence Read-Only', () => {
 
   test('Unicode preservation: non-ASCII characters preserved without normalization or stripping', { timeout: 5000 }, () => {
     const unicodeSummary = '🚀 优化编译器：支持 UTF-8 符号与 Emoji ✨';
-    const customReview: ExecuteReviewReadyDto = {
-      ...sampleReviewReadyDto,
+    const customReview = makeValidReviewReady({
       workerResult: {
         ...sampleReviewReadyDto.workerResult,
         summary: unicodeSummary
       }
-    };
+    });
 
     const next = captureReviewReadyResult({}, {
       status: 'executed',
@@ -346,7 +363,69 @@ describe('AgentHub Review Evidence Read-Only', () => {
     // committedPatch
     assert.equal(formatCommittedPatch('diff content'), 'diff content');
     assert.equal(formatCommittedPatch(undefined), 'No committed patch value returned.');
-    assert.equal(formatCommittedPatch(''), 'No committed patch value returned.');
+    assert.equal(formatCommittedPatch(''), '');
+  });
+
+  test('committedPatch presence semantics: empty string vs absent distinguishable end-to-end', { timeout: 5000 }, () => {
+    // Present empty string
+    const reviewWithEmptyPatch = makeValidReviewReady({
+      source: {
+        ...sampleReviewReadyDto.source,
+        committedPatch: ''
+      }
+    });
+    assert.equal(reviewWithEmptyPatch.source.committedPatch, '');
+
+    const stateEmpty = captureReviewReadyResult({}, {
+      status: 'executed',
+      result: reviewWithEmptyPatch,
+      stateSynchronized: true
+    });
+    const recordEmpty = stateEmpty['task-100'];
+    assert.equal(recordEmpty.review.source.committedPatch, '');
+    assert.equal(formatCommittedPatch(recordEmpty.review.source.committedPatch), '');
+
+    // Absent committedPatch
+    const rawWithoutPatch = {
+      outcome: 'review-ready',
+      reviewHandle: sampleReviewReadyDto.reviewHandle,
+      reviewBundleSha256: sampleReviewReadyDto.reviewBundleSha256,
+      taskId: 'task-absent',
+      assignmentId: 'asg-200',
+      agentId: 'agent-300',
+      providerId: 'claude',
+      workerResult: {
+        summary: 'No patch worker summary',
+        blockers: [],
+        questions: [],
+        risks: [],
+        notes: []
+      },
+      source: {
+        branchName: 'agenthub/task-absent',
+        baseCommit: '1111111111111111111111111111111111111111',
+        headCommit: '2222222222222222222222222222222222222222',
+        changedPaths: ['src/a.ts'],
+        changeSetSha256: '3333333333333333333333333333333333333333333333333333333333333333'
+        // committedPatch intentionally absent
+      },
+      buildTest: sampleReviewReadyDto.buildTest,
+      evidenceSha256: sampleReviewReadyDto.evidenceSha256
+    };
+    const reviewWithoutPatch = snapshotExecuteReviewReadyDto(rawWithoutPatch);
+    assert.equal(reviewWithoutPatch.source.committedPatch, undefined);
+
+    const stateAbsent = captureReviewReadyResult({}, {
+      status: 'executed',
+      result: reviewWithoutPatch,
+      stateSynchronized: true
+    });
+    const recordAbsent = stateAbsent['task-absent'];
+    assert.equal(recordAbsent.review.source.committedPatch, undefined);
+    assert.equal(
+      formatCommittedPatch(recordAbsent.review.source.committedPatch),
+      'No committed patch value returned.'
+    );
   });
 
   test('architecture guard: Review session store does not use persistent browser/disk APIs', { timeout: 5000 }, () => {

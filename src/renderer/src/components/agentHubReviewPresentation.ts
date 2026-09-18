@@ -33,8 +33,7 @@ export function formatExitCode(exitCode?: number | null): string {
  * If absent, returns honest notification string.
  */
 export function formatCommittedPatch(patch?: string): string {
-  if (patch === undefined || patch === null || patch === '') {
-    return 'No committed patch value returned.';
-  }
-  return patch;
+  return patch === undefined
+    ? 'No committed patch value returned.'
+    : patch;
 }
