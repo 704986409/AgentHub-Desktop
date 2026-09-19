@@ -5,7 +5,7 @@ import {
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
   readlinkSync, symlinkSync
 } from 'node:fs';
-import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { request as httpsRequest } from 'node:https';
@@ -2644,6 +2644,97 @@ export async function spawnDeveloperTerminalCore(
   return { ok: true, cwd };
 }
 
+import {
+  type TerminalSession,
+  terminalSessions,
+  sessionForSender,
+  handleDeveloperTerminalWrite,
+  handleDeveloperTerminalResize,
+  handleDeveloperTerminalClose
+} from './terminalSession';
+
+export {
+  type TerminalSession,
+  terminalSessions,
+  sessionForSender,
+  handleDeveloperTerminalWrite,
+  handleDeveloperTerminalResize,
+  handleDeveloperTerminalClose
+};
+
+export async function createDeveloperTerminalWindow(options?: {
+  cwd?: string;
+  cols?: number;
+  rows?: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const cwd = options?.cwd ? expandTilde(options.cwd) : (process.env.HOME || process.cwd());
+  if (!existsSync(cwd)) {
+    return { ok: false, error: `cwd does not exist: ${cwd}` };
+  }
+
+  const terminalPreloadPath = join(__dirname, '../preload/terminal.js');
+  const win = new BrowserWindow({
+    width: 900,
+    height: 600,
+    minWidth: 400,
+    minHeight: 300,
+    title: `Terminal — ${cwd}`,
+    backgroundColor: '#18181b',
+    show: false,
+    webPreferences: {
+      preload: terminalPreloadPath,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  });
+
+  const ptyId = `term_${randomUUID()}`;
+  const spawnRes = await spawnDeveloperTerminalCore({
+    id: ptyId,
+    cwd,
+    cols: options?.cols ?? 80,
+    rows: options?.rows ?? 24
+  }, win.webContents);
+
+  if (!spawnRes.ok) {
+    win.destroy();
+    return { ok: false, error: spawnRes.error ?? 'failed to spawn developer terminal' };
+  }
+
+  const session: TerminalSession = {
+    ptyId,
+    ownerWebContentsId: win.webContents.id,
+    cwd
+  };
+  terminalSessions.set(win.webContents.id, session);
+
+  // Security hardening: deny popup windows and foreign navigations (spec §18)
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+
+  win.on('closed', () => {
+    terminalSessions.delete(win.webContents.id);
+    try {
+      ptyManager.kill(ptyId);
+    } catch {
+      /* ignore */
+    }
+  });
+
+  if (isDev && process.env.ELECTRON_RENDERER_URL) {
+    win.loadURL(new URL('terminal.html', process.env.ELECTRON_RENDERER_URL).href);
+  } else {
+    win.loadFile(join(__dirname, '../renderer/terminal.html'));
+  }
+
+  win.once('ready-to-show', () => win.show());
+  return { ok: true };
+}
+
 ipcMain.handle('pty:spawn', async (evt, opts: DeveloperTerminalSpawnOptions) => {
   if (!opts || typeof opts.id !== 'string' || typeof opts.cwd !== 'string') {
     return { ok: false, error: 'invalid SpawnOptions' };
@@ -3068,9 +3159,26 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // record matches what the registry and the PTY actually used.
   return { ...res, cwd: opts.cwd, ...(worktreePath ? { worktreePath } : {}), ...(resumeNotFound ? { resumeNotFound: true } : {}), ...(didResume ? { resumed: true } : {}), ...(seedPrompt ? { seedPrompt } : {}) };
 }
-ipcMain.handle('pty:write', (_evt, id: string, data: string) => {
-  if (typeof id !== 'string' || typeof data !== 'string') return { ok: false, error: 'invalid args' };
-  return ptyManager.write(id, data);
+
+// ─── IPC: developer terminal (dedicated & sender-bound) ─────────────────────
+ipcMain.handle('developer-terminal:write', (evt, data: string) =>
+  handleDeveloperTerminalWrite(evt.sender.id, data, (id, d) => ptyManager.write(id, d))
+);
+ipcMain.handle('developer-terminal:resize', (evt, cols: number, rows: number) =>
+  handleDeveloperTerminalResize(evt.sender.id, cols, rows, (id, c, r) => ptyManager.resize(id, c, r))
+);
+ipcMain.handle('developer-terminal:close', (evt) => {
+  const res = handleDeveloperTerminalClose(evt.sender.id, (id) => ptyManager.kill(id));
+  if (res.ok) {
+    const win = BrowserWindow.fromWebContents(evt.sender);
+    if (win && !win.isDestroyed()) {
+      win.close();
+    }
+  }
+  return res;
+});
+ipcMain.handle('developer-terminal:open', async (_evt, opts?: { cwd?: string; cols?: number; rows?: number }) => {
+  return createDeveloperTerminalWindow(opts);
 });
 ipcMain.handle('pty:resize', (_evt, id: string, cols: number, rows: number) => {
   if (typeof id !== 'string' || typeof cols !== 'number' || typeof rows !== 'number') return { ok: false, error: 'invalid args' };

@@ -618,8 +618,14 @@ const api = {
     };
     return ipcRenderer.invoke('pty:spawn', sanitized);
   },
-  writePty: (id: string, data: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke('pty:write', id, data),
+  openDeveloperTerminal: (opts?: { cwd?: string; cols?: number; rows?: number }): Promise<{ ok: boolean; error?: string }> => {
+    const sanitized = {
+      cwd: typeof opts?.cwd === 'string' ? opts.cwd : undefined,
+      cols: typeof opts?.cols === 'number' ? opts.cols : undefined,
+      rows: typeof opts?.rows === 'number' ? opts.rows : undefined
+    };
+    return ipcRenderer.invoke('developer-terminal:open', sanitized);
+  },
   resizePty: (id: string, cols: number, rows: number): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('pty:resize', id, cols, rows),
   redrawPty: (id: string): Promise<{ ok: boolean; error?: string }> =>

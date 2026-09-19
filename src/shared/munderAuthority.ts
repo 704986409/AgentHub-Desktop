@@ -22,7 +22,10 @@ export const FORBIDDEN_AGENTHUB_RENDERER_AUTHORITY_KEYS = Object.freeze([
   'hire',
   'godCommand',
   'exec',
-  'spawn'
+  'spawn',
+  'writePty',
+  'sendToPty',
+  'terminalWrite'
 ]);
 
 /** AgentHub provider execution is only allowed through this preload surface. */

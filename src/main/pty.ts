@@ -707,12 +707,18 @@ export class PtyManager {
         session.tail = (session.tail + data).slice(-TAIL_MAX);
         // Route to the session's owner window (multi-window owner routing).
         this.safeSend(`pty:data:${opts.id}`, data, session.owner);
+        if (session.owner) {
+          this.safeSend('developer-terminal:data', data, session.owner);
+        }
       });
       proc.onExit(({ exitCode, signal }) => {
         // Stale exit from a process whose id was reclaimed (kill()+respawn) — do
         // NOT touch the live session or tell the renderer the new pty died.
         if (this.sessions.get(opts.id) !== session) return;
         this.safeSend(`pty:exit:${opts.id}`, { exitCode, signal }, session.owner);
+        if (session.owner) {
+          this.safeSend('developer-terminal:exit', { exitCode, signal }, session.owner);
+        }
         this.sessions.delete(opts.id);
         // Natural exit must run the same lifecycle teardown as an explicit kill.
         // Guarded so a teardown error can never crash node-pty's exit callback.

@@ -329,9 +329,8 @@ export function PtyTerminalView({ ptyId, onStreamData, onUserPrompt, onToggleFul
         return p.replace(CTRL, '').split('')
           .map((ch) => (SPECIAL.has(ch.charCodeAt(0)) ? BS + ch : ch)).join('');
       });
-    if (paths.length === 0) return;
-    // Trailing space separates consecutive drops and lets the user keep typing.
-    void window.cth.writePty(ptyId, paths.join(' ') + ' ');
+    // Primary Renderer has no PTY write authority in V0.8.9C. Interactive terminal input is restricted to Dedicated Terminal Window.
+    console.info('[PtyTerminalView] Terminal drop write ignored; interactive terminal input is delegated to Dedicated Terminal Window.');
   };
 
   const zoom = (delta: number) => setTerminalFontSize(getTerminalFontSize() + delta);

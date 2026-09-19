@@ -64,7 +64,10 @@ export default defineConfig({
     define,
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/preload/index.ts') }
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          terminal: resolve(__dirname, 'src/preload/terminal.ts')
+        }
       }
     }
   },
@@ -73,7 +76,10 @@ export default defineConfig({
     root: resolve(__dirname, 'src/renderer'),
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/renderer/index.html') }
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          terminal: resolve(__dirname, 'src/renderer/terminal.html')
+        }
       }
     },
     plugins: [react()],

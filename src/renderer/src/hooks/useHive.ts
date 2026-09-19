@@ -138,17 +138,10 @@ function submitToPty(
     // commands) is sent raw — some TUIs (Antigravity's agy) treat the paste
     // markers as literal input and never submit, so skipping them is more robust.
     const payload = text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text;
-    // writePty NEVER rejects for a dead pty — it resolves { ok:false, error:
-    // 'no pty: …' } — so an unchecked await here made every failed delivery look
-    // successful (the queue-drain then destroyed the message it had already
-    // popped, #36). Surface the failure as a rejection; the chain itself is
-    // immune (the prev.catch above absorbs it for the next writer).
-    const wrote = await window.cth.writePty(ptyId, payload);
-    if (!wrote?.ok) throw new Error(wrote?.error ?? `pty write failed: ${ptyId}`);
-    await new Promise((r) => setTimeout(r, 140));
-    const submitted = await window.cth.writePty(ptyId, '\r');
-    if (!submitted?.ok) throw new Error(submitted?.error ?? `pty write failed: ${ptyId}`);
-    await new Promise((r) => setTimeout(r, settleMs));
+    // V0.8.9C: Primary AgentHub Renderer has no PTY write authority.
+    // Programmatic agent execution is routed strictly via Backend executeTask.
+    console.warn(`[useHive] Programmatic PTY write suppressed for ${ptyId} (AgentHub provider execution is Backend-only).`);
+    return;
   });
   writeChains.set(ptyId, next);
   return next;

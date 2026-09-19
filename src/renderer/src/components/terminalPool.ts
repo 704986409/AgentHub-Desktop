@@ -115,7 +115,7 @@ export function notifyThemeChangeAll(theme: 'light' | 'dark'): void {
 function notifyThemeChange(ptyId: string, theme: 'light' | 'dark'): void {
   const entry = pool.get(ptyId);
   if (!entry || entry.exited || !entry.themeNotify) return;
-  window.cth.writePty(ptyId, `\x1b[?997;${theme === 'dark' ? 1 : 2}n`);
+  // V0.8.9C: Primary Renderer has no PTY write authority.
 }
 
 /** Get (or lazily create) the persistent terminal for a pty. Theme/font are
@@ -293,11 +293,7 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
   const oscColorReply = (index: 10 | 11) => (data: string): boolean => {
     if (data !== '?') return false;          // only the QUERY form; a SET is not ours to handle
     if (entry.exited) return true;           // swallow it rather than write to a dead pty
-    const map = (term.options.theme ?? theme) as ThemeMap | undefined;
-    const hex = index === 11 ? map?.background : map?.foreground;
-    const rgb = hex && parseHexColor(hex);
-    if (!rgb) return false;                  // unknown colour: stay silent rather than lie
-    window.cth.writePty(ptyId, `\x1b]${index};${oscColorBody(rgb)}\x1b\\`);
+    // V0.8.9C: Primary Renderer has no PTY write authority.
     return true;
   };
   term.parser.registerOscHandler(10, oscColorReply(10));
@@ -334,7 +330,8 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
   // path resets it too.
   term.onData((data) => {
     if (entry.exited) return;
-    window.cth.writePty(ptyId, data);
+    // V0.8.9C: Primary AgentHub Renderer has no PTY write authority.
+    // Keystrokes in Primary are inert; interactive terminal input requires Dedicated Terminal Window.
     // A lone Escape or Ctrl-C closes interactive pickers. Arrow-key escape
     // sequences must NOT clear the block while the user navigates a picker.
     if (data === '\x1b' || data === '\x03') {
@@ -525,7 +522,7 @@ export function clearTerminalDraft(ptyId: string): string {
   // again. Ctrl-U is not undoable in a TUI, so silently discarding it was data
   // loss every time an abandoned-looking draft turned out to be a real one.
   const discarded = entry.lineBuf;
-  void window.cth.writePty(ptyId, '\x15');
+  // V0.8.9C: Primary Renderer has no PTY write authority.
   entry.inputDirty = false;
   entry.inputDirtyAt = 0;
   // Reset our model of the line too. Leaving it set made the very next keystroke
@@ -551,7 +548,7 @@ export function clearTerminalDraft(ptyId: string): string {
 export function dismissTerminalPicker(ptyId: string): void {
   const entry = pool.get(ptyId);
   if (!entry || entry.exited) return;
-  void window.cth.writePty(ptyId, '\x1b');
+  // V0.8.9C: Primary Renderer has no PTY write authority.
   releasePickerBlock(entry);
 }
 

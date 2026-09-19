@@ -5,7 +5,7 @@
 - **Version**: AgentHub Desktop V0.8.9B — Renderer Provider Capability Closure
 - **Role**: P0 capability hole closure following V0.8.9A independent audit
 - **Base Commit**: `c64b70447d459ffd49a411ceb29af9d224fcdeff`
-- **Production SHA**: `c4a85f6d5312384f7b6059d6153ea3e414c5b3ca`
+- **Production SHA**: `c4a85f6dcaa58639099180de704c7789347efd27` *(Note: previously recorded with typographical error c4a85f6d5312384f7b6059d6153ea3e414c5b3ca; corrected per V0.8.9C audit)*
 - **Tag**: `V0.8.9B`
 - **Backend Alignment**: AgentHub Backend 0.7.2E (`SEALED` + `UNCHANGED`)
 - **Backend Changed**: NO
@@ -16,7 +16,7 @@
 - **External API/Model Calls**: 0 (Fully in-memory mock, zero external quota consumed)
 - **Unrelated Refactors**: NO
 - **GitHub Actions Run ID**: `35411362604`
-- **GitHub Actions Head SHA**: `c4a85f6d5312384f7b6059d6153ea3e414c5b3ca`
+- **GitHub Actions Head SHA**: `c4a85f6dcaa58639099180de704c7789347efd27`
 - **GitHub Actions Status**: `completed`
 - **GitHub Actions Conclusion**: `success`
 - **Skip Count**: `0`
