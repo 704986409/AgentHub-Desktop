@@ -7,7 +7,7 @@
  * of the loop's status.
  *
  * Gating mirrors the established Free Flow / Groq precedent (FreeFlowButton in
- * MessageQueueComposer): the button stays VISIBLE but DISABLED when no BYOK OpenAI key is
+ * other voice controls): the button stays VISIBLE but DISABLED when no BYOK OpenAI key is
  * present (`hasOpenAiKey === false`), with a tooltip pointing at Settings — so connect() /
  * getUserMedia are never reached without a key (the zero-call-when-unavailable guarantee).
  *

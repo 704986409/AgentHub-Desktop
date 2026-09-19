@@ -4,23 +4,19 @@ import { PixelPanel } from './PixelPanel';
 import { PixelBadge } from './PixelBadge';
 import { PixelButton } from './PixelButton';
 import { SpritePortrait } from './SpritePortrait';
-import { PtyTerminalView } from './PtyTerminalView';
-import { MessageQueueComposer } from './MessageQueueComposer';
 import { TasksKanban } from './TasksKanban';
 import { AskMeTab } from './AskMeTab';
 import { TriggersTab } from './triggers/TriggersTab';
 import { TriggerHistoryTab } from './triggers/TriggerHistoryTab';
 import { WorkersTab } from './WorkersTab';
 import { SkillsTab } from './SkillsTab';
-import { terminalInstanceKey } from './terminalRecovery';
 import { LEGACY_RUNTIME_ACTION_POLICY } from './runtimeActionSemantics';
 import { Icon } from './Icon';
 import { MemoryGraphPanel } from './MemoryGraphPanel';
 import { useFleetTelemetry } from '@/hooks/useTelemetry';
 import { COMMAND_GROUPS } from '@shared/claudeCommands';
 import { roleForHiveSpawn } from '@shared/agentRole';
-import { useStore, triggerHistoryVisible, type Agent } from '@/store/store';
-import { usePtyParser } from '@/hooks/usePtyParser';
+import { useStore, triggerHistoryVisible, type PresentationActor } from '@/store/store';
 import {
   inferAgentProvider,
   isClaudeProvider,
@@ -30,14 +26,14 @@ import { isComposingKey } from '@shared/imeGuard';
 import { useRtl } from '@/i18n/useDirection';
 
 /** Michael's control surface. Shown instead of the plain terminal/files panel
- *  when the god agent is selected: terminal + queue, the floor roster (with
- *  per-agent model + dispatch + assistant access), a memory view, and a live
+ *  when the Office Host is selected: floor roster (with per-agent model +
+ *  dispatch + assistant access), a memory view, and a live
  *  activity feed / board / usage meter. */
 
 // Both the AskMe (#human) tab and the Triggers tab live here. Triggers replaced
 // the old Schedules tab: schedules are now one of four trigger types, and the
 // whole surface lives in ./triggers (see src/shared/triggers.ts for the contract).
-type CCTab = 'terminal' | 'floor' | 'tasks' | 'human' | 'triggers' | 'trigger-history'
+type CCTab = 'floor' | 'tasks' | 'human' | 'triggers' | 'trigger-history'
   | 'memory' | 'graph' | 'activity' | 'skills' | 'workers';
 
 /** Fallback denominator for the per-agent token meter when no floor token budget
@@ -57,7 +53,6 @@ interface GHIssue {
 
 /** Canonical tab order. Not every entry is always shown — see `visibleTabs`. */
 const TABS: { key: CCTab; labelKey: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
-  { key: 'terminal', labelKey: 'commandCenter.tabs.terminal', icon: 'terminal' },
   { key: 'floor', labelKey: 'commandCenter.tabs.floor', icon: 'mcp' },
   { key: 'tasks', labelKey: 'commandCenter.tabs.tasks', icon: 'check' },
   { key: 'human', labelKey: 'commandCenter.tabs.human', icon: 'bell' },
@@ -70,13 +65,9 @@ const TABS: { key: CCTab; labelKey: string; icon: Parameters<typeof Icon>[0]['na
   { key: 'workers', labelKey: 'commandCenter.tabs.workers', icon: 'gear' }
 ];
 
-/** @param fullscreen this instance IS the fullscreen overlay, so it owns the pty
- *  and renders the real terminal. The docked instance renders the "open in
- *  fullscreen" placeholder instead — two live xterms on one pty fight over its
- *  cols/rows and corrupt the display. */
-export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent; fullscreen?: boolean }) {
+export function CommandCenterPanel({ actor }: { actor: PresentationActor }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<CCTab>('terminal');
+  const [tab, setTab] = useState<CCTab>('floor');
   // The trigger-history ledger has nothing to say until an outside party can
   // reach us, so its tab appears only once an org key or a webhook exists. This
   // is the first config-gated tab in the panel: TABS stays the canonical order
@@ -86,7 +77,7 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
   const showHistory = useStore(triggerHistoryVisible);
   // Never leave the panel parked on a tab that has just been hidden.
   useEffect(() => {
-    if (!showHistory && tab === 'trigger-history') setTab('terminal');
+    if (!showHistory && tab === 'trigger-history') setTab('floor');
   }, [showHistory, tab]);
   const visibleTabs = TABS.filter((t) => t.key !== 'trigger-history' || showHistory);
 
@@ -114,31 +105,6 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
   }, [dispatchSeedRequest]);
   // Lifted so the memory-graph tab can jump to a specific agent's memory file.
   const [selectedMemoryAgent, setSelectedMemoryAgent] = useState<string | null>(null);
-  const updateAgent = useStore((s) => s.updateAgent);
-  const setFullscreen = useStore((s) => s.setFullscreen);
-  const fullscreenAgentId = useStore((s) => s.fullscreenAgentId);
-  const onPtyStream = usePtyParser(agent.id);
-  // True only for the DOCKED panel while the overlay holds this agent.
-  const isFullscreenedHere = fullscreenAgentId === agent.id && !fullscreen;
-  // v0.3.4: ONE floor-wide auto-delivery switch, moved off the per-agent
-  // control strips — toggling applies to every live agent, god included.
-  // Seeded from the god's own control state (the floor is kept in sync by
-  // this single control, so any agent's state reflects the floor's).
-  const [floorDeliveryPaused, setFloorDeliveryPaused] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    window.cth.controlSnapshot(agent.id)
-      .then((s) => { if (alive && s) setFloorDeliveryPaused(s.autoDeliveryPaused); })
-      .catch(() => { /* none */ });
-    return () => { alive = false; };
-  }, [agent.id]);
-  const toggleFloorDelivery = async () => {
-    const next = !floorDeliveryPaused;
-    setFloorDeliveryPaused(next);
-    const all = useStore.getState().agents;
-    await Promise.all(all.map((a) => window.cth.controlAutoDelivery(a.id, next).catch(() => null)));
-  };
-
   return (
     <PixelPanel
       variant="default"
@@ -152,11 +118,11 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
         borderBottom: '1px solid var(--cth-ink-700)', flexShrink: 0
       }}>
         <div style={{
-          width: 32, height: 32, background: `var(--cth-${agent.accent}-light)`,
+          width: 32, height: 32, background: `var(--cth-${actor.accent}-light)`,
           boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)',
           display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden', flexShrink: 0
         }}>
-          <SpritePortrait character={agent.character} scale={1} />
+          <SpritePortrait character={actor.character} scale={1} />
         </div>
         {/* Title + subtitle truncate; the control cluster never shrinks. At
             sidebar width the old header wrapped its 24-char display-font title
@@ -168,42 +134,21 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
           }}>{t('commandCenter.title')}</div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 1, minWidth: 0 }}>
-            <PixelBadge status={agent.status} />
             <span style={{
               fontSize: 12, color: 'var(--cth-ink-500)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-            }}>{t('commandCenter.runsTheFloor', { name: agent.name })}</span>
+            }}>{actor.name} — {actor.description}</span>
           </div>
         </div>
-        {/* v0.3.4: floor-wide auto-delivery lives HERE (one switch for every
-            agent's queue), and the IDE opens from agent level, not the toolbar.
-            Short labels — the tooltips carry the full explanation. */}
+        {/* The Office Host is presentation-only. This header exposes UI tools,
+            never runtime delivery or terminal controls. */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-          <PixelButton
-            variant={floorDeliveryPaused ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => { void toggleFloorDelivery(); }}
-          >
-            <span
-              className="cth-tip cth-tip-wrap"
-              data-tip={floorDeliveryPaused
-                ? t('commandCenter.deliveryPausedTitle')
-                : t('commandCenter.deliveryOnTitle')}
-              aria-label={floorDeliveryPaused
-                ? t('commandCenter.deliveryResumeAria')
-                : t('commandCenter.deliveryHoldAria')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-            >
-              <Icon name={floorDeliveryPaused ? 'pause' : 'play'} />
-              {floorDeliveryPaused ? t('commandCenter.deliveryPaused') : t('commandCenter.deliveryAuto')}
-            </span>
-          </PixelButton>
           {/* Floor-level surface with no agent of its own: the honest target is
               whoever is selected, stated explicitly rather than left to the
               IDE's fallback so the intent is visible at the call site. */}
           <PixelButton variant="secondary" size="sm" onClick={() => {
             const s = useStore.getState();
-            s.setIdeOpen(true, s.selectedId);
+            s.setIdeOpen(true, null);
           }}>
             <span
               className="cth-tip cth-tip-wrap"
@@ -246,8 +191,8 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
         // In focus mode the panel is wide and vertical space is the scarce
         // resource, so it stays ONE row and scrolls instead. `.cth-tabbar` in
         // global.css already hides that scrollbar.
-        flexWrap: fullscreen ? 'nowrap' : 'wrap',
-        overflowX: fullscreen ? 'auto' : 'visible',
+        flexWrap: 'wrap',
+        overflowX: 'visible',
         padding: '6px 8px', background: 'var(--cth-cream-100)',
         borderBottom: '1px solid var(--cth-ink-700)', flexShrink: 0
       }}>
@@ -263,7 +208,7 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
               flex: '1 0 auto',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               padding: '4px 8px 3px', border: 'none', cursor: 'pointer',
-              background: tab === tabDef.key ? `var(--cth-${agent.accent})` : 'var(--cth-cream-200)',
+              background: tab === tabDef.key ? `var(--cth-${actor.accent})` : 'var(--cth-cream-200)',
               // The selected tab is filled with the agent's accent, which is a
               // LIGHT colour in both themes. ink-900 flips to near-white in dark
               // mode, so the active tab's label was pale-on-pale — the one tab
@@ -282,50 +227,22 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
 
       {/* Body */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {tab === 'terminal' && (
-          isFullscreenedHere ? (
-            <Centered>{t('commandCenter.terminalFullscreen')}</Centered>
-          ) : agent.ptyId ? (
-            <>
-              <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-                <PtyTerminalView
-                  key={terminalInstanceKey(agent.ptyId, agent.terminalGeneration)}
-                  ptyId={agent.ptyId}
-                  onStreamData={onPtyStream}
-                  onUserPrompt={(t) => {
-                    updateAgent(agent.id, { lastPrompt: t });
-                    if (t.trim().toLowerCase() === '/clear') {
-                      updateAgent(agent.id, { contextTokens: 0, contextLimit: undefined, progress: 0 });
-                    }
-                    void window.cth.historyAdd({ agentId: agent.id, cwd: agent.cwd, text: t });
-                  }}
-                  onToggleFullscreen={() => setFullscreen(fullscreen ? null : agent.id)}
-                  fullscreen={fullscreen}
-                  embedded={!fullscreen}
-                />
-              </div>
-              <MessageQueueComposer agent={agent} />
-            </>
-          ) : (
-            <Centered>{t('commandCenter.noTerminal', { name: agent.name })}</Centered>
-          )
-        )}
         {tab === 'floor' && <FloorTab seed={dispatchSeed} />}
         {tab === 'tasks' && <TasksKanban />}
         {tab === 'human' && <AskMeTab />}
         {tab === 'triggers' && <TriggersTab />}
         {tab === 'trigger-history' && <TriggerHistoryTab />}
         {tab === 'memory' && (
-          <MemoryTab godId={agent.id} who={selectedMemoryAgent ?? undefined} onWho={setSelectedMemoryAgent} />
+          <MemoryTab godId={actor.id} who={selectedMemoryAgent ?? undefined} onWho={setSelectedMemoryAgent} />
         )}
         {tab === 'graph' && (
           <MemoryGraphPanel
-            godId={agent.id}
+            godId={actor.id}
             onJumpToMemory={(id) => { setSelectedMemoryAgent(id); setTab('memory'); }}
           />
         )}
         {tab === 'activity' && <ActivityTab />}
-        {tab === 'skills' && <SkillsTab agentCwd={agent.cwd} />}
+        {tab === 'skills' && <SkillsTab agentCwd={actor.cwd} />}
         {tab === 'workers' && <WorkersTab />}
       </div>
     </PixelPanel>

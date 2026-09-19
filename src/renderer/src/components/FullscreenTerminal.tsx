@@ -5,7 +5,6 @@ import { PixelBadge } from './PixelBadge';
 import { PixelButton } from './PixelButton';
 import { PtyTerminalView } from './PtyTerminalView';
 import { terminalInstanceKey } from './terminalRecovery';
-import { MessageQueueComposer } from './MessageQueueComposer';
 import { AgentControlStrip } from './AgentControlStrip';
 import { CommandCenterPanel } from './CommandCenterPanel';
 import { EditAgentModal } from './EditAgentModal';
@@ -150,7 +149,7 @@ export interface FullscreenTerminalProps {
 export function FullscreenTerminal({ config }: FullscreenTerminalProps) {
   const { t } = useTranslation();
   const agents = useStore(s => s.agents);
-  const restorableAgents = useStore(s => s.restorableAgents);
+  const presentationActor = useStore(s => s.presentationActor);
   const fullscreenAgentId = useStore(s => s.fullscreenAgentId);
   const setFullscreen = useStore(s => s.setFullscreen);
   const select = useStore(s => s.select);
@@ -486,42 +485,6 @@ export function FullscreenTerminal({ config }: FullscreenTerminalProps) {
             ))}
           </div>
 
-          {restorableAgents.length > 0 && (
-            <div style={{
-              flexShrink: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 6,
-              borderTop: '1px solid var(--cth-ink-300)'
-            }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {restorableAgents.map((a: Agent) => (
-                  <span
-                    key={a.id}
-                    title={`${a.name} — restorable from last session`}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 2,
-                      height: 20, padding: '0 2px 0 6px',
-                      fontFamily: 'var(--cth-font-ui)', fontSize: 11,
-                      color: 'var(--cth-ink-700)', background: 'var(--cth-paper-100)',
-                      boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
-                    }}
-                  >
-                    {a.name}
-                    <button
-                      onClick={() => useStore.getState().removeRestorableAgent(a.id)}
-                      title={`Dismiss ${a.name} — remove permanently from the restore list`}
-                      aria-label={`Dismiss ${a.name}`}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 14, height: 14, padding: 0, lineHeight: 1,
-                        fontFamily: 'var(--cth-font-ui)', fontSize: 11,
-                        color: 'var(--cth-ink-500)', background: 'transparent',
-                        border: 'none', cursor: 'pointer'
-                      }}
-                    >✕</button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </aside>
         )}
 
@@ -537,7 +500,7 @@ export function FullscreenTerminal({ config }: FullscreenTerminalProps) {
             // Column so the panel's `height: 100%` resolves against a definite
             // height and `align-items: stretch` gives it the full width.
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              <CommandCenterPanel agent={agent} fullscreen />
+              <CommandCenterPanel actor={presentationActor} />
             </div>
           ) : (
             <>
@@ -567,7 +530,6 @@ export function FullscreenTerminal({ config }: FullscreenTerminalProps) {
                     fullscreen
                   />
                 </div>
-                <MessageQueueComposer agent={agent} />
               </div>
             </>
           )}

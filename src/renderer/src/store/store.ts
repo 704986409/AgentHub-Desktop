@@ -13,9 +13,8 @@ import {
   type HireReviewQueue
 } from '@shared/hireQueue';
 import { DEFAULT_ORG_TRIGGER, type OrgTriggerConfig, type WebhookTrigger } from '@shared/triggers';
-import { isCompactionCommand } from '@shared/providerAutomation';
 import { preferredAgentRole } from '@shared/agentRole';
-import { isInboxNudge } from '@shared/hiveNudge';
+import { GOD_ID } from '@shared/godIdentity';
 import { refocusAfterRemoval, focusOnLoad, restoreFocus } from './focusMode';
 import { chooseRosterSource } from './rosterSource';
 
@@ -110,50 +109,22 @@ export interface Agent {
   seedPrompt?: string;
 }
 
+/** A UI-only host for the Command Center. It deliberately has no provider,
+ * runtime status, model, or PTY identity. */
+export interface PresentationActor {
+  id: typeof GOD_ID;
+  name: string;
+  character: 'michael';
+  accent: 'lemon';
+  description: string;
+  role: 'office-host';
+  cwd: string;
+}
+
 export interface FeedEntry {
   agentId: string;
   text: string;
   ts: number;
-}
-
-/** A message the user has parked for an agent while its terminal was busy.
- *  Queued messages are drained one at a time when the agent next goes idle (see
- *  useHive's flush loop). */
-export interface QueuedMessage {
-  id: string;
-  text: string;
-  /** epoch ms the message was queued — drives ordering and the "queued 2m ago" hint */
-  ts: number;
-  /** Slack-originated: thread coordinates so the office can reply in-thread. */
-  slack?: { channel: string; thread_ts: string };
-  /** Optional override for the text actually typed into the agent's PTY. When set,
-   *  the drain submits THIS instead of `text`, while UI/card surfaces keep using
-   *  `text`. Used by Slack-origin work to carry the autonomy preamble to god's
-   *  prompt without polluting the human-readable kanban card title (= raw `text`). */
-  instruction?: string;
-  /** User clicked "send now" while floor-wide auto-delivery was paused. Bypasses
-   *  ONLY the pause gate in the drain loop — idle/draft/picker safety still hold,
-   *  so it delivers the moment the terminal is actually free. */
-  manual?: boolean;
-  /** Delivery-time precondition, re-checked by the drain immediately before the
-   *  message is typed; a message whose precondition no longer holds is DROPPED
-   *  rather than deferred (deferring would park it at the queue head forever and
-   *  starve everything behind it).
-   *
-   *  Exists because a queued message is evaluated at enqueue time but delivered
-   *  an arbitrary interval later, and some messages are only worth sending if the
-   *  world they described still exists. 'inbox-nonempty' is the inbox-wake nudge:
-   *  the agent can drain its whole inbox in the same turn the nudge was queued
-   *  from, and delivering it afterwards costs a full turn to discover nothing is
-   *  there. Declarative (a string, not a closure) so it survives persistQueues. */
-  precondition?: 'inbox-nonempty';
-    /** Token count captured when a /compact was enqueued for this agent, carried
-   *  through to the point of successful delivery so the "already compacted at
-   *  N tokens" latch (see useHive) can be written there instead of at enqueue
-   *  time. Enqueue time is too early: a /compact stuck behind an undeliverable
-   *  status would otherwise latch out every future compact attempt for a
-   *  compaction that never actually happened. */
-  compactUsed?: number;
 }
 
 // 'files' retired in v0.3.4 (the per-agent IDE button superseded it) — a
@@ -161,24 +132,13 @@ export interface QueuedMessage {
 // v0.3.4: at-a-glance branch/status/log without opening the IDE.
 export type SidebarTab = 'terminal' | 'messages' | 'traces' | 'git';
 
-/** Lifecycle of the god agent ("Michael") bootstrap on launch.
- *  'booting' until his PTY is confirmed live, then 'ready' (or 'failed' if the
- *  spawn errored). The empty-floor UI shows a loader while 'booting' so users
- *  don't see the "add agent" prompt before Michael has clocked in. */
-export type GodStatus = 'booting' | 'ready' | 'failed';
-
 interface State {
   agents: Agent[];
+  presentationActor: PresentationActor;
   /** Agents whose terminal was closed — retained + flagged, kept off the active
    *  roster/floor. The hive registry retains them durably; this mirrors them for
    *  the renderer's "Archived" view. */
   archivedAgents: Agent[];
-  /** Workers from the previous session whose terminal died with the app (quit /
-   *  crash). Kept with their full spawn recipe (id, cwd, model, command) so the
-   *  user can one-click respawn them with the SAME agent id — memory, inbox and
-   *  registry entry reattach by themselves. God/assistant are excluded (they
-   *  auto-respawn). */
-  restorableAgents: Agent[];
   selectedId: string | null;
   feeds: Record<string, string[]>;
   addAgentOpen: boolean;
@@ -208,16 +168,11 @@ interface State {
   ideAgentId: string | null;
   sidebarWidth: number;
   sidebarTab: SidebarTab;
-  godStatus: GodStatus;
-  /** Per-agent outgoing message queue (agent id → messages awaiting delivery).
-   *  Lets the user keep "talking" to a busy agent: messages park here and are
-   *  drained to the terminal one-by-one once the agent is free. */
-  messageQueues: Record<string, QueuedMessage[]>;
   /** Per-agent tool-call count this session — a lightweight activity/usage proxy
    *  shown in the command center (interactive sessions don't expose billed $). */
   toolCounts: Record<string, number>;
   bumpToolCount: (id: string) => void;
-  setGodStatus: (status: GodStatus) => void;
+  setPresentationActorName: (name: string) => void;
   select: (id: string) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   /** Copy durable hive roles onto roster descriptions (and the reverse is a
@@ -236,8 +191,6 @@ interface State {
   /** Permanently forget an archived agent (drops the renderer entry only; the
    *  hive registry keeps its record). */
   removeArchivedAgent: (id: string) => void;
-  /** Drop one agent from the restorable list (it was respawned or dismissed). */
-  removeRestorableAgent: (id: string) => void;
   reorderAgents: (fromId: string, toId: string) => void; // move agent fromId into toId's slot (AgentStrip drag-reorder) and persist the new order
   /** One-shot request to open a Command-Center tab (e.g. clicking the office
    *  task board → 'tasks'). `seq` makes repeated identical requests distinct. */
@@ -297,17 +250,6 @@ interface State {
    *  else. Configuration only for now: no transport reads the key yet. */
   orgTrigger: OrgTriggerConfig;
   setOrgTrigger: (cfg: OrgTriggerConfig) => void;
-  /** Park a message for an agent. Returns nothing; the flush loop delivers it.
-   *  `meta.instruction`, when set, is what gets typed into the PTY instead of
-   *  `text` (UI/card surfaces still show `text`). */
-    enqueueMessage: (agentId: string, text: string, meta?: { slack?: { channel: string; thread_ts: string }; instruction?: string; precondition?: QueuedMessage['precondition']; compactUsed?: number }) => void;
-  /** Drop a single queued message (user removed it, or it was just delivered). */
-  removeQueuedMessage: (agentId: string, messageId: string) => void;
-  /** "Send now" while floor auto-delivery is paused: marks the message manual
-   *  (drain bypasses the pause gate for it) and moves it to the queue front. */
-  releaseQueuedMessage: (agentId: string, messageId: string) => void;
-  /** Clear an agent's entire pending queue. */
-  clearQueue: (agentId: string) => void;
   setAddAgentOpen: (open: boolean) => void;
   /** Validated manifests waiting for one-at-a-time human review. */
   hireQueue: HireReviewQueue;
@@ -336,19 +278,13 @@ interface State {
   setIdeInitialFile: (path: string | null) => void;
   setSidebarWidth: (px: number) => void;
   setSidebarTab: (tab: SidebarTab) => void;
-  /** Drop persisted agents whose PTY is no longer alive in the main process.
-   *  Called once at startup so a renderer reload (e.g. after the laptop sleeps)
-   *  restores still-running agents and only removes truly-dead ones. */
-  reconcileWithLivePtys: (livePtyIds: string[]) => void;
 }
 
 const LS_SIDEBAR_WIDTH = 'cth.sidebarWidth';
 const LS_SIDEBAR_TAB = 'cth.sidebarTab';
 const LS_AGENTS = 'cth.agents';
 const LS_ARCHIVED = 'cth.archivedAgents';
-const LS_RESTORABLE = 'cth.restorableAgents';
 const LS_SELECTED = 'cth.selectedId';
-const LS_QUEUES = 'cth.messageQueues';
 /** Which hive this origin's roster keys were last written for. See rosterSource.ts. */
 const LS_ROSTER_HOME = 'cth.rosterHome';
 const LS_FOCUS_MODE = 'cth.prefersFocusMode';
@@ -407,7 +343,7 @@ const rosterMirror: {
   agents: PersistedAgent[];
   archived: PersistedAgent[];
   restorable: PersistedAgent[];
-  queues: Record<string, QueuedMessage[]>;
+  queues: Record<string, never[]>;
   selectedId: string | null;
 } = { agents: [], archived: [], restorable: [], queues: {}, selectedId: null };
 
@@ -493,23 +429,10 @@ function persistedSlice(
   }
 }
 
+/** A saved legacy roster is not evidence of a live runtime. Ignore it; active
+ * cards are created only by live lifecycle events in this process. */
 function loadPersistedAgents(): Agent[] {
-  try {
-    const parsed = persistedSlice(LS_AGENTS, fileRoster?.agents);
-    if (!parsed.length) return [];
-    // Reset volatile run-state; the PTY stream / mock loop will repopulate it.
-    return parsed.map((a) => ({
-      ...a,
-      progress: 0,
-      status: 'idle',
-      action: 'reconnecting…',
-      currentStation: 'desk',
-      carrying: undefined,
-      recentTextTs: Date.now(),
-    }));
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 function persistArchived(archived: Agent[]): void {
@@ -539,77 +462,16 @@ function loadPersistedArchived(): Agent[] {
   }
 }
 
-function persistRestorable(restorable: Agent[]): void {
-  // Keeps contextTokens/contextLimit, unlike the other two: a restorable entry
-  // is a spawn recipe for a session that has not been re-entered yet, so its
-  // last known context size is still meaningful.
-  const slim: PersistedAgent[] = restorable.map(({ recentAssistantText, recentTextTs, blockReason, seedPrompt, ...rest }) => {
-    void recentAssistantText; void recentTextTs; void blockReason; void seedPrompt;
-    return rest;
-  });
-  try {
-    window.localStorage.setItem(LS_RESTORABLE, JSON.stringify(slim));
-  } catch { /* noop */ }
-  rosterMirror.restorable = slim;
-  scheduleRosterFlush();
-}
-
-function loadPersistedRestorable(): Agent[] {
-  try {
-    const parsed = persistedSlice(LS_RESTORABLE, fileRoster?.restorable);
-    if (!parsed.length) return [];
-    // No live process — clear run-state; the spawn recipe fields are what matter.
-    return parsed.map((a) => ({
-      ...a,
-      status: 'idle',
-      carrying: undefined,
-      currentStation: undefined
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function persistQueues(queues: Record<string, QueuedMessage[]>): void {
-  try {
-    // Only keep non-empty queues so the key stays small.
-    const slim: Record<string, QueuedMessage[]> = {};
-    for (const [id, q] of Object.entries(queues)) if (q.length) slim[id] = q;
-    window.localStorage.setItem(LS_QUEUES, JSON.stringify(slim));
-    rosterMirror.queues = slim;
-    scheduleRosterFlush();
-  } catch { /* noop */ }
-}
-
-function loadPersistedQueues(): Record<string, QueuedMessage[]> {
-  try {
-    const parsed = useFileRoster
-      ? (fileRoster?.queues as Record<string, QueuedMessage[]> | undefined)
-      : useLocalFallback
-        ? JSON.parse(window.localStorage.getItem(LS_QUEUES) ?? 'null') as Record<string, QueuedMessage[]> | null
-        : null;
-    if (!parsed || typeof parsed !== 'object') return {};
-    // Defensively keep only well-formed entries.
-    const out: Record<string, QueuedMessage[]> = {};
-    for (const [id, q] of Object.entries(parsed)) {
-      if (Array.isArray(q)) {
-        out[id] = q.filter((m) => m && typeof m.text === 'string' && typeof m.id === 'string');
-      }
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
 function loadPersistedSelectedId(agents: Agent[]): string | null {
   try {
     const id = useFileRoster
       ? fileRoster?.selectedId
       : useLocalFallback ? window.localStorage.getItem(LS_SELECTED) : null;
-    return id && agents.some((a) => a.id === id) ? id : (agents[0]?.id ?? null);
+    if (id === GOD_ID) return GOD_ID;
+    if (typeof id === 'string' && agents.some((a) => a.id === id)) return id;
+    return GOD_ID;
   } catch {
-    return agents[0]?.id ?? null;
+    return GOD_ID;
   }
 }
 const initialSidebarWidth = (() => {
@@ -645,37 +507,37 @@ const initialPrefersFocusMode = (() => {
 
 const initialAgents = loadPersistedAgents();
 const initialArchivedAgents = loadPersistedArchived();
-const initialRestorableAgents = loadPersistedRestorable();
 const initialSelectedId = loadPersistedSelectedId(initialAgents);
-const initialQueues = loadPersistedQueues();
 
 // Prime the mirror with whatever we just loaded, so a later persist of ONE slice
 // writes a complete file rather than blanking the slices it didn't touch.
 rosterMirror.agents = slimAgents(initialAgents);
 rosterMirror.archived = slimAgents(initialArchivedAgents);
-rosterMirror.restorable = slimAgents(initialRestorableAgents);
-rosterMirror.queues = initialQueues;
+// Keep the version-1 file shape for older builds, but discard legacy runtime
+// recipes and undeliverable queue data during migration.
+rosterMirror.restorable = [];
+rosterMirror.queues = {};
 rosterMirror.selectedId = initialSelectedId;
 
 // First run with the file: seed it from this origin's localStorage. Only when
 // there is something to seed — writing an empty file here would hand a blank
 // roster to the other side, which is precisely the outcome being designed out.
-if (useLocalFallback && rosterMirror.agents.length + rosterMirror.archived.length + rosterMirror.restorable.length > 0) {
+if (useLocalFallback && rosterMirror.archived.length > 0) {
   scheduleRosterFlush();
-}
-
-let queuedSeq = 0;
-/** Process-unique id for a queued message (timestamp + counter avoids collisions
- *  when several are queued within the same millisecond). */
-function newQueuedId(): string {
-  queuedSeq += 1;
-  return `q-${Date.now()}-${queuedSeq}`;
 }
 
 export const useStore = create<State>((set, get) => ({
   agents: initialAgents,
+  presentationActor: {
+    id: GOD_ID,
+    name: 'Michael',
+    character: 'michael',
+    accent: 'lemon',
+    description: 'Office Host',
+    role: 'office-host',
+    cwd: currentHome ?? ''
+  },
   archivedAgents: initialArchivedAgents,
-  restorableAgents: initialRestorableAgents,
   selectedId: initialSelectedId,
   feeds: {},
   addAgentOpen: false,
@@ -689,12 +551,11 @@ export const useStore = create<State>((set, get) => ({
   ideAgentId: null,
   sidebarWidth: initialSidebarWidth,
   sidebarTab: initialSidebarTab,
-  godStatus: 'booting',
-  messageQueues: initialQueues,
   toolCounts: {},
   bumpToolCount: (id) =>
     set((s) => ({ toolCounts: { ...s.toolCounts, [id]: (s.toolCounts[id] ?? 0) + 1 } })),
-  setGodStatus: (status) => set({ godStatus: status }),
+  setPresentationActorName: (name) =>
+    set((s) => ({ presentationActor: { ...s.presentationActor, name } })),
   select: (id) => set((s) => { persistAgents(s.agents, id); return { selectedId: id, ccTabRequest: null }; }),
   updateAgent: (id, patch) =>
     set((s) => {
@@ -722,14 +583,12 @@ export const useStore = create<State>((set, get) => ({
       };
       const agents = apply(s.agents);
       const archivedAgents = apply(s.archivedAgents);
-      const restorableAgents = apply(s.restorableAgents);
-      if (agents === s.agents && archivedAgents === s.archivedAgents && restorableAgents === s.restorableAgents) {
+      if (agents === s.agents && archivedAgents === s.archivedAgents) {
         return s;
       }
       persistAgents(agents, s.selectedId);
       if (archivedAgents !== s.archivedAgents) persistArchived(archivedAgents);
-      if (restorableAgents !== s.restorableAgents) persistRestorable(restorableAgents);
-      return { agents, archivedAgents, restorableAgents };
+      return { agents, archivedAgents };
     }),
   renameAgent: async (id, name) => {
     try {
@@ -742,11 +601,12 @@ export const useStore = create<State>((set, get) => ({
           agents.map((agent) => agent.id === id ? { ...agent, name: nextName } : agent);
         const agents = rename(s.agents);
         const archivedAgents = rename(s.archivedAgents);
-        const restorableAgents = rename(s.restorableAgents);
         persistAgents(agents, s.selectedId);
         persistArchived(archivedAgents);
-        persistRestorable(restorableAgents);
-        return { agents, archivedAgents, restorableAgents };
+        const presentationActor = id === GOD_ID
+          ? { ...s.presentationActor, name: nextName }
+          : s.presentationActor;
+        return { agents, archivedAgents, presentationActor };
       });
       return { ok: true };
     } catch (error) {
@@ -784,15 +644,11 @@ export const useStore = create<State>((set, get) => ({
       const agents = agent.isGod ? [agent, ...s.agents] : [...s.agents, agent];
       // Re-spawning an archived agent un-archives it: an id is active xor archived.
       const archivedAgents = s.archivedAgents.filter((a) => a.id !== agent.id);
-      // A live (re)spawn also consumes any restorable entry for the same id.
-      const restorableAgents = s.restorableAgents.filter((a) => a.id !== agent.id);
       persistAgents(agents, agent.id);
       persistArchived(archivedAgents);
-      if (restorableAgents.length !== s.restorableAgents.length) persistRestorable(restorableAgents);
       return {
         agents,
         archivedAgents,
-        restorableAgents,
         selectedId: agent.id,
         feeds: { ...s.feeds, [agent.id]: s.feeds[agent.id] ?? [] }
       };
@@ -801,12 +657,10 @@ export const useStore = create<State>((set, get) => ({
     set((s) => {
       const agents = s.agents.filter(a => a.id !== id);
       const { [id]: _gone, ...feeds } = s.feeds;
-      const { [id]: _queueGone, ...messageQueues } = s.messageQueues;
-      const selectedId = s.selectedId === id ? (agents[0]?.id ?? null) : s.selectedId;
+      const selectedId = s.selectedId === id ? (agents[0]?.id ?? GOD_ID) : s.selectedId;
       const fullscreenAgentId = refocusAfterRemoval(s.fullscreenAgentId, agents, selectedId);
       persistAgents(agents, selectedId);
-      if (_queueGone) persistQueues(messageQueues);
-      return { agents, feeds, selectedId, messageQueues, fullscreenAgentId };
+      return { agents, feeds, selectedId, fullscreenAgentId };
     }),
   archiveAgent: (id) =>
     set((s) => {
@@ -825,13 +679,11 @@ export const useStore = create<State>((set, get) => ({
       };
       const archivedAgents = [...s.archivedAgents.filter((a) => a.id !== id), archivedEntry];
       const { [id]: _feedGone, ...feeds } = s.feeds;
-      const { [id]: _queueGone, ...messageQueues } = s.messageQueues;
-      const selectedId = s.selectedId === id ? (agents[0]?.id ?? null) : s.selectedId;
+      const selectedId = s.selectedId === id ? (agents[0]?.id ?? GOD_ID) : s.selectedId;
       const fullscreenAgentId = refocusAfterRemoval(s.fullscreenAgentId, agents, selectedId);
       persistAgents(agents, selectedId);
       persistArchived(archivedAgents);
-      if (_queueGone) persistQueues(messageQueues);
-      return { agents, archivedAgents, feeds, selectedId, messageQueues, fullscreenAgentId };
+      return { agents, archivedAgents, feeds, selectedId, fullscreenAgentId };
     }),
   removeArchivedAgent: (id) =>
     set((s) => {
@@ -839,13 +691,6 @@ export const useStore = create<State>((set, get) => ({
       const archivedAgents = s.archivedAgents.filter((a) => a.id !== id);
       persistArchived(archivedAgents);
       return { archivedAgents };
-    }),
-  removeRestorableAgent: (id) =>
-    set((s) => {
-      if (!s.restorableAgents.some((a) => a.id === id)) return s;
-      const restorableAgents = s.restorableAgents.filter((a) => a.id !== id);
-      persistRestorable(restorableAgents);
-      return { restorableAgents };
     }),
   reorderAgents: (fromId, toId) =>
     set((s) => {
@@ -888,103 +733,6 @@ export const useStore = create<State>((set, get) => ({
   // one careless mutation rewrites the default for everyone.
   orgTrigger: { ...DEFAULT_ORG_TRIGGER },
   setOrgTrigger: (cfg) => set({ orgTrigger: cfg }),
-  enqueueMessage: (agentId, text, meta) =>
-    set((s) => {
-      const trimmed = text.trim();
-      if (!trimmed) return s;
-      // ONE PENDING COMPACT PER AGENT. Compaction is idempotent in the worst way:
-      // the first `/compact` does the work and every one behind it answers
-      // "nothing to compact", so a queue that accumulates them spends a delivery
-      // slot and a model round-trip per copy to achieve nothing, and buries the
-      // operator's real backlog behind them.
-      //
-      // The invariant lives HERE rather than at the call sites because there are
-      // several — the context trigger, god dispatching a work order, Slack, the
-      // composer — and each one that grew its own check could still be bypassed
-      // by the next path someone adds. The context trigger's own check stays as
-      // cheap defence in depth, but this is the one that cannot be routed around.
-      const queued = s.messageQueues[agentId] ?? [];
-      if (isCompactionCommand(trimmed) && queued.some((m) => isCompactionCommand(m.text))) {
-        return s;
-      }
-      // ONE PENDING INBOX NUDGE PER AGENT — the same property, for the same
-      // reason. The first nudge makes the agent drain its WHOLE inbox, so every
-      // nudge queued behind it lands on a directory that agent has already
-      // emptied and answers "nothing new": a delivery slot and a model
-      // round-trip each, to say nothing. Mail arriving while an agent is mid-turn
-      // queues one nudge per poll, so this is the common case rather than the
-      // rare one, and the floor reports it as repeated empty-inbox wakes.
-      // Suppressing the copy loses nothing — the surviving nudge sends the agent
-      // to the same authoritative directory, where the newer mail is waiting too.
-      if (isInboxNudge(trimmed) && queued.some((m) => isInboxNudge(m.text))) {
-        return s;
-      }
-            const msg: QueuedMessage = {
-        id: newQueuedId(), text: trimmed, ts: Date.now(),
-        ...(meta?.slack ? { slack: meta.slack } : {}),
-        ...(meta?.instruction ? { instruction: meta.instruction } : {}),
-        ...(meta?.precondition ? { precondition: meta.precondition } : {}),
-        ...(meta?.compactUsed !== undefined ? { compactUsed: meta.compactUsed } : {})
-      };
-      const messageQueues = { ...s.messageQueues, [agentId]: [...(s.messageQueues[agentId] ?? []), msg] };
-      persistQueues(messageQueues);
-      return { messageQueues };
-    }),
-  removeQueuedMessage: (agentId, messageId) =>
-    set((s) => {
-      const current = s.messageQueues[agentId];
-      if (!current) return s;
-      const next = current.filter((m) => m.id !== messageId);
-      const messageQueues = { ...s.messageQueues, [agentId]: next };
-      persistQueues(messageQueues);
-      return { messageQueues };
-    }),
-  releaseQueuedMessage: (agentId, messageId) =>
-    set((s) => {
-      const current = s.messageQueues[agentId];
-      const target = current?.find((m) => m.id === messageId);
-      if (!current || !target) return s;
-      const next = [
-        { ...target, manual: true },
-        ...current.filter((m) => m.id !== messageId)
-      ];
-      const messageQueues = { ...s.messageQueues, [agentId]: next };
-      persistQueues(messageQueues);
-      return { messageQueues };
-    }),
-  clearQueue: (agentId) =>
-    set((s) => {
-      if (!s.messageQueues[agentId]?.length) return s;
-      const messageQueues = { ...s.messageQueues, [agentId]: [] };
-      persistQueues(messageQueues);
-      return { messageQueues };
-    }),
-  reconcileWithLivePtys: (livePtyIds) =>
-    set((s) => {
-      const live = new Set(livePtyIds);
-      // Keep agents with no PTY (synthetic) or whose PTY is still alive.
-      const agents = s.agents.filter((a) => !a.ptyId || live.has(a.ptyId));
-      if (agents.length === s.agents.length) return s;
-      // Workers whose terminal died with the previous session become restorable
-      // (full spawn recipe retained) instead of silently vanishing. God and the
-      // prep assistant are excluded — they auto-respawn at boot.
-      const dead = s.agents.filter(
-        (a) => a.ptyId && !live.has(a.ptyId) && !a.isGod && !a.isAssistant
-      );
-      const restorableAgents = [
-        ...s.restorableAgents.filter((r) => !dead.some((d) => d.id === r.id)),
-        ...dead
-      ];
-      const feeds: Record<string, string[]> = {};
-      for (const a of agents) feeds[a.id] = s.feeds[a.id] ?? [];
-      const selectedId = agents.some((a) => a.id === s.selectedId)
-        ? s.selectedId
-        : (agents[0]?.id ?? null);
-      const fullscreenAgentId = refocusAfterRemoval(s.fullscreenAgentId, agents, selectedId);
-      persistAgents(agents, selectedId);
-      persistRestorable(restorableAgents);
-      return { agents, feeds, selectedId, restorableAgents, fullscreenAgentId };
-    }),
   setAddAgentOpen: (open) => set({ addAgentOpen: open }),
   hireQueue: EMPTY_HIRE_QUEUE,
   enqueuePendingHires: (manifests) => set((s) => ({

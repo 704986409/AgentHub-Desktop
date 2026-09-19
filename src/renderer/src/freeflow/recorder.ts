@@ -1,7 +1,7 @@
 /**
  * Free Flow recorder — a single shared push-to-talk capture engine for the whole
  * renderer. Both entry points use it, so only ONE recording can run at a time:
- *   (A) the "Free Flow" button in MessageQueueComposer (click to start/stop), and
+ *   (A) a renderer dictation control (click to start/stop), and
  *   (B) hold-Option-to-talk (see freeflow/holdOption.ts) — start on arm, stop on
  *       Option release.
  *

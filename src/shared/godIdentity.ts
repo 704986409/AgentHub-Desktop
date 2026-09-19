@@ -2,6 +2,7 @@
  *  V0.8.9: this is presentation/compatibility only. Human Boss is a human
  *  user (`HumanPresenceActor`) and is NOT GOD, Michael, Hive, or a Lead Agent. */
 export const DEFAULT_GOD_NAME = 'Michael';
+export const GOD_ID = 'god' as const;
 
 /**
  * Resolve god's display name for a (re)spawn.

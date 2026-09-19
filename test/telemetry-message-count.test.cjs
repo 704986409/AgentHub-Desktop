@@ -223,22 +223,19 @@ test('the terminal counts at the submit boundary, not at pty:write', () => {
   assert.match(pool, /const pasted = data\.includes\('\\x1b\[200~'\);/);
 });
 
-test('the composer counts its own submit, not the shared enqueue action', () => {
-  const composer = read('src/renderer/src/components/MessageQueueComposer.tsx');
-  // enqueueMessage is also how work orders, Slack inbound, nudges and compact
-  // commands reach an agent. Counting inside it would count all of those.
-  assert.match(composer, /enqueueMessage\(agent\.id, body\);\n(?:\s*\/\/.*\n)*\s*void window\.cth\.trackMessageSent\('composer'\);/);
+test('the removed composer cannot emit false message-sent telemetry', () => {
+  assert.equal(fs.existsSync(path.resolve(__dirname, '..', 'src/renderer/src/components/MessageQueueComposer.tsx')), false);
   const store = read('src/renderer/src/store/store.ts');
   assert.ok(!store.includes('trackMessageSent'), 'the store action must not count');
 });
 
-test('the composer inherits the IME guard instead of restating it', () => {
-  const composer = read('src/renderer/src/components/MessageQueueComposer.tsx');
-  // An Enter that picks an IME candidate is not a submit. The count sits inside
-  // queueIt(), which the key handler only reaches past isComposingKey — so a
-  // Japanese or Chinese user cannot inflate their own count on candidate
-  // selection. Assert the guard is still the first thing that handler does.
-  assert.match(composer, /const onKey = \(e: KeyboardEvent<HTMLTextAreaElement>\) => \{\s*if \(isComposingKey\(e\)\) return;/);
+test('production renderer has no legacy composer telemetry call', () => {
+  const rendererRoot = path.resolve(__dirname, '..', 'src/renderer/src');
+  const renderer = fs.readdirSync(rendererRoot, { recursive: true })
+    .filter((name) => /\.(?:ts|tsx)$/.test(String(name)))
+    .map((name) => fs.readFileSync(path.join(rendererRoot, String(name)), 'utf8'))
+    .join('\n');
+  assert.doesNotMatch(renderer, /trackMessageSent\('composer'\)/);
 });
 
 test('only human hive messages are counted, never agent-to-agent traffic', () => {

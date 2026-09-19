@@ -6,8 +6,6 @@ import { PixelButton } from './PixelButton';
 import { SpritePortrait } from './SpritePortrait';
 import { PtyTerminalView } from './PtyTerminalView';
 import { terminalInstanceKey } from './terminalRecovery';
-import { MessageQueueComposer } from './MessageQueueComposer';
-import { CommandCenterPanel } from './CommandCenterPanel';
 import { LEGACY_RUNTIME_ACTION_POLICY } from './runtimeActionSemantics';
 import { SidebarTabs } from './SidebarTabs';
 import { ThreadsPanel } from './ThreadsPanel';
@@ -90,9 +88,6 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
   const isFullscreenedHere = fullscreenAgentId === agent.id;
 
   const onPtyStream = usePtyParser(agent.id);
-
-  // Michael gets the full command-center dashboard instead of the plain panel.
-  if (agent.isGod) return <CommandCenterPanel agent={agent} />;
 
   const openTerminal = async () => {
     setOpenTerminalState('opening');
@@ -260,7 +255,6 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
                   embedded
                 />
               </div>
-              <MessageQueueComposer agent={agent} />
             </div>
             )
           ) : (

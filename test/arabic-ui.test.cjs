@@ -118,7 +118,7 @@ test('content direction in components is gated, never content-sniffed', () => {
   const files = [
     'components/AddAgentModal', 'components/AgentStrip', 'components/AskMeTab',
     'components/CommandCenterPanel', 'components/FullscreenTerminal',
-    'components/MemoryPanel', 'components/MessageQueueComposer',
+    'components/MemoryPanel',
     'components/TasksKanban', 'components/ThreadsPanel',
     'components/triggers/ContextSection', 'components/triggers/SchedulesSection',
     'components/triggers/TriggerHistoryTab'
@@ -136,7 +136,8 @@ test('content direction in components is gated, never content-sniffed', () => {
     }
     gated += g.length;
   }
-  assert.ok(gated >= 17, `expected the PR's dir sites to be carried over, found ${gated}`);
+  // V0.8.9I removed the legacy composer and its two gated text areas.
+  assert.ok(gated >= 15, `expected the remaining dir sites to be carried over, found ${gated}`);
 });
 
 test('the markdown auto-direction plugin only runs for an RTL language', () => {

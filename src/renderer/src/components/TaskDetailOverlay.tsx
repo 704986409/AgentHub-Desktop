@@ -15,7 +15,6 @@ export function TaskDetailOverlay() {
   const taskDetailId = useStore((s) => s.taskDetailId);
   const closeTaskDetail = useStore((s) => s.closeTaskDetail);
   const agents = useStore((s) => s.agents);
-  const restorable = useStore((s) => s.restorableAgents);
   const [tasks, setTasks] = useState<HiveTask[]>([]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -38,7 +37,7 @@ export function TaskDetailOverlay() {
   if (!task) return null;
 
   const nameFor = (id?: string): string | undefined =>
-    id ? (agents.find((a) => a.id === id)?.name ?? restorable.find((a) => a.id === id)?.name ?? id) : undefined;
+    id ? (agents.find((a) => a.id === id)?.name ?? id) : undefined;
 
   // Moving a card writes ONE field. Operate on the RAW ledger (the same pattern
   // as TasksKanban.dismissTask), never on the display-parsed state: parseTasks

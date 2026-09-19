@@ -8,12 +8,12 @@ import type { HarnessConfig } from '@/store/config';
 import { DEFAULT_ORG_TRIGGER } from '@shared/triggers';
 import { OfficeFloor } from '@/scene/office/OfficeFloor';
 import { useHive } from '@/hooks/useHive';
-import { useResolvedGodName } from '@/hooks/useResolvedGodName';
 import { useGodNameSync } from '@/i18n/useGodNameSync';
 import { useDirectionSync } from '@/i18n/useDirection';
 import { useArabicTerminalSync } from '@/terminal/useArabicTerminalSync';
 import { MemoryPanel } from '@/components/MemoryPanel';
 import { AgentDetailPanel } from '@/components/AgentDetailPanel';
+import { CommandCenterPanel } from '@/components/CommandCenterPanel';
 import { AgentStrip } from '@/components/AgentStrip';
 import { AddAgentModal } from '@/components/AddAgentModal';
 import { AgentHubAgentManagementModal } from '@/components/AgentHubAgentManagementModal';
@@ -36,6 +36,7 @@ import { TaskDetailOverlay } from '@/components/TaskDetailOverlay';
 import { IdePanel } from '@/ide/IdePanel';
 import { useHoldOptionToTalk } from '@/freeflow/holdOption';
 import brandLogo from '@brand/logo.png?url';
+import { GOD_ID } from '@shared/godIdentity';
 
 // Injected at build time from package.json (see electron.vite.config.ts).
 declare const __APP_VERSION__: string;
@@ -49,11 +50,11 @@ export function App() {
   useArabicTerminalSync();
   const agent = useStore(selectedAgent);
   const agents = useStore(s => s.agents);
-  const bootingGodName = useResolvedGodName();
+  const selectedId = useStore(s => s.selectedId);
+  const presentationActor = useStore(s => s.presentationActor);
   const addAgentOpen = useStore(s => s.addAgentOpen);
   const setAddAgentOpen = useStore(s => s.setAddAgentOpen);
   const clearPendingHires = useStore(s => s.clearPendingHires);
-  const godStatus = useStore(s => s.godStatus);
   const fullscreenAgentId = useStore(s => s.fullscreenAgentId);
   const appThemeNow = useAppTheme();
   const sidebarWidth = useStore(s => s.sidebarWidth);
@@ -203,7 +204,7 @@ export function App() {
     setClosing(null);
   };
 
-  // The hive: god-agent bootstrap, hook-driven avatars, idle-agent waking. Held
+  // Hive metadata + hook-driven worker avatars. Held
   // off until the user opens a hive in the launch picker (passing null no-ops the
   // hook) so Michael doesn't boot against the current home while the user may be
   // about to switch to a different one.
@@ -465,23 +466,10 @@ export function App() {
           width: sidebarWidth, flexShrink: 0,
           minHeight: 0, display: 'flex', flexDirection: 'column'
         }}>
-          {agent ? (
+          {selectedId === GOD_ID ? (
+            <CommandCenterPanel actor={presentationActor} />
+          ) : agent ? (
             <AgentDetailPanel agent={agent} />
-          ) : godStatus === 'booting' ? (
-            <PixelPanel variant="default" noPadding style={{
-              padding: 16, height: '100%',
-              display: 'flex', flexDirection: 'column',
-              justifyContent: 'center', alignItems: 'center', gap: 12
-            }}>
-              <div style={{
-                fontFamily: 'var(--cth-font-display)', fontSize: 10, lineHeight: '14px',
-                color: 'var(--cth-ink-500)'
-              }}>WAKING THE FLOOR</div>
-              <p style={{ margin: 0, fontSize: 13, textAlign: 'center', color: 'var(--cth-ink-700)' }}>
-                {bootingGodName} is clocking in.<br />
-                The terminal will land here once he's seated.
-              </p>
-            </PixelPanel>
           ) : (
             <PixelPanel variant="default" noPadding style={{
               padding: 16, height: '100%',
@@ -493,8 +481,8 @@ export function App() {
                 color: 'var(--cth-ink-500)'
               }}>NO AGENT SELECTED</div>
               <p style={{ margin: 0, fontSize: 13, textAlign: 'center', color: 'var(--cth-ink-700)' }}>
-                Spawn an agent from the strip below.<br />
-                The terminal and command bar will land here.
+                Create an agent from the strip below.<br />
+                Live controls appear only for an active runtime.
               </p>
               <PixelButton variant="secondary" size="md" onClick={() => setAddAgentOpen(true)}>
                 <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>

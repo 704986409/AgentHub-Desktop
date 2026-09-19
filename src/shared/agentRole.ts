@@ -7,6 +7,8 @@
  * captions are status, not a job.
  */
 
+// Includes historical captions only as a migration filter; matching text is
+// rejected as a durable role and never becomes live runtime state or UI copy.
 const TRANSIENT_ROLE_RE = /^(on\s+)?standby$|^(idle|awaiting|paused|resumed|working|thinking|archived|starting up|reconnecting…?|running the floor|a fresh harness)$/i;
 
 export function isDurableRole(text: string | undefined | null): boolean {

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AgentCard } from './AgentCard';
 import { PixelButton } from './PixelButton';
 import { Icon } from './Icon';
+import { SpritePortrait } from './SpritePortrait';
 import { useStore, type Agent } from '@/store/store';
 import { type HarnessConfig } from '@/store/config';
 import { useRtl } from '@/i18n/useDirection';
@@ -17,7 +18,7 @@ export function AgentStrip({ config }: AgentStripProps) {
   const { t } = useTranslation();
   const rtl = useRtl();
   const agents = useStore(s => s.agents);
-  const restorableAgents = useStore(s => s.restorableAgents);
+  const presentationActor = useStore(s => s.presentationActor);
   const selectedId = useStore(s => s.selectedId);
   const select = useStore(s => s.select);
   const setAddAgentOpen = useStore(s => s.setAddAgentOpen);
@@ -72,6 +73,30 @@ export function AgentStrip({ config }: AgentStripProps) {
       minHeight: 112,
       alignItems: 'center'
     }}>
+      <button
+        type="button"
+        onClick={() => select(presentationActor.id)}
+        aria-label={`Open ${presentationActor.name} Command Center`}
+        style={{
+          width: 180, height: 82, flexShrink: 0, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 10, padding: 10,
+          border: 'none', textAlign: 'left', color: 'var(--cth-ink-900)',
+          background: selectedId === presentationActor.id ? 'var(--cth-lemon)' : 'var(--cth-paper-100)',
+          boxShadow: 'inset 0 0 0 1px var(--cth-ink-300), 3px 3px 0 rgba(26,19,32,0.12)'
+        }}
+      >
+        <span style={{ width: 46, height: 54, overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <SpritePortrait character={presentationActor.character} scale={1} />
+        </span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', fontFamily: 'var(--cth-font-display)', fontSize: 9, lineHeight: '14px' }}>
+            {presentationActor.name.toUpperCase()}
+          </span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--cth-ink-500)' }}>
+            {presentationActor.description}
+          </span>
+        </span>
+      </button>
       {agents.map(a => (
         // Draggable wrapper: reorder the roster by dragging one card onto another.
         // Native HTML5 DnD (no dep). A plain click still selects — a drag only

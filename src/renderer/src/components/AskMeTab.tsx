@@ -48,7 +48,6 @@ export function AskMeTab() {
   const { t: translate } = useTranslation();
   const rtl = useRtl();
   const agents = useStore((s) => s.agents);
-  const restorable = useStore((s) => s.restorableAgents);
   const [tasks, setTasks] = useState<HiveTask[]>([]);
   // Drafts live in the STORE (keyed by task id) — switching tabs unmounts this
   // view, and a half-typed answer must survive the round trip.
@@ -69,7 +68,7 @@ export function AskMeTab() {
   }, [refresh]);
 
   const nameFor = (id?: string): string | undefined =>
-    id ? (agents.find((a) => a.id === id)?.name ?? restorable.find((a) => a.id === id)?.name ?? id) : undefined;
+    id ? (agents.find((a) => a.id === id)?.name ?? id) : undefined;
 
   // Newest ask at the top, oldest at the bottom. Before this the board had no
   // comparator at all, so a question's position was an accident of where its
