@@ -1,7 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { useStore, type Agent } from '@/store/store';
-import { buildSpawnCommand, inferAgentProvider, tokenizeCommand, type HarnessConfig } from '@/store/config';
-import { roleForHiveSpawn } from '@shared/agentRole';
+import { inferAgentProvider, type HarnessConfig } from '@/store/config';
 
 /** "Restore team" — respawn every worker from the previous session.
  *
@@ -100,25 +99,7 @@ export function useRestoreTeam(config?: HarnessConfig | null): RestoreTeamState 
         // entire restore a silent no-op after the first bad agent.
         try {
           const provider = inferAgentProvider(a.command, a.provider);
-          const command = (a.command ?? '').trim() || (config ? buildSpawnCommand(config, a.model, provider) : '');
-          if (!command || !a.cwd) {
-            // No spawn recipe (an old entry persisted before `command`, with no
-            // config to rebuild one). Keep it restorable and SAY why rather than
-            // silently dropping it — silent removal read as "nothing happened".
-            failures.push(`${a.name}: no saved command`);
-            return null;
-          }
-          const [exe, ...args] = tokenizeCommand(command);
           const ptyId = a.ptyId ?? `pty-${a.id}`;
-          // An isolated agent's worktree SURVIVES an app restart on disk (it's only
-          // torn down on per-tab close / mid-session exit, not on quit). So re-enter
-          // that exact worktree as the cwd rather than re-isolating — `git worktree
-          // add` would conflict with the existing path/branch, and re-isolating would
-          // also lose the worktree's uncommitted work. cwd = the worktree means
-          // resume + seedSessionTranscript land in the CORRECT checkout.
-          // But the user may have manually pruned/deleted the worktree between runs —
-          // gitIsRepo (git rev-parse) returns false for a missing/invalid dir, so
-          // fall back to the base repo cwd rather than spawning into a dead path.
           let cwd = a.cwd;
           let worktreeGone = false;
           if (a.worktreePath) {
@@ -129,41 +110,22 @@ export function useRestoreTeam(config?: HarnessConfig | null): RestoreTeamState 
               console.warn(`[restore] worktree gone for ${a.id} (${a.worktreePath}); falling back to base repo ${a.cwd}`);
             }
           }
-          const res = await window.cth.spawnPty({
-            id: ptyId,
-            cwd,
-            command: exe,
-            args,
-            cols: 100,
-            rows: 30
-          });
-          if (res.ok) {
-            restored++;
-            return {
-                ...a,
-                provider,
-                ptyId,
-                archived: false,
-                status: 'idle',
-                action: worktreeGone ? 'worktree gone — using base repo' : 'starting up',
-                worktreePath: worktreeGone ? undefined : a.worktreePath,
-                seedPrompt: undefined,
-                carrying: undefined,
-                currentStation: 'desk',
-                recentTextTs: Date.now()
-            };
-          } else if ((res.error ?? '').includes('already exists')) {
-            // A live PTY with this id is already running (e.g. respawned at boot or
-            // by another path) — the agent isn't actually missing, so retire it from
-            // the restorable list rather than reporting a phantom failure.
-            alreadyLive++;
-            useStore.getState().removeRestorableAgent(a.id);
-          } else {
-            // Leave it restorable so the user can retry — but record WHY so the
-            // outcome is shown on the floor, not buried in the devtools console.
-            failures.push(`${a.name}: ${res.error ?? 'spawn failed'}`);
-            console.error('[restore] spawn failed for', a.id, res.error);
-          }
+          // In AgentHub mode, local provider CLI execution via PTY is disabled.
+          // Restore the agent entry in the store without spawning local process.
+          restored++;
+          return {
+            ...a,
+            provider,
+            ptyId,
+            archived: false,
+            status: 'idle',
+            action: worktreeGone ? 'worktree gone — using base repo' : 'restored',
+            worktreePath: worktreeGone ? undefined : a.worktreePath,
+            seedPrompt: undefined,
+            carrying: undefined,
+            currentStation: 'desk',
+            recentTextTs: Date.now()
+          };
         } catch (e) {
           failures.push(`${a.name}: ${e instanceof Error ? e.message : String(e)}`);
           console.error('[restore] error for', a.id, e);

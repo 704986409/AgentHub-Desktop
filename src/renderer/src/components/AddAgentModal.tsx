@@ -23,7 +23,6 @@ import {
   type HarnessConfig,
   AGENT_PROVIDER_PRESETS,
   buildSpawnCommand,
-  tokenizeCommand,
   modelsForProvider,
   inferAgentProvider,
   providerPreset,
@@ -389,72 +388,10 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   };
 
   const submit = async () => {
-    setError(undefined);
-    // A required field can live in a section the user hasn't opened, so jump to
-    // the offending section as we surface the error — the field is never hidden.
-    if (!name.trim()) { setError(tr('addAgent.errName')); setSection('identity'); return; }
-    if (!cwd) { setError(tr('addAgent.errFolder')); setSection('workspace'); return; }
-    if (!command.trim()) { setError(tr('addAgent.errCommand')); setSection('engine'); return; }
-
-    setBusy(true);
-    const id = uniqueId(name);
-    const ptyId = `pty-${id}`;
-    // Split the editable command field into argv-style pieces for node-pty.
-    // Quote-aware so an agy model label like "Gemini 3.1 Pro (High)" — or any
-    // auto-mode flags appended to the command — stays one argument.
-    const [exe, ...args] = tokenizeCommand(command.trim());
-    const spawnRes = await window.cth.spawnPty({
-      id: ptyId,
-      cwd,
-      command: exe,
-      args,
-      cols: 100,
-      rows: 30
-    });
-    if (!spawnRes.ok) {
-      setBusy(false);
-      setError(spawnRes.error ?? 'spawn failed');
-      return;
-    }
-
-    const spawnedCwd = spawnRes.cwd || cwd;
-    const projectCwd = cwd.trim() || spawnedCwd;
-    const agent: Agent = {
-      id,
-      name: name.trim(),
-      character,
-      accent,
-      description: description.trim() || 'a fresh harness',
-      project: basename(projectCwd),
-      tmuxTarget: '',
-      cwd: spawnedCwd,
-      goal: goal.trim() || undefined,
-      status: 'idle',
-      action: 'starting up',
-      progress: 0,
-      currentStation: 'desk',
-      ptyId,
-      command: command.trim(),
-      provider,
-      model,
-      worktreePath: undefined,
-      seedPrompt: undefined,
-      recentTextTs: Date.now()
-    };
-    addAgent(agent);
-    // Remember the folder for the next hire: promote it to the front of the
-    // registeredRepos quick-picks (the modal's default cwd) so back-to-back
-    // hires land in the same project without re-picking.
-    if (projectCwd && repos[0] !== projectCwd) {
-      const nextRepos = [projectCwd, ...repos.filter((r) => r !== projectCwd && r !== cwd)];
-      try {
-        const updated = await window.cth.updateConfig({ registeredRepos: nextRepos });
-        onConfigChange?.(updated);
-      } catch { /* best-effort */ }
-    }
-    // A hire manifest may carry a per-agent token budget — apply it to the
-    // latest agentTokenCaps map in main. Await it before advancing a batch: the
-    // next hire reuses this mounted modal and must not race a stale config write.
+    setError(
+      'Legacy Munder agent launch is disabled in AgentHub mode. Create and execute Agents through AgentHub Agent Management / Backend.'
+    );
+    const id = uniqueId(name || 'agent');
     if (hireMeta?.tokenCap) {
       try {
         const updated = await window.cth.setAgentTokenCap(id, hireMeta.tokenCap);
@@ -464,8 +401,6 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
     setBusy(false);
     if (pendingHire) {
       advanceHireReview();
-    } else {
-      onClose();
     }
   };
 

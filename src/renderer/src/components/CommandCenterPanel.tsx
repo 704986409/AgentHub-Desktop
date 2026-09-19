@@ -22,7 +22,6 @@ import { roleForHiveSpawn } from '@shared/agentRole';
 import { useStore, triggerHistoryVisible, type Agent } from '@/store/store';
 import { usePtyParser } from '@/hooks/usePtyParser';
 import {
-  buildSpawnCommand,
   decodeProviderModel,
   encodeProviderModel,
   inferAgentProvider,
@@ -30,7 +29,6 @@ import {
   modelProvidersForAgent,
   modelsForProvider,
   providerPreset,
-  tokenizeCommand,
   AGENT_PROVIDER_PRESETS,
   type AgentProvider
 } from '@/store/config';
@@ -420,9 +418,9 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
     setRestartErrors((errors) => ({ ...errors, [a.id]: '' }));
     try {
       const cfg = await window.cth.getConfig();
-      // Respawn on the same CLI this agent already runs on (inferred from its
+      // Re-evaluate on the same CLI this agent already runs on (inferred from its
       // command if not explicitly tagged) so an Antigravity/Codex worker stays
-      // on its own binary. tokenizeCommand keeps quoted model labels one arg.
+      // on its own binary. Quoted model labels stay one arg.
       // opts.provider overrides the inferred provider — used when changing GOD's engine.
       const previousProvider = inferAgentProvider(a.command, a.provider);
       const provider = opts.provider ?? previousProvider;
@@ -484,51 +482,15 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
       } else {
         resetTerminal(a.ptyId);
       }
-      const command = buildSpawnCommand(cfg, model, provider);
-      const [exe, ...args] = tokenizeCommand(command.trim());
-      const hive = {
-        id: a.id,
-        name: a.name,
-        cwd: a.cwd,
+      // In AgentHub mode, local provider CLI execution via PTY is disabled.
+      // Update agent provider and model state directly in the store.
+      const patch = {
         provider,
-        isGod: a.isGod,
-        isAssistant: a.isAssistant,
-        role: roleForHiveSpawn(a)
+        model,
+        status: 'idle' as const,
+        action: provider === previousProvider ? 'model updated' : `switched to ${providerPreset(provider).label}`
       };
-      const res = await window.cth.spawnPty({
-        id: a.ptyId,
-        cwd: a.cwd,
-        command: exe,
-        args,
-        cols,
-        rows
-      });
-      if (!res.ok) throw new Error(res.error ?? 'Restart failed.');
-      if (res.ok) {
-        // Record the model even on a resume. A same-provider model change now
-        // RESUMES the session (that is the point — you keep the conversation and
-        // just swap the model), so "resume ⇒ the model is unchanged" stopped
-        // being true. Skipping the patch left the live process on the new model
-        // while the selector and the persisted agent kept the old one, and the
-        // next restore relaunched the old command. `command` is rebuilt from the
-        // selected model above, so on a genuine no-change restart this is a no-op.
-        const patch = resume
-          ? {
-              command: command.trim(),
-              provider,
-              model,
-              status: 'idle' as const,
-              action: 'continuing…'
-            }
-          : {
-              command: command.trim(),
-              provider,
-              model,
-              status: 'idle' as const,
-              action: provider === previousProvider ? 'restarting…' : `switching to ${providerPreset(provider).label}…`
-            };
-        updateAgent(a.id, patch);
-      }
+      updateAgent(a.id, patch);
     } catch (error) {
       setRestartErrors((errors) => ({
         ...errors,

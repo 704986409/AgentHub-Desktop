@@ -1,11 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useStore, type Agent, type QueuedMessage, type StationKind, type ToolKind } from '@/store/store';
 import {
-  buildSpawnCommand,
   ASSISTANT_MODEL,
   inferAgentProvider,
   isClaudeProvider,
-  tokenizeCommand,
   type HarnessConfig
 } from '@/store/config';
 import {
@@ -398,18 +396,9 @@ export function useHive(config: HarnessConfig | null): void {
 
       const godProvider = config.godProvider ?? 'claude';
       const godModel = config.godModel;
-      const command = buildSpawnCommand(config, godModel, godProvider);
-      const [exe, ...args] = tokenizeCommand(command.trim());
-      const res = await window.cth.spawnPty({
-        id: GOD_PTY,
-        cwd: config.harnessHome!,
-        command: exe,
-        args,
-        cols: 100,
-        rows: 30
-      });
       if (cancelled) { godSpawning.current = false; return; }
-      if (!res.ok) { godSpawning.current = false; useStore.getState().setGodStatus('failed'); return; }
+
+      // In AgentHub mode, Michael/God is presentation only and not spawned as a local provider process.
       const god: Agent = {
         id: GOD_ID,
         name: godName,
@@ -424,7 +413,7 @@ export function useHive(config: HarnessConfig | null): void {
         progress: 0,
         currentStation: 'desk',
         ptyId: GOD_PTY,
-        command: command.trim(),
+        command: '',
         provider: godProvider,
         model: godModel,
         isGod: true,
@@ -432,21 +421,7 @@ export function useHive(config: HarnessConfig | null): void {
       };
       useStore.getState().addAgent(god);
       useStore.getState().setGodStatus('ready');
-
-      const resumedGod = false;
-      bootGraceUntil.current[GOD_ID] = Date.now() + BOOT_GRACE_MS;
-      void (async () => {
-        try {
-          const remoteCommand = remoteControlCommandForProvider(godProvider, godName);
-          if (remoteCommand) {
-            await submitToPty(GOD_PTY, remoteCommand, godProvider, REMOTE_CONTROL_SETTLE_MS);
-          }
-          if (!cancelled && !resumedGod) {
-            await submitToPty(GOD_PTY, INITIAL_GOD_PROMPT, godProvider);
-          }
-        } catch { /* PTY may have died during startup */ }
-        finally { bootGraceUntil.current[GOD_ID] = 0; }
-      })();
+      godSpawning.current = false;
     }, 1200);
     return () => { cancelled = true; clearTimeout(t); };
   }, [config?.onboardingComplete, config?.harnessHome]);
@@ -1177,33 +1152,10 @@ export function useHive(config: HarnessConfig | null): void {
         const provider = inferAgentProvider(a.command, a.provider);
         // Prefer the agent's exact recorded command (same model/flags); fall back to
         // a rebuilt one only if it predates the persisted `command` field.
-        const command = (a.command ?? '').trim() || buildSpawnCommand(cfg, a.model, provider);
-        const [exe, ...args] = tokenizeCommand(command);
-        const hive = a.isGod
-          ? { id: a.id, name: a.name, cwd, provider, isGod: true, role: roleForHiveSpawn(a) }
-          : a.isAssistant
-          ? { id: a.id, name: a.name, cwd, provider, isAssistant: true, role: roleForHiveSpawn(a) }
-          : { id: a.id, name: a.name, cwd, provider, role: roleForHiveSpawn(a) };
-        // Spawn at the terminal's real grid so the TUI's absolute cursor moves land
-        // in the right cells (a size mismatch scatters the redraw).
-        const entry = acquireTerminal(deadId);
-        let cols = 100, rows = 30;
-        try { entry.fit.fit(); cols = entry.term.cols; rows = entry.term.rows; } catch { /* host not sized yet */ }
-        const res = await window.cth.spawnPty({
-          id: deadId,
-          cwd,
-          command: exe,
-          args,
-          cols,
-          rows
-        });
-        if (res.ok) {
-          reviving.current[deadId] = Date.now(); // re-stamp so the debounce covers the spawn
-          useStore.getState().updateAgent(a.id, { status: 'idle', action: 'revived after sleep' });
-        } else {
-          delete reviving.current[deadId]; // let a later power:resume retry it
-          console.error('[autorevive] respawn failed for', a.id, res.error);
-        }
+        // In AgentHub mode, local provider CLI execution via PTY is disabled.
+        // Update agent status directly without spawning local process.
+        reviving.current[deadId] = Date.now();
+        useStore.getState().updateAgent(a.id, { status: 'idle', action: 'restored after sleep' });
       } catch (err) {
         delete reviving.current[deadId];
         console.error('[autorevive] respawn threw for', deadId, err);

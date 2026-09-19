@@ -2596,17 +2596,18 @@ function spawnFailReason(error?: string): SpawnFailReason {
 }
 
 /** Developer terminal options for Renderer-visible PTY capability.
- *  Contains strictly terminal parameters — zero agent/provider/hive/isolate/resume fields. */
+ *  Contains strictly terminal parameters — zero agent/provider/hive/isolate/resume fields,
+ *  and zero command/args executable selection parameters. */
 export interface DeveloperTerminalSpawnOptions {
   id: string;
   cwd: string;
-  command?: string;
-  args?: string[];
   cols?: number;
   rows?: number;
 }
 
 /** Pure terminal process spawn for developer terminal capability.
+ *  Main selects the system default shell (ComSpec / SHELL).
+ *  Renderer cannot specify command or args.
  *  Does NOT infer provider, attach AgentProvider, provision Hive, write registry,
  *  create worktree, resume session, or auto-install engine CLI. */
 export async function spawnDeveloperTerminalCore(
@@ -2625,15 +2626,13 @@ export async function spawnDeveloperTerminalCore(
   const defaultShell = isWin
     ? (process.env.ComSpec || 'powershell.exe')
     : (process.env.SHELL || '/bin/bash');
-  const command = typeof opts.command === 'string' && opts.command.trim().length > 0
-    ? opts.command.trim()
-    : defaultShell;
+  const command = defaultShell;
 
   const spawnOpts: SpawnOptions = {
     id: opts.id,
     cwd,
     command,
-    args: Array.isArray(opts.args) ? opts.args : [],
+    args: [],
     cols: typeof opts.cols === 'number' ? opts.cols : 80,
     rows: typeof opts.rows === 'number' ? opts.rows : 24
   };
@@ -2652,7 +2651,7 @@ ipcMain.handle('pty:spawn', async (evt, opts: DeveloperTerminalSpawnOptions) => 
   const blocked = rejectAgentHubPtyExecution(opts);
   if (!blocked.ok) return blocked;
   const owner = BrowserWindow.fromWebContents(evt.sender)?.webContents ?? null;
-  return spawnDeveloperTerminalCore(opts, owner);
+  return spawnDeveloperTerminalCore({ id: opts.id, cwd: opts.cwd, cols: opts.cols, rows: opts.rows }, owner);
 });
 
 /** Core agent-spawn logic — provider inference, the missing-CLI installer

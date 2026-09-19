@@ -236,12 +236,11 @@ export interface HiveTerminalHandoffEvent {
 export interface DeveloperTerminalSpawnOptions {
   id: string;
   cwd: string;
-  command?: string;
-  args?: string[];
   cols?: number;
   rows?: number;
 }
 
+/** @deprecated Use DeveloperTerminalSpawnOptions. Narrow terminal alias. */
 export type SpawnPtyOptions = DeveloperTerminalSpawnOptions;
 
 export interface PtyExit { exitCode: number; signal?: number | undefined }
@@ -596,14 +595,13 @@ const api = {
     ipcRenderer.invoke('analytics:messageSent', surface).then(() => undefined, () => undefined),
 
   // ─── PTY ─────────────────────────────────────────────────────────────────
+  /** @deprecated Use spawnDeveloperTerminal instead. Narrow alias only. */
   spawnPty: (opts: DeveloperTerminalSpawnOptions): Promise<{ ok: boolean; error?: string; cwd?: string }> => {
     const blocked = rejectAgentHubPtyExecution(opts);
     if (!blocked.ok) return Promise.resolve(blocked);
     const sanitized: DeveloperTerminalSpawnOptions = {
       id: opts.id,
       cwd: opts.cwd,
-      command: opts.command,
-      args: opts.args,
       cols: opts.cols,
       rows: opts.rows
     };
@@ -615,8 +613,6 @@ const api = {
     const sanitized: DeveloperTerminalSpawnOptions = {
       id: opts.id,
       cwd: opts.cwd,
-      command: opts.command,
-      args: opts.args,
       cols: opts.cols,
       rows: opts.rows
     };
