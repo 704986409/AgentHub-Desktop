@@ -2595,16 +2595,64 @@ function spawnFailReason(error?: string): SpawnFailReason {
   return 'spawn_error';
 }
 
-ipcMain.handle('pty:spawn', async (evt, opts: AgentSpawnOptions) => {
-  if (!opts || typeof opts.id !== 'string' || typeof opts.cwd !== 'string' || typeof opts.command !== 'string') {
+/** Developer terminal options for Renderer-visible PTY capability.
+ *  Contains strictly terminal parameters — zero agent/provider/hive/isolate/resume fields. */
+export interface DeveloperTerminalSpawnOptions {
+  id: string;
+  cwd: string;
+  command?: string;
+  args?: string[];
+  cols?: number;
+  rows?: number;
+}
+
+/** Pure terminal process spawn for developer terminal capability.
+ *  Does NOT infer provider, attach AgentProvider, provision Hive, write registry,
+ *  create worktree, resume session, or auto-install engine CLI. */
+export async function spawnDeveloperTerminalCore(
+  opts: DeveloperTerminalSpawnOptions,
+  owner: Electron.WebContents | null
+): Promise<{ ok: boolean; error?: string; cwd?: string }> {
+  if (!opts || typeof opts.id !== 'string' || typeof opts.cwd !== 'string') {
+    return { ok: false, error: 'invalid DeveloperTerminalSpawnOptions: missing id or cwd' };
+  }
+  const cwd = expandTilde(opts.cwd);
+  if (!existsSync(cwd)) {
+    return { ok: false, error: `cwd does not exist: ${cwd}` };
+  }
+
+  const isWin = process.platform === 'win32';
+  const defaultShell = isWin
+    ? (process.env.ComSpec || 'powershell.exe')
+    : (process.env.SHELL || '/bin/bash');
+  const command = typeof opts.command === 'string' && opts.command.trim().length > 0
+    ? opts.command.trim()
+    : defaultShell;
+
+  const spawnOpts: SpawnOptions = {
+    id: opts.id,
+    cwd,
+    command,
+    args: Array.isArray(opts.args) ? opts.args : [],
+    cols: typeof opts.cols === 'number' ? opts.cols : 80,
+    rows: typeof opts.rows === 'number' ? opts.rows : 24
+  };
+
+  const res = ptyManager.spawn(spawnOpts, owner);
+  if (!res.ok) {
+    return { ok: false, error: res.error ?? 'failed to spawn terminal' };
+  }
+  return { ok: true, cwd };
+}
+
+ipcMain.handle('pty:spawn', async (evt, opts: DeveloperTerminalSpawnOptions) => {
+  if (!opts || typeof opts.id !== 'string' || typeof opts.cwd !== 'string') {
     return { ok: false, error: 'invalid SpawnOptions' };
   }
   const blocked = rejectAgentHubPtyExecution(opts);
   if (!blocked.ok) return blocked;
-  // Record the spawning window as the PTY's owner so its output routes ONLY back
-  // to that floor, then run the shared spawn core.
   const owner = BrowserWindow.fromWebContents(evt.sender)?.webContents ?? null;
-  return spawnAgentCore(opts, owner);
+  return spawnDeveloperTerminalCore(opts, owner);
 });
 
 /** Core agent-spawn logic — provider inference, the missing-CLI installer

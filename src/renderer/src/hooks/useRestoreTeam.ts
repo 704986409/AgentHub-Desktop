@@ -133,21 +133,9 @@ export function useRestoreTeam(config?: HarnessConfig | null): RestoreTeamState 
             id: ptyId,
             cwd,
             command: exe,
-            provider,
             args,
             cols: 100,
-            rows: 30,
-            // Worktree (if any) already exists on disk — cd into it, don't create a
-            // new one (re-isolating would conflict on the existing path/branch and
-            // lose its uncommitted work).
-            isolate: false,
-            // Continue the worker's prior CLI session if one was recorded — the
-            // main process picks the provider's resume flag (Claude --resume,
-            // agy --conversation) and for Claude reattaches the transcript. The
-            // agent id is preserved across restart, so its registry entry,
-            // memory.md and inbox reattach by id. No-op without a recorded session.
-            resume: true,
-            hive: { id: a.id, name: a.name, provider, cwd, role: roleForHiveSpawn(a) }
+            rows: 30
           });
           if (res.ok) {
             restored++;
@@ -157,16 +145,9 @@ export function useRestoreTeam(config?: HarnessConfig | null): RestoreTeamState 
                 ptyId,
                 archived: false,
                 status: 'idle',
-                // Surface the worktree fallback on the floor card; otherwise normal.
                 action: worktreeGone ? 'worktree gone — using base repo' : 'starting up',
-                // The worktree is no longer on disk — drop it so this agent is treated
-                // as a plain base-cwd agent going forward (a future restore won't keep
-                // re-probing a dead path).
                 worktreePath: worktreeGone ? undefined : a.worktreePath,
-                // Crush spawns bare (no positional protocol) and hands the seed back
-                // here; useHive types it after boot. Re-seeding a resumed worker is
-                // idempotent (it just re-reads its inbox per protocol). (ondev-b)
-                seedPrompt: res.seedPrompt,
+                seedPrompt: undefined,
                 carrying: undefined,
                 currentStation: 'desk',
                 recentTextTs: Date.now()

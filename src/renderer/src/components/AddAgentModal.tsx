@@ -407,49 +407,18 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
       id: ptyId,
       cwd,
       command: exe,
-      provider,
       args,
       cols: 100,
-      rows: 30,
-      // When set, the main process spawns this agent in its own git worktree.
-      // Forced OFF when resuming a session — `--resume` needs the real cwd's
-      // transcript, not a fresh worktree with a different (empty) project dir.
-      isolate: resuming ? false : isolate,
-      // #2 — continue an existing Claude session in this agent's cwd.
-      resumeSessionId: resuming ? resumeSessionId.trim() : undefined,
-      // Provision this agent in the hive (memory + mailbox + identity/protocol).
-      hive: {
-        id,
-        name: name.trim(),
-        provider,
-        cwd,
-        role: description.trim() || undefined,
-        // A hire manifest may carry validated capability tags (routing hints).
-        capabilities: hireMeta?.capabilities
-      }
+      rows: 30
     });
     if (!spawnRes.ok) {
       setBusy(false);
       setError(spawnRes.error ?? 'spawn failed');
       return;
     }
-    // #2 — the requested resume session id wasn't found anywhere; main fell back
-    // to a fresh session. Don't block the spawn, but make it visible.
-    if (resuming && spawnRes.resumeNotFound) {
-      console.warn(`[add-agent] resume session "${resumeSessionId.trim()}" not found — started a fresh session`);
-    }
 
-    // Main expands `~` at ingestion and echoes back the absolute path it actually
-    // spawned into — record THAT, so this agent's cwd matches the hive registry
-    // (and survives a restart, where nothing re-expands it).
     const spawnedCwd = spawnRes.cwd || cwd;
-    // With git isolation the agent RUNS in its own worktree, but its PROJECT is
-    // still the folder the user picked. Labelling the agent with the worktree's
-    // name was the visible half; the damaging half was promoting that worktree
-    // into registeredRepos below, which turned the project quick-picks into a
-    // list of throwaway worktrees. Mirrors the `isolate` sent to main, which is
-    // forced off while resuming.
-    const projectCwd = (!resuming && isolate) ? cwd.trim() : spawnedCwd;
+    const projectCwd = cwd.trim() || spawnedCwd;
     const agent: Agent = {
       id,
       name: name.trim(),
@@ -461,19 +430,15 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
       cwd: spawnedCwd,
       goal: goal.trim() || undefined,
       status: 'idle',
-      action: resuming && spawnRes.resumeNotFound ? 'session not found — fresh start' : 'starting up',
+      action: 'starting up',
       progress: 0,
       currentStation: 'desk',
       ptyId,
       command: command.trim(),
       provider,
       model,
-      // Persist the resolved worktree path (set only when isolation provisioned
-      // one) so a restart can re-enter this exact worktree — see restoreTeam.
-      worktreePath: spawnRes.worktreePath,
-      // Crush (seedDelivery:'type-into-tui') hands its hive protocol back here
-      // instead of on argv; useHive types it into the TUI after boot. (ondev-b)
-      seedPrompt: spawnRes.seedPrompt,
+      worktreePath: undefined,
+      seedPrompt: undefined,
       recentTextTs: Date.now()
     };
     addAgent(agent);

@@ -404,17 +404,9 @@ export function useHive(config: HarnessConfig | null): void {
         id: GOD_PTY,
         cwd: config.harnessHome!,
         command: exe,
-        provider: godProvider,
         args,
         cols: 100,
-        rows: 30,
-        // Restore Michael's prior conversation across an app restart. His session
-        // id lives in the hive registry (recorded from his hooks), so the main
-        // process attaches `--resume <id>`; a missing transcript falls back to a
-        // fresh session. Without this the most important context on the floor —
-        // the orchestrator's — was lost on every restart.
-        resume: true,
-        hive: { id: GOD_ID, name: godName, provider: godProvider, cwd: config.harnessHome!, isGod: true, role: 'orchestrator (god)' }
+        rows: 30
       });
       if (cancelled) { godSpawning.current = false; return; }
       if (!res.ok) { godSpawning.current = false; useStore.getState().setGodStatus('failed'); return; }
@@ -441,30 +433,15 @@ export function useHive(config: HarnessConfig | null): void {
       useStore.getState().addAgent(god);
       useStore.getState().setGodStatus('ready');
 
-      // Kick Michael off once his TUI is up. Always re-enable remote control so
-      // the human can approve permission prompts from their phone (best-effort — a
-      // failed/unknown slash command just prints to his terminal and is harmless).
-      // Then, ONLY on a genuinely fresh spawn, hand him the orientation prompt —
-      // a RESUMED Michael already has his full context and must not be re-oriented
-      // mid-thread (that would reset the floor's situational awareness). Both go
-      // through the per-pty submit chain, so they're strictly sequential and can't
-      // jam together; the boot-grace window keeps the inbox-wake/drain loops off
-      // Michael until he's settled. The live-PTY branch above skips this entirely.
-      const resumedGod = res.resumed === true;
+      const resumedGod = false;
       bootGraceUntil.current[GOD_ID] = Date.now() + BOOT_GRACE_MS;
       void (async () => {
         try {
           const remoteCommand = remoteControlCommandForProvider(godProvider, godName);
           if (remoteCommand) {
-            // settleMs pauses the chain ~1.5s after /remote-control before the
-            // orientation prompt (fresh spawns only) is submitted next.
             await submitToPty(GOD_PTY, remoteCommand, godProvider, REMOTE_CONTROL_SETTLE_MS);
           }
           if (!cancelled && !resumedGod) {
-            // A type-into-tui god (Crush) can't ride its hive protocol on argv, so the
-            // main process hands it back as seedPrompt — type it FIRST (identity), then
-            // the orientation kick. Serialized via writeChains so they can't jam. (ondev-b)
-            if (res.seedPrompt) await submitToPty(GOD_PTY, res.seedPrompt, godProvider);
             await submitToPty(GOD_PTY, INITIAL_GOD_PROMPT, godProvider);
           }
         } catch { /* PTY may have died during startup */ }
@@ -1216,16 +1193,9 @@ export function useHive(config: HarnessConfig | null): void {
           id: deadId,
           cwd,
           command: exe,
-          provider,
           args,
           cols,
-          rows,
-          // The worktree (if any) already exists on disk — re-enter it, do NOT
-          // re-isolate (that conflicts on the existing path/branch).
-          isolate: false,
-          // Reattach the agent's prior session so no context is lost on revive.
-          resume: true,
-          hive
+          rows
         });
         if (res.ok) {
           reviving.current[deadId] = Date.now(); // re-stamp so the debounce covers the spawn

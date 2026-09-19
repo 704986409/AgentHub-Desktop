@@ -500,18 +500,10 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
         cwd: a.cwd,
         command: exe,
         args,
-        provider,
         cols,
-        rows,
-        hive,
-        resume,
-        resumeSessionId,
-        requireResume: resume
+        rows
       });
       if (!res.ok) throw new Error(res.error ?? 'Restart failed.');
-      if (resume && res.resumed !== true) {
-        throw new Error('Resume was refused; no replacement session was accepted.');
-      }
       if (res.ok) {
         // Record the model even on a resume. A same-provider model change now
         // RESUMES the session (that is the point — you keep the conversation and

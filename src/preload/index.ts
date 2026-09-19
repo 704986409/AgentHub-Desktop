@@ -233,36 +233,16 @@ export interface HiveTerminalHandoffEvent {
   createdAt: string;
 }
 
-export interface SpawnPtyOptions {
+export interface DeveloperTerminalSpawnOptions {
   id: string;
   cwd: string;
-  command: string;
-  /** Which CLI to spawn; usually inferred from `command` in the main process. */
-  provider?: AgentProvider;
+  command?: string;
   args?: string[];
   cols?: number;
   rows?: number;
-  /** When present, the agent is provisioned in the hive at spawn. */
-  hive?: HiveAgentMeta;
-  /** When true (and cwd is a git repo), spawn the agent in its own git worktree. */
-  isolate?: boolean;
-  /** When true, continue the agent's prior CLI session if one was recorded
-   *  (provider-aware: Claude/Grok `--resume`, Antigravity `--conversation`). For
-   *  Claude the main process looks up the session id from the hive registry and
-   *  seeds its transcript into the cwd's project dir (#1 — restore on restart). */
-  resume?: boolean;
-  /** Fail before spawning when a requested resume cannot be attached. */
-  requireResume?: boolean;
-  /** Explicit Claude session id to resume (#2 — Add Agent "resume session"). The
-   *  main process seeds that session's `.jsonl` into the target cwd's project dir
-   *  (copying it from wherever it lives) and launches `claude --resume <id>`. */
-  resumeSessionId?: string;
-  /**
-   * PTY purpose. AgentHub provider execution is forbidden.
-   * Default is legacy Munder compatibility / developer terminal.
-   */
-  purpose?: 'developer-terminal' | 'legacy-munder-compat';
 }
+
+export type SpawnPtyOptions = DeveloperTerminalSpawnOptions;
 
 export interface PtyExit { exitCode: number; signal?: number | undefined }
 
@@ -616,12 +596,31 @@ const api = {
     ipcRenderer.invoke('analytics:messageSent', surface).then(() => undefined, () => undefined),
 
   // ─── PTY ─────────────────────────────────────────────────────────────────
-  /** `cwd` in the result is the TILDE-EXPANDED absolute path main actually spawned
-   *  into — the renderer stores that, not the raw `~/…` the user typed. */
-  spawnPty: (opts: SpawnPtyOptions): Promise<{ ok: boolean; error?: string; cwd?: string; worktreePath?: string; resumeNotFound?: boolean; resumed?: boolean; seedPrompt?: string }> => {
+  spawnPty: (opts: DeveloperTerminalSpawnOptions): Promise<{ ok: boolean; error?: string; cwd?: string }> => {
     const blocked = rejectAgentHubPtyExecution(opts);
     if (!blocked.ok) return Promise.resolve(blocked);
-    return ipcRenderer.invoke('pty:spawn', opts);
+    const sanitized: DeveloperTerminalSpawnOptions = {
+      id: opts.id,
+      cwd: opts.cwd,
+      command: opts.command,
+      args: opts.args,
+      cols: opts.cols,
+      rows: opts.rows
+    };
+    return ipcRenderer.invoke('pty:spawn', sanitized);
+  },
+  spawnDeveloperTerminal: (opts: DeveloperTerminalSpawnOptions): Promise<{ ok: boolean; error?: string; cwd?: string }> => {
+    const blocked = rejectAgentHubPtyExecution(opts);
+    if (!blocked.ok) return Promise.resolve(blocked);
+    const sanitized: DeveloperTerminalSpawnOptions = {
+      id: opts.id,
+      cwd: opts.cwd,
+      command: opts.command,
+      args: opts.args,
+      cols: opts.cols,
+      rows: opts.rows
+    };
+    return ipcRenderer.invoke('pty:spawn', sanitized);
   },
   writePty: (id: string, data: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('pty:write', id, data),
