@@ -172,14 +172,8 @@ export function PtyTerminalView({ ptyId, onStreamData, onUserPrompt, onToggleFul
       try {
         const before = { cols: entry.term.cols, rows: entry.term.rows };
         entry.fit.fit();
-        // Only poke the pty when the grid ACTUALLY changed: every resize makes
-        // the Claude TUI repaint its whole screen, and each repaint pushes the
-        // previous frame into scrollback — the attach-time refit cascade (rAF,
-        // 60ms, 240ms, font-load) used to stack the boot banner three times
-        // before the user ever typed anything.
-        if (entry.term.cols !== before.cols || entry.term.rows !== before.rows) {
-          window.cth.resizePty(ptyId, entry.term.cols, entry.term.rows);
-        }
+        // V0.8.9D: Primary AgentHub Renderer has zero PTY resize authority.
+
         entry.term.refresh(0, Math.max(0, entry.term.rows - 1));
         initialFitDone = true;
       } catch { /* host may not be sized yet */ }
@@ -284,8 +278,8 @@ export function PtyTerminalView({ ptyId, onStreamData, onUserPrompt, onToggleFul
     entry.term.options.fontSize = fontSize;
     try {
       entry.fit.fit();
-      window.cth.resizePty(ptyId, entry.term.cols, entry.term.rows);
     } catch { /* host may not be sized yet */ }
+
   }, [fontSize, ptyId]);
 
   // Drag-and-drop a file (image, etc.) onto the terminal → inject its absolute

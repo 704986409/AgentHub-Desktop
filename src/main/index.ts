@@ -68,6 +68,7 @@ import { WorkerWakeWatchdog, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
 import { rejectAgentHubPtyExecution } from '../shared/munderAuthority';
+import { removeSessionByPtyId } from './terminalSession';
 import { fetchHireManifest, readHireManifestFiles } from './hire';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
@@ -448,6 +449,8 @@ const preservedWorktrees = new Map<string, PreservedWorktree>();
  * handler or node-pty's onExit).
  */
 function teardownPty(id: string): void {
+  // Natural exit & teardown session cleanup (V0.8.9D)
+  try { removeSessionByPtyId(id); } catch { /* best-effort */ }
   // Ephemeral-worker flag, read BEFORE the cleanup below deletes the entry. All
   // worker deaths (done-release, idle/token reap, manual stop, crash) funnel
   // through here, so this is the one place their floor card gets archived
@@ -3180,24 +3183,10 @@ ipcMain.handle('developer-terminal:close', (evt) => {
 ipcMain.handle('developer-terminal:open', async (_evt, opts?: { cwd?: string; cols?: number; rows?: number }) => {
   return createDeveloperTerminalWindow(opts);
 });
-ipcMain.handle('pty:resize', (_evt, id: string, cols: number, rows: number) => {
-  if (typeof id !== 'string' || typeof cols !== 'number' || typeof rows !== 'number') return { ok: false, error: 'invalid args' };
-  return ptyManager.resize(id, cols, rows);
-});
-ipcMain.handle('pty:redraw', (_evt, id: string) => {
-  if (typeof id !== 'string') return { ok: false, error: 'invalid id' };
-  return ptyManager.redraw(id);
-});
-ipcMain.handle('pty:kill', (_evt, id: string) => {
-  if (typeof id !== 'string') return { ok: false, error: 'invalid id' };
-  // Kill the process, then run the shared lifecycle teardown (archive the agent,
-  // remove its isolated worktree, drop the maps). teardownPty is idempotent, so
-  // node-pty firing onExit once the child actually dies is a harmless no-op.
-  const res = ptyManager.kill(id);
-  teardownPty(id);
-  return res;
-});
-ipcMain.handle('pty:list', () => ptyManager.list());
+// V0.8.9D: Generic Renderer-facing PTY lifecycle IPC channels (pty:resize, pty:redraw,
+// pty:kill, pty:list) are removed. Primary AgentHub Renderer has zero PTY lifecycle
+// authority. Dedicated Terminal controls its own session via developer-terminal:* channels.
+
 
 // ─── IPC: analytics (the ONE renderer-facing seam) ──────────────────────────
 /** Count one human-sent message (TELEMETRY.md → `message_sent`). A COUNT, and

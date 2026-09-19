@@ -234,18 +234,9 @@ export function App() {
     return () => { unsub(); stopMockLoop(); };
   }, [config?.onboardingComplete]);
 
-  // Reconcile restored agents against the PTYs still alive in the main process.
-  // After a renderer reload (e.g. the laptop slept and Vite reloaded the page),
-  // this keeps agents whose process survived and drops any that truly died.
-  useEffect(() => {
-    if (!config?.onboardingComplete) return;
-    let cancelled = false;
-    window.cth.listPtys().then((list) => {
-      if (cancelled) return;
-      useStore.getState().reconcileWithLivePtys(list.map((p) => p.id));
-    }).catch(() => { /* ignore — keep restored agents as-is */ });
-    return () => { cancelled = true; };
-  }, [config?.onboardingComplete]);
+  // V0.8.9D: Primary AgentHub Renderer has zero PTY enumeration authority.
+  // Agent roster and status are managed authoritatively via Backend.
+
 
   // Re-apply the persisted focus-mode preference as the roster fills in.
   //

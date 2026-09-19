@@ -71,10 +71,10 @@ export function OfficeThemePicker({ config }: { config: HarnessConfig }) {
       const victims = nonGodAgents();
       for (const a of victims) {
         if (a.ptyId) {
-          await window.cth.killPty(a.ptyId);
           disposeTerminal(a.ptyId);
         }
       }
+
       for (const a of victims) archiveAgent(a.id);
       await window.cth.updateConfig({ officeTheme: id });
       setCurrent(id);

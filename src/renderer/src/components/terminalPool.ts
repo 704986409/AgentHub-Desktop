@@ -757,10 +757,9 @@ export function attachTerminal(entry: TerminalEntry, container: HTMLElement): vo
     if (isArabicTerminalEnabled()) enableArabicRendering(entry);
   }
   leaseWebglRenderer(entry);
-  // PTY startup output can arrive before this pooled terminal subscribes.
-  // Request one same-size redraw after open/subscription even when fit() later
-  // sees unchanged dimensions and therefore emits no resize of its own.
-  requestInitialPtyRedraw(entry.recovery, () => window.cth.redrawPty(entry.ptyId));
+  // V0.8.9D: Primary AgentHub Renderer has zero PTY redraw authority.
+  requestInitialPtyRedraw(entry.recovery, () => undefined);
+
   if (entry.needsRendererRepaint) {
     scheduleWebglRecovery(entry.recovery, requestAnimationFrame, () =>
       repaintTerminalAfterRendererLoss(entry));
@@ -833,11 +832,8 @@ export function reflowTerminal(ptyId: string): void {
     entry.term.clearTextureAtlas?.();
     const before = { cols: entry.term.cols, rows: entry.term.rows };
     entry.fit.fit();
-    // Only poke the pty when the grid actually changed (every resize repaints
-    // the TUI and pushes a frame into scrollback).
-    if (entry.term.cols !== before.cols || entry.term.rows !== before.rows) {
-      window.cth.resizePty(ptyId, entry.term.cols, entry.term.rows);
-    }
+    // V0.8.9D: Primary AgentHub Renderer has zero PTY resize authority.
+
     entry.term.refresh(0, Math.max(0, entry.term.rows - 1));
   } catch { /* host may not be sized yet */ }
 }

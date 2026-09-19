@@ -87,24 +87,14 @@ const writeChains = new Map<string, Promise<void>>();
 const readyPids = new Map<string, number>();
 
 async function waitForTerminalReady(
-  ptyId: string,
-  provider: AgentProvider,
-  timeoutMs = 30_000
+  _ptyId: string,
+  _provider: AgentProvider,
+  _timeoutMs = 30_000
 ): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const live = await window.cth.listPtys();
-    const pty = live.find((entry) => entry.id === ptyId);
-    if (!pty) throw new Error(`PTY exited before becoming ready: ${ptyId}`);
-    if (readyPids.get(ptyId) === pty.pid) return;
-    if (terminalReadyToReceive(pty.hasOutput, Date.now() - started, provider)) {
-      readyPids.set(ptyId, pty.pid);
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`PTY did not become ready within ${timeoutMs}ms: ${ptyId}`);
+  // V0.8.9D: Primary AgentHub Renderer has zero PTY authority. No PTY enumeration or readiness polling.
+  return Promise.resolve();
 }
+
 
 /**
  * Type a line into an agent's Claude Code TUI and actually submit it.
@@ -363,18 +353,18 @@ export function useHive(config: HarnessConfig | null): void {
     }).catch(() => { /* hive not ready yet */ });
   }, [config?.onboardingComplete]);
 
-  // 1) Bootstrap the god agent (source of truth = live PTYs, to dodge restarts).
+  // 1) Bootstrap the god agent (presentation-only in AgentHub mode).
   useEffect(() => {
     if (!config?.onboardingComplete || !config.harnessHome) return;
     let cancelled = false;
     useStore.getState().setGodStatus('booting');
     const t = setTimeout(async () => {
       if (cancelled) return;
-      const live = await window.cth.listPtys().catch(() => []);
-      if (live.some((p) => p.id === GOD_PTY)) { // already running — keep restored entry
+      if (useStore.getState().agents.some((a) => a.id === GOD_ID)) {
         if (!cancelled) useStore.getState().setGodStatus('ready');
         return;
       }
+
       // Synchronous guard (no await between check and set) → exactly one spawn.
       if (cancelled || godSpawning.current) return;
       godSpawning.current = true;
@@ -591,34 +581,8 @@ export function useHive(config: HarnessConfig | null): void {
   //     flips any 'working' agent quiet for QUIESCE_IDLE_MS to idle so the nudge can
   //     drain it. Safe because a genuinely-working agent (incl. a long streaming tool)
   //     keeps emitting bytes; a false idle self-corrects on the next hook event.
-  useEffect(() => {
-    if (!config?.onboardingComplete) return;
-    const iv = setInterval(async () => {
-      const ptys = await window.cth.listPtys().catch(() => []);
-      const lastOut: Record<string, number> = {};
-      for (const p of ptys) lastOut[p.id] = p.lastOutputAt;
-      // Publish BEFORE the early return and before the 'working' filter below,
-      // so the drain (#4) also gets a reading for breaker-pinned agents — and so
-      // a vanished PTY clears its entry instead of leaving a stale one.
-      ptyLastOutput.current = lastOut;
-      if (!ptys.length) return;
-      const now = Date.now();
-      const { agents, updateAgent } = useStore.getState();
-      for (const a of agents) {
-        if (!a.ptyId || a.status !== 'working') continue;
-        // Never fight the breaker pin (a constrained/stopped agent stays 'looping')
-        // or a still-booting agent (its boot sequence is mid-type).
-        const bl = breakerLevel.current[a.id];
-        if (bl === 'constrained' || bl === 'stopped') continue;
-        if ((bootGraceUntil.current[a.id] ?? 0) > now) continue;
-        const last = lastOut[a.ptyId];
-        if (typeof last === 'number' && last > 0 && now - last > QUIESCE_IDLE_MS) {
-          updateAgent(a.id, { status: 'idle', action: 'idle', carrying: undefined });
-        }
-      }
-    }, QUIESCE_POLL_MS);
-    return () => clearInterval(iv);
-  }, [config?.onboardingComplete]);
+  // V0.8.9D: Quiesce poll via listPtys removed. Primary AgentHub Renderer has zero PTY enumeration authority.
+
 
   // 3) Wake agents holding unread inbox messages. The assistant is send-only
   //    (it never receives inbox mail), so it's excluded.
@@ -1138,7 +1102,6 @@ export function useHive(config: HarnessConfig | null): void {
         // it if it still exists, else fall back to the base cwd — same as restoreTeam.
         let cwd = a.cwd;
         if (a.worktreePath && (await window.cth.gitIsRepo(a.worktreePath))) cwd = a.worktreePath;
-        await window.cth.killPty(deadId);
         // Soft-reset the pooled xterm in place (no-op if none): re-arm input and
         // clear the stale frame so the revived TUI paints clean — like the button.
         resetTerminal(deadId);

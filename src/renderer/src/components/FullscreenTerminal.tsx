@@ -942,8 +942,8 @@ function Header({ agent, onEdit }: { agent: Agent; onEdit: () => void }) {
   const onKill = async () => {
     if (!agent.ptyId) return;
     if (!confirm(t('agentDetail.killConfirm', { name: agent.name }))) return;
-    await window.cth.killPty(agent.ptyId);
     disposeTerminal(agent.ptyId);
+
     // archiveAgent re-homes focus mode to the next agent, and only leaves it when
     // the last one is gone. Hard-nulling here threw that away, which is why
     // closing an agent from inside focus mode still dropped you to the sidebar

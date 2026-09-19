@@ -55,3 +55,13 @@ export function handleDeveloperTerminalClose(
   terminalSessions.delete(senderId);
   return { ok: true };
 }
+
+export function removeSessionByPtyId(ptyId: string): boolean {
+  for (const [senderId, session] of terminalSessions.entries()) {
+    if (session.ptyId === ptyId) {
+      terminalSessions.delete(senderId);
+      return true;
+    }
+  }
+  return false;
+}

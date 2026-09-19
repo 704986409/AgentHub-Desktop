@@ -594,31 +594,12 @@ const api = {
   trackMessageSent: (surface: 'terminal' | 'composer'): Promise<void> =>
     ipcRenderer.invoke('analytics:messageSent', surface).then(() => undefined, () => undefined),
 
-  // ─── PTY ─────────────────────────────────────────────────────────────────
-  /** @deprecated Use spawnDeveloperTerminal instead. Narrow alias only. */
-  spawnPty: (opts: DeveloperTerminalSpawnOptions): Promise<{ ok: boolean; error?: string; cwd?: string }> => {
-    const blocked = rejectAgentHubPtyExecution(opts);
-    if (!blocked.ok) return Promise.resolve(blocked);
-    const sanitized: DeveloperTerminalSpawnOptions = {
-      id: opts.id,
-      cwd: opts.cwd,
-      cols: opts.cols,
-      rows: opts.rows
-    };
-    return ipcRenderer.invoke('pty:spawn', sanitized);
-  },
-  spawnDeveloperTerminal: (opts: DeveloperTerminalSpawnOptions): Promise<{ ok: boolean; error?: string; cwd?: string }> => {
-    const blocked = rejectAgentHubPtyExecution(opts);
-    if (!blocked.ok) return Promise.resolve(blocked);
-    const sanitized: DeveloperTerminalSpawnOptions = {
-      id: opts.id,
-      cwd: opts.cwd,
-      cols: opts.cols,
-      rows: opts.rows
-    };
-    return ipcRenderer.invoke('pty:spawn', sanitized);
-  },
+  // ─── PTY / Developer Terminal ───────────────────────────────────────────
+  // Primary AgentHub Renderer has ZERO generic PTY lifecycle authority (V0.8.9D).
+  // Only openDeveloperTerminal intent is exposed; process identity and ownership remain in Main.
   openDeveloperTerminal: (opts?: { cwd?: string; cols?: number; rows?: number }): Promise<{ ok: boolean; error?: string }> => {
+    const blocked = rejectAgentHubPtyExecution(opts);
+    if (!blocked.ok) return Promise.resolve(blocked);
     const sanitized = {
       cwd: typeof opts?.cwd === 'string' ? opts.cwd : undefined,
       cols: typeof opts?.cols === 'number' ? opts.cols : undefined,
@@ -626,21 +607,7 @@ const api = {
     };
     return ipcRenderer.invoke('developer-terminal:open', sanitized);
   },
-  resizePty: (id: string, cols: number, rows: number): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke('pty:resize', id, cols, rows),
-  redrawPty: (id: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke('pty:redraw', id),
-  killPty: (id: string): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke('pty:kill', id),
-  listPtys: (): Promise<Array<{
-    id: string;
-    cwd: string;
-    command: string;
-    pid: number;
-    lastOutputAt: number;
-    hasOutput: boolean;
-  }>> =>
-    ipcRenderer.invoke('pty:list'),
+
   /** Resolve a Claude session id to the cwd it originally ran in (Add Agent
    *  resume auto-fill), or null if the id is invalid/unknown. */
   resolveSessionCwd: (sessionId: string): Promise<string | null> =>
