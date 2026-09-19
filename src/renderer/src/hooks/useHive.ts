@@ -18,7 +18,7 @@ import { bridgeOf, providerPreset } from '../../../shared/agentProvider';
 import { isDurableRole, preferredAgentRole, roleForHiveSpawn } from '../../../shared/agentRole';
 import { inboxNudgeText } from '../../../shared/hiveNudge';
 import { resolveGodName } from '../../../shared/godIdentity';
-import { acquireTerminal, resetTerminal, isTerminalAutomationSafe } from '@/components/terminalPool';
+import { acquireTerminal, isTerminalAutomationSafe } from '@/components/terminalPool';
 import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition } from './queueDelivery';
 import { OFFICE_CAST, DEFAULT_CHARACTER } from '@/scene/office/cast';
 
@@ -306,11 +306,6 @@ export function useHive(config: HarnessConfig | null): void {
   // has already been typed — guards effect #3b against re-seeding. (ondev-b)
   const seeded = useRef<Set<string>>(new Set());
   const seenTerminalHandoffs = useRef<Set<string>>(new Set());
-  // Per-pty timestamp guarding auto-revive (effect #7) against a double-respawn
-  // when power-resume + screen-unlock arrive back-to-back: an id revived (or
-  // mid-revive) within REVIVE_DEBOUNCE_MS is skipped. Set BEFORE the async spawn
-  // so a re-entrant event can't race a second respawn for the same id.
-  const reviving = useRef<Record<string, number>>({});
   // Reactive so the assistant bootstrap (effect #1b) re-runs once Michael is ready.
   const godStatus = useStore((s) => s.godStatus);
   // Per-pty `lastOutputAt`, refreshed by the quiescence sweep (#2e) and read by
@@ -1075,53 +1070,7 @@ export function useHive(config: HarnessConfig | null): void {
     return () => { off?.(); offLegacy?.(); };
   }, [config?.onboardingComplete]);
 
-  // 7) Auto-revive wedged PTYs after the Mac sleeps/locks. Kevin's main-process
-  //    keepalive catches up its schedules on wake and DETECTS terminals that were
-  //    live before sleep but went silent after resume — it reports those ids on
-  //    `power:resume`. We respawn EXACTLY those, resuming each agent's prior CLI
-  //    session (--resume) so the terminal self-heals instead of the user clicking
-  //    "Restart & Continue". This reuses the same resume-spawn flow as that button
-  //    (CommandCenterPanel.restartWithModel) and restoreTeam's worktree handling.
-  //    Pure addition: an empty `dead[]` is a no-op; healthy PTYs are never touched.
-  useEffect(() => {
-    if (!config?.onboardingComplete) return;
-    // Skip an id we revived (or are mid-reviving) within this window — coalesces
-    // a resume + unlock that arrive back-to-back (main also coalesces on its side).
-    const REVIVE_DEBOUNCE_MS = 8000;
-
-    const revive = async (deadId: string): Promise<void> => {
-      const now = Date.now();
-      if (now - (reviving.current[deadId] ?? 0) < REVIVE_DEBOUNCE_MS) return;
-      reviving.current[deadId] = now; // claim BEFORE any await so re-entry can't double-spawn
-      // Only respawn a PTY we actually own; never touch an unknown/healthy id.
-      const a = useStore.getState().agents.find((x) => x.ptyId === deadId);
-      if (!a) return;
-      try {
-        const cfg = await window.cth.getConfig();
-        // Isolated agents run inside their worktree (a.cwd is the base repo); re-enter
-        // it if it still exists, else fall back to the base cwd — same as restoreTeam.
-        let cwd = a.cwd;
-        if (a.worktreePath && (await window.cth.gitIsRepo(a.worktreePath))) cwd = a.worktreePath;
-        // Soft-reset the pooled xterm in place (no-op if none): re-arm input and
-        // clear the stale frame so the revived TUI paints clean — like the button.
-        resetTerminal(deadId);
-        const provider = inferAgentProvider(a.command, a.provider);
-        // Prefer the agent's exact recorded command (same model/flags); fall back to
-        // a rebuilt one only if it predates the persisted `command` field.
-        // In AgentHub mode, local provider CLI execution via PTY is disabled.
-        // Update agent status directly without spawning local process.
-        reviving.current[deadId] = Date.now();
-        useStore.getState().updateAgent(a.id, { status: 'idle', action: 'restored after sleep' });
-      } catch (err) {
-        delete reviving.current[deadId];
-        console.error('[autorevive] respawn threw for', deadId, err);
-      }
-    };
-
-    return window.cth.onPowerResume?.((e) => {
-      const dead = Array.isArray(e?.dead) ? e.dead : [];
-      if (!dead.length) return; // healthy wake — nothing wedged, no-op
-      for (const id of dead) void revive(id);
-    });
-  }, [config?.onboardingComplete]);
+  // Renderer-side auto-revive is intentionally disabled in AgentHub mode.
+  // A dead legacy PTY is not proof that a runtime was restored; authoritative
+  // Agent state remains offline/degraded until Backend state says otherwise.
 }

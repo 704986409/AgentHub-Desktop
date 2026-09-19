@@ -18,7 +18,8 @@ import { useStore, type Agent } from '@/store/store';
 import { usePtyParser } from '@/hooks/usePtyParser';
 import { useRestoreTeam } from '@/hooks/useRestoreTeam';
 import { useTerminalFontSize } from './terminalFontSize';
-import { useHasTerminalDraft, disposeTerminal, reflowTerminal, notifyThemeChangeAll } from './terminalPool';
+import { useHasTerminalDraft, reflowTerminal, notifyThemeChangeAll } from './terminalPool';
+import { LEGACY_RUNTIME_ACTION_POLICY } from './runtimeActionSemantics';
 import { useAppTheme, toggleAppTheme } from '@/design/theme';
 import type { HarnessConfig } from '@/store/config';
 import { useRtl } from '@/i18n/useDirection';
@@ -264,7 +265,7 @@ export function FullscreenTerminal({ config }: FullscreenTerminalProps) {
   // Focus mode is pointing at something we cannot render. Re-home to another live
   // agent rather than dropping the user out; leave only when nothing is left.
   // In an effect, not in render: setState during render is a React anti-pattern,
-  // and hard-nulling here defeated the store's re-homing the same way onKill did.
+  // and hard-nulling here defeats the store's re-homing behavior.
   // `refocusFullscreen`, NOT `setFullscreen`: this is the app following the user,
   // not the user telling the app what they want. Going through the explicit
   // toggle here wrote `prefersFocusMode = false` every time an agent went away,
@@ -921,7 +922,6 @@ function SidebarRow({
 function Header({ agent, onEdit }: { agent: Agent; onEdit: () => void }) {
   const { t } = useTranslation();
   const typing = useHasTerminalDraft(agent.ptyId);
-  const archiveAgent = useStore((st) => st.archiveAgent);
   const [openState, setOpenState] = useState<'idle' | 'opening' | 'ok' | 'error'>('idle');
 
   /** Same action as the docked panel: open the OS terminal in this agent's
@@ -934,21 +934,6 @@ function Header({ agent, onEdit }: { agent: Agent; onEdit: () => void }) {
       setOpenState(res.ok ? 'ok' : 'error');
     } catch { setOpenState('error'); }
     setTimeout(() => setOpenState('idle'), 1500);
-  };
-
-  /** Kill + archive, mirroring AgentDetailPanel. Confirmed, because it ends a
-   *  running process. God is exempt: the floor respawns it immediately, so the
-   *  button would read as "restart Michael" while looking like "close". */
-  const onKill = async () => {
-    if (!agent.ptyId) return;
-    if (!confirm(t('agentDetail.killConfirm', { name: agent.name }))) return;
-    disposeTerminal(agent.ptyId);
-
-    // archiveAgent re-homes focus mode to the next agent, and only leaves it when
-    // the last one is gone. Hard-nulling here threw that away, which is why
-    // closing an agent from inside focus mode still dropped you to the sidebar
-    // even after the store was fixed.
-    archiveAgent(agent.id);
   };
 
   return (
@@ -1032,14 +1017,15 @@ function Header({ agent, onEdit }: { agent: Agent; onEdit: () => void }) {
           style={{ height: 24, padding: '0 8px', lineHeight: '24px' }}
         />
         {!agent.isGod && (
-          <PixelButton variant="destructive" size="sm" onClick={onKill}>
+          <PixelButton variant="destructive" size="sm" disabled>
             {/* inline-flex + center: the other buttons hold TEXT, whose line box
                 the button centres for free. A bare <Icon> is replaced-content
                 sitting on the text baseline, so it rode low and overhung the
                 24px box — the button measured the same as its neighbours while
                 reading taller than them. */}
             <span
-              title={t('fullscreenTerminal.closeAgent', { name: agent.name })}
+              title={LEGACY_RUNTIME_ACTION_POLICY.terminateAgent.reason}
+              aria-label={LEGACY_RUNTIME_ACTION_POLICY.terminateAgent.reason}
               style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 0 }}
             >
               <Icon name="x" />

@@ -2,17 +2,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
-import { disposeTerminal } from './terminalPool';
-import { PixelPanel } from './PixelPanel';
 import { PixelButton } from './PixelButton';
-import { Icon } from './Icon';
 import type { ThemeId } from '@/scene/office/themeRegistry';
+import { applyPresentationOnlyOfficeTheme } from './runtimeActionSemantics';
 
-// TV-show office themes (Phase 1 = the switch flow infra). Only `office` has a
-// real map+cast today; the five shows render via the loader's office fallback
-// until their content lands (Phase 2). `built: false` shows a "soon" tag and a
-// fallback note on switch, but the destructive switch flow still runs so the
-// whole pipeline (modal → delete cast → persist → re-seat) is exercisable now.
+// TV-show office themes are presentation only. `built: false` renders through
+// the office fallback and shows a note without changing Agent lifecycle state.
 interface ThemeMeta { id: ThemeId; label: string; blurb: string; built: boolean; swatch: string; }
 const THEME_META: ThemeMeta[] = [
   { id: 'office',        label: 'The Office',         blurb: 'Dunder Mifflin — the original floor', built: true,  swatch: '#6b5a4a' },
@@ -23,18 +18,14 @@ const THEME_META: ThemeMeta[] = [
   { id: 'hogwarts',      label: 'Harry Potter',       blurb: 'Hogwarts great hall',                 built: false, swatch: '#39305a' },
 ];
 
-/** Settings "Office Theme" section: an experimental flag toggle + a 6-card
- *  theme picker with the destructive switch flow (report §E). Self-contained so
- *  it stays out of SettingsModal's bulk. */
+/** Settings "Office Theme" section: presentation-only flag and theme picker. */
 export function OfficeThemePicker({ config }: { config: HarnessConfig }) {
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState(!!config.tvShowOffices);
   const [current, setCurrent] = useState<ThemeId>((config.officeTheme as ThemeId) ?? 'office');
-  const [pending, setPending] = useState<ThemeId | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
 
-  const archiveAgent = useStore((s) => s.archiveAgent);
   const setOfficeTheme = useStore((s) => s.setOfficeTheme);
 
   const toggleFlag = async () => {
@@ -51,45 +42,30 @@ export function OfficeThemePicker({ config }: { config: HarnessConfig }) {
     }
   };
 
-  const nonGodAgents = () =>
-    useStore.getState().agents.filter((a) => !a.isGod && !a.isAssistant);
-
   const onSelect = (id: ThemeId) => {
     setNote('');
-    if (busy || id === current) return;                 // no-op on the current theme
-    if (nonGodAgents().length === 0) { void applyTheme(id); return; } // god-only → instant
-    setPending(id);                                     // workers exist → confirm modal
+    if (busy || id === current) return;
+    void applyTheme(id);
   };
 
   const applyTheme = async (id: ThemeId) => {
     setBusy(true);
     try {
-      // Tear down every non-god agent through the EXISTING lifecycle (kill PTY →
-      // dispose terminal → archive). god + the prep assistant carry over; god's
-      // PTY is never touched. If a PTY won't die, abort the switch (surface the
-      // error, don't persist the new theme) rather than leave a half-switched floor.
-      const victims = nonGodAgents();
-      for (const a of victims) {
-        if (a.ptyId) {
-          disposeTerminal(a.ptyId);
-        }
-      }
-
-      for (const a of victims) archiveAgent(a.id);
-      await window.cth.updateConfig({ officeTheme: id });
+      // Theme switching is presentation-only. It does not terminate, restart,
+      // archive, enable, disable, or otherwise mutate Agent runtime lifecycle.
+      await applyPresentationOnlyOfficeTheme(id, {
+        updateConfig: (patch) => window.cth.updateConfig(patch),
+        setOfficeTheme
+      });
       setCurrent(id);
-      setOfficeTheme(id); // → OfficeFloor rebuilds the scene on the new map/cast
       const meta = THEME_META.find((t) => t.id === id);
       if (meta && !meta.built) setNote(t('officeTheme.notBuiltYet', { label: meta.label }));
     } catch (e) {
       setNote(t('officeTheme.switchAborted', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setBusy(false);
-      setPending(null);
     }
   };
-
-  const pendingMeta = pending ? THEME_META.find((t) => t.id === pending) : null;
 
   return (
     <div>
@@ -168,94 +144,6 @@ export function OfficeThemePicker({ config }: { config: HarnessConfig }) {
       {enabled && note && (
         <div style={{ marginTop: 10, fontSize: 12, color: 'var(--cth-ink-500)' }}>{note}</div>
       )}
-
-      {pending && pendingMeta && (
-        <ThemeSwitchConfirmModal
-          label={pendingMeta.label}
-          agents={nonGodAgents()}
-          busy={busy}
-          onCancel={() => setPending(null)}
-          onConfirm={() => void applyTheme(pending)}
-        />
-      )}
-    </div>
-  );
-}
-
-interface VictimAgent { id: string; status?: string; }
-
-/** Destructive confirm for a theme switch with live workers (report §E copy). */
-function ThemeSwitchConfirmModal({
-  label, agents, busy, onCancel, onConfirm,
-}: {
-  label: string;
-  agents: VictimAgent[];
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const { t } = useTranslation();
-  const n = agents.length;
-  const working = agents.filter((a) => a.status && !['idle', 'success', 'error'].includes(a.status)).length;
-  const godName = useStore.getState().agents.find((a) => a.isGod)?.name ?? 'the orchestrator';
-
-  return (
-    <div
-      onClick={busy ? undefined : onCancel}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(26, 19, 32, 0.7)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400,
-      }}
-    >
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 480, maxWidth: '92vw' }}>
-        <PixelPanel variant="dialog" title={t('officeTheme.confirmTitle', { label: label.toUpperCase() })} noPadding>
-          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{
-                width: 32, height: 32, flexShrink: 0,
-                background: 'var(--cth-coral-light)',
-                boxShadow: 'inset 0 0 0 1.5px var(--cth-ink-500)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Icon name="bell" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{
-                  fontFamily: 'var(--cth-font-display)', fontSize: 12, lineHeight: '20px',
-                  color: 'var(--cth-ink-900)', marginBottom: 4,
-                }}>
-                  {t('officeTheme.startsFreshCast')}
-                </div>
-                <div style={{ fontSize: 15, lineHeight: '22px', color: 'var(--cth-ink-700)' }}>
-                  {n === 1
-                    ? t('officeTheme.deleteCount', { count: n })
-                    : t('officeTheme.deleteCountPlural', { count: n })}{' '}
-                  {t('officeTheme.onlyCarries', { god: godName })}
-                  {working > 0 && (
-                    <span style={{ display: 'block', marginTop: 6, color: 'var(--cth-coral)' }}>
-                      ⚠ {working === 1
-                        ? t('officeTheme.stillWorking', { count: working })
-                        : t('officeTheme.stillWorkingPlural', { count: working })}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--cth-ink-500)', marginTop: 8 }}>
-                  {t('officeTheme.cantUndo')}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <PixelButton variant="secondary" size="md" onClick={onCancel} disabled={busy}>
-                {t('common.cancel')}
-              </PixelButton>
-              <PixelButton variant="destructive" size="md" onClick={onConfirm} disabled={busy}>
-                {busy ? t('officeTheme.switching') : t('officeTheme.deleteSwitch', { count: n })}
-              </PixelButton>
-            </div>
-          </div>
-        </PixelPanel>
-      </div>
     </div>
   );
 }

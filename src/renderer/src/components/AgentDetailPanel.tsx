@@ -8,7 +8,7 @@ import { PtyTerminalView } from './PtyTerminalView';
 import { terminalInstanceKey } from './terminalRecovery';
 import { MessageQueueComposer } from './MessageQueueComposer';
 import { CommandCenterPanel } from './CommandCenterPanel';
-import { disposeTerminal } from './terminalPool';
+import { LEGACY_RUNTIME_ACTION_POLICY } from './runtimeActionSemantics';
 import { SidebarTabs } from './SidebarTabs';
 import { ThreadsPanel } from './ThreadsPanel';
 import { ToolWaterfall } from './ToolWaterfall';
@@ -75,7 +75,6 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const archiveAgent = useStore(s => s.archiveAgent);
   const updateAgent = useStore(s => s.updateAgent);
   const renameAgent = useStore(s => s.renameAgent);
   const setFullscreen = useStore(s => s.setFullscreen);
@@ -114,14 +113,6 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
       setTimeout(() => setOpenTerminalState('idle'), 4000);
     }
   };
-
-  const onKill = async () => {
-    if (!agent.ptyId) return;
-    if (!confirm(t('agentDetail.killConfirm', { name: agent.name }))) return;
-    disposeTerminal(agent.ptyId);
-    archiveAgent(agent.id);
-  };
-
 
   return (
     <PixelPanel
@@ -215,8 +206,14 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
           </span>
         </PixelButton>
         {isReal && (
-          <PixelButton variant="destructive" size="sm" onClick={onKill}>
-            <Icon name="x" />
+          <PixelButton variant="destructive" size="sm" disabled>
+            <span
+              title={LEGACY_RUNTIME_ACTION_POLICY.terminateAgent.reason}
+              aria-label={LEGACY_RUNTIME_ACTION_POLICY.terminateAgent.reason}
+              style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 0 }}
+            >
+              <Icon name="x" />
+            </span>
           </PixelButton>
         )}
       </div>

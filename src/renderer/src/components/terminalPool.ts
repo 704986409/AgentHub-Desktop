@@ -839,16 +839,8 @@ export function reflowTerminal(ptyId: string): void {
 }
 
 /**
- * Soft-reset a pooled terminal for an IN-PLACE pty respawn (the same ptyId is
- * reused — e.g. a model change or agent restart). Clears the screen + scrollback
- * and re-arms input while keeping the SAME Terminal, its live data subscription
- * and its DOM attachment, so the mounted view stays visible and typeable across
- * the restart.
- *
- * Why not disposeTerminal here: the view (PtyTerminalView) keys its attach effect
- * on the ptyId, which doesn't change on a restart — so it never re-attaches a
- * replacement terminal. Disposing therefore left a dead, detached pane that
- * swallowed every keystroke. Resetting in place avoids that entirely.
+ * Presentation-only reset of a pooled xterm. This clears visual/input state but
+ * does not terminate, restart, resume, revive, or switch the underlying runtime.
  */
 export function resetTerminal(
   ptyId: string,
@@ -856,20 +848,17 @@ export function resetTerminal(
 ): void {
   const entry = pool.get(ptyId);
   if (!entry) return;
-  // Re-arm input — a prior exit (or the kill that precedes the respawn) may have
-  // latched `exited`, which otherwise makes onData drop keystrokes silently.
+  // Re-arm the presentation input state without claiming any runtime transition.
   entry.exited = false;
   entry.inputDirty = false;
   entry.inputDirtyAt = 0;
-  // The old process's prompt is gone with it — drop our model of that line and
-  // any picker it had open, or the replacement inherits a phantom draft and a
-  // block that nothing can clear.
+  // Drop the renderer's line/picker model so stale presentation state is cleared.
   entry.lineBuf = '';
   entry.automationBlocked = false;
   entry.automationBlockedAt = 0;
   try {
     if (opts.preserveScrollback) {
-      entry.term.writeln('\r\n\x1b[2m─ resuming existing session ─\x1b[0m');
+      entry.term.writeln('\r\n\x1b[2m─ terminal view refreshed ─\x1b[0m');
     } else {
       // Fresh sessions need a clean grid; resume keeps the existing scrollback.
       entry.term.reset();
@@ -877,7 +866,10 @@ export function resetTerminal(
   } catch { /* not yet open */ }
 }
 
-/** Tear down a pty's terminal (call when the agent/pty is gone for good). */
+/**
+ * Presentation-only cleanup for a pooled xterm. This releases renderer
+ * resources and does not terminate, disable, delete, or archive an Agent.
+ */
 export function disposeTerminal(ptyId: string): void {
   const entry = pool.get(ptyId);
   if (!entry) return;
