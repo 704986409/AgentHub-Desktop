@@ -771,8 +771,7 @@ export const useStore = create<State>((set, get) => ({
       // GOD enters at the HEAD, everyone else at the tail. Michael's position was
       // otherwise decided by a race he usually lost: useHive's bootstrap removes
       // the restored god entry, then spawns him asynchronously (a setTimeout, a
-      // listPtys round-trip, and a --resume that seeds a transcript first), while
-      // useRestoreTeam respawns last session's workers in parallel. Whoever
+      // listPtys round-trip, and a --resume that seeds a transcript first).
       // resolved first landed first, so a session with workers to restore put the
       // BOSS card fourth — and persistAgents() then wrote that order to disk, so
       // it stuck across restarts instead of flickering once.

@@ -130,7 +130,8 @@ describe('AgentHub Desktop V0.8.9B — Renderer Provider Capability Closure', ()
   test('P0 23.5: CommandCenterPanel, useHive, and useRestoreTeam have no provider CLI launch', { timeout: TIMEOUT }, () => {
     const panel = read('src/renderer/src/components/CommandCenterPanel.tsx');
     const hive = read('src/renderer/src/hooks/useHive.ts');
-    const restore = read('src/renderer/src/hooks/useRestoreTeam.ts');
+    const restoreExists = fs.existsSync(path.join(ROOT, 'src/renderer/src/hooks/useRestoreTeam.ts'));
+    const restore = restoreExists ? read('src/renderer/src/hooks/useRestoreTeam.ts') : '';
 
     for (const [name, content] of [
       ['CommandCenterPanel.tsx', panel],

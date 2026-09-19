@@ -16,7 +16,6 @@ import { RealtimeMichaelToggle } from './RealtimeMichaelToggle';
 import { CostHud } from '@/realtime/CostHud';
 import { useStore, type Agent } from '@/store/store';
 import { usePtyParser } from '@/hooks/usePtyParser';
-import { useRestoreTeam } from '@/hooks/useRestoreTeam';
 import { useTerminalFontSize } from './terminalFontSize';
 import { useHasTerminalDraft, reflowTerminal, notifyThemeChangeAll } from './terminalPool';
 import { LEGACY_RUNTIME_ACTION_POLICY } from './runtimeActionSemantics';
@@ -162,9 +161,6 @@ export function FullscreenTerminal({ config }: FullscreenTerminalProps) {
   const [editAgentOpen, setEditAgentOpen] = useState(false);
   const setAgentNote = useStore(s => s.setAgentNote);
   const updateAgent = useStore(s => s.updateAgent);
-  // The floor strip (and with it the restore button) is hidden behind the
-  // overlay, so the roster carries restore too.
-  const { restoring, autoRestoring, restoreTeam } = useRestoreTeam(config);
   const appThemeNow = useAppTheme();
 
   const agent = agents.find(a => a.id === fullscreenAgentId);
@@ -490,72 +486,40 @@ export function FullscreenTerminal({ config }: FullscreenTerminalProps) {
             ))}
           </div>
 
-          {/* Last session's team, same as the floor strip — pinned to the bottom
-              so it can't be scrolled out of reach behind a long roster. */}
-          {(restorableAgents.length > 0 || autoRestoring) && (
+          {restorableAgents.length > 0 && (
             <div style={{
               flexShrink: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 6,
               borderTop: '1px solid var(--cth-ink-300)'
             }}>
-              {autoRestoring && (
-                // Same banner as the floor strip: terminals that open by
-                // themselves need to say why.
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '4px 8px',
-                  fontFamily: 'var(--cth-font-ui)', fontSize: 11,
-                  color: 'var(--cth-ink-900)',
-                  background: 'var(--cth-status-working)',
-                  boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
-                }}>
-                  <Icon name="play" /> restoring your team…
-                </div>
-              )}
-              {!autoRestoring && restorableAgents.length > 0 && (
-                <PixelButton
-                  variant="primary"
-                  size="sm"
-                  onClick={restoreTeam}
-                  disabled={restoring}
-                  style={{ width: '100%' }}
-                  title={t('fullscreenTerminal.respawnTitle', { names: restorableAgents.map((a: Agent) => a.name).join(', ') })}
-                >
-                  <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                    <Icon name="play" /> {restoring ? t('agentStrip.restoringTeam') : t('agentStrip.restoreTeam', { count: restorableAgents.length })}
-                  </span>
-                </PixelButton>
-              )}
-              {!autoRestoring && restorableAgents.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {restorableAgents.map((a: Agent) => (
-                    <span
-                      key={a.id}
-                      title={`${a.name} — restorable from last session`}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {restorableAgents.map((a: Agent) => (
+                  <span
+                    key={a.id}
+                    title={`${a.name} — restorable from last session`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 2,
+                      height: 20, padding: '0 2px 0 6px',
+                      fontFamily: 'var(--cth-font-ui)', fontSize: 11,
+                      color: 'var(--cth-ink-700)', background: 'var(--cth-paper-100)',
+                      boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
+                    }}
+                  >
+                    {a.name}
+                    <button
+                      onClick={() => useStore.getState().removeRestorableAgent(a.id)}
+                      title={`Dismiss ${a.name} — remove permanently from the restore list`}
+                      aria-label={`Dismiss ${a.name}`}
                       style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 2,
-                        height: 20, padding: '0 2px 0 6px',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 14, height: 14, padding: 0, lineHeight: 1,
                         fontFamily: 'var(--cth-font-ui)', fontSize: 11,
-                        color: 'var(--cth-ink-700)', background: 'var(--cth-paper-100)',
-                        boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
+                        color: 'var(--cth-ink-500)', background: 'transparent',
+                        border: 'none', cursor: 'pointer'
                       }}
-                    >
-                      {a.name}
-                      <button
-                        onClick={() => useStore.getState().removeRestorableAgent(a.id)}
-                        title={`Dismiss ${a.name} — remove permanently from the restore list`}
-                        aria-label={`Dismiss ${a.name}`}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 14, height: 14, padding: 0, lineHeight: 1,
-                          fontFamily: 'var(--cth-font-ui)', fontSize: 11,
-                          color: 'var(--cth-ink-500)', background: 'transparent',
-                          border: 'none', cursor: 'pointer'
-                        }}
-                      >✕</button>
-                    </span>
-                  ))}
-                </div>
-              )}
+                    >✕</button>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </aside>

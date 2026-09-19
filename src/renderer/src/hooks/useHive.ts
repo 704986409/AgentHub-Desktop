@@ -1,25 +1,17 @@
 import { useEffect, useRef } from 'react';
-import { useStore, type Agent, type QueuedMessage, type StationKind, type ToolKind } from '@/store/store';
+import { useStore, type Agent, type StationKind, type ToolKind } from '@/store/store';
 import {
-  ASSISTANT_MODEL,
   inferAgentProvider,
-  isClaudeProvider,
   type HarnessConfig
 } from '@/store/config';
-import {
-  clearCommandForProvider,
-  compactionCommandForProvider,
-  remoteControlCommandForProvider,
-  terminalReadyToReceive
-} from '../../../shared/providerAutomation';
-import { DEFAULT_CONTEXT_TRIGGER, type ContextRule } from '../../../shared/triggers';
+
+import { type ContextRule } from '../../../shared/triggers';
 import type { AgentProvider } from '../../../shared/agentProvider';
 import { bridgeOf, providerPreset } from '../../../shared/agentProvider';
-import { isDurableRole, preferredAgentRole, roleForHiveSpawn } from '../../../shared/agentRole';
+import { isDurableRole, preferredAgentRole } from '../../../shared/agentRole';
 import { inboxNudgeText } from '../../../shared/hiveNudge';
 import { resolveGodName } from '../../../shared/godIdentity';
-import { acquireTerminal, isTerminalAutomationSafe } from '@/components/terminalPool';
-import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition, type LegacyTerminalDeliveryResult } from './queueDelivery';
+
 import { OFFICE_CAST, DEFAULT_CHARACTER } from '@/scene/office/cast';
 
 const GOD_ID = 'god';
@@ -29,24 +21,7 @@ const GOD_ID = 'god';
 const SPAWN_ACCENTS = ['coral', 'mint', 'sky', 'lemon', 'lilac', 'peach'] as const;
 const GOD_PTY = `pty-${GOD_ID}`;
 
-const REMOTE_CONTROL_SETTLE_MS = 1500;
-// Provider-agnostic PTY-quiescence idle fallback (#2e). A non-Claude bridge that
-// fires a 'working' event but never its turn-end signal (Stop / session.idle /
-// agent_end) would pin the agent 'working' forever → the idle-only inbox-wake nudge
-// never fires → a god stops draining mail and the floor stalls. So a 'working'
-// agent whose PTY has emitted NOTHING for this window is treated as turn-done and
-// flipped idle. A streaming turn (incl. a long tool) keeps emitting bytes → stays
-// working; only true silence drifts it idle. Hook events still win — a fresh
-// PreToolUse/Stop refreshes status on the next event. Checked on QUIESCE_POLL_MS.
-const QUIESCE_IDLE_MS = 12000;
-const QUIESCE_POLL_MS = 4000;
-// After a god/agent spawn, hold off the inbox-wake + queue-drain typers for this
-// long while the readiness handshake + provider-specific boot sequence runs.
-const BOOT_GRACE_MS = 35_000;
-// Delay before typing a one-time TUI protocol seed into a fresh worker (3b) —
-// long enough for the TUI to finish painting and surface any permission prompt.
-// submitToPty additionally waits for the terminal's readiness handshake.
-const SEED_BOOT_MS = 12_000;
+
 
 /** Hive-aware / hooks-bridge engines get standing goals via HookServer
  *  (SessionStart + UserPromptSubmit). Cursor and other no-hook engines need the
@@ -68,85 +43,7 @@ function withStandingGoal(agent: Agent, text: string): string {
   return `<goal>\n${goal}\n</goal>\n\n${text}`;
 }
 
-// The first thing Michael (god) is told on a fresh spawn — orient him and put
-// him to work running the floor. Kept terse and action-oriented.
-const INITIAL_GOD_PROMPT = [
-  "You're online as Michael, the orchestrator of the hive. Get oriented, then start running the floor:",
-  '1. Read your memory.md and drain every message in your inbox.',
-  '2. Review board.md + tasks.json and the current roster of agents (active vs archived).',
-  '3. Check fleet health: read fleet.json in the hive root for every agent\'s live tokens, cost, status, breaker level, and inbox backlog (`claude agents` will NOT show your hive\'s agents). Flag anyone stalled, over-budget, or breaker-armed.',
-  '4. Skim COMMANDS.md (hive root) for the Claude Code commands you can use — and run `mempalace wake-up` for a memory digest if the CLI is available.',
-  'Then begin orchestrating: triage requests, delegate work to the team, and keep everyone unblocked. You are fully autonomous — there is no approval queue, so handle tool-permission prompts in this session yourself (the human can approve them remotely from their phone).'
-].join('\n');
 
-// Per-pty submission chain. Every submitToPty for a given pty is appended here so
-// two callers (e.g. the boot sequence's /remote-control and the inbox-wake nudge)
-// can NEVER interleave their text + Enter — which jammed them onto one line and
-// produced "Unknown command: /remote-control<next prompt>".
-const writeChains = new Map<string, Promise<void>>();
-const readyPids = new Map<string, number>();
-
-async function waitForTerminalReady(
-  _ptyId: string,
-  _provider: AgentProvider,
-  _timeoutMs = 30_000
-): Promise<void> {
-  // V0.8.9D: Primary AgentHub Renderer has zero PTY authority. No PTY enumeration or readiness polling.
-  return Promise.resolve();
-}
-
-
-/**
- * Type a line into an agent's Claude Code TUI and actually submit it.
- *
- * Writing the text and the carriage return in a single chunk makes the TUI
- * treat the whole thing as a paste, so the "\r" lands as a newline inside the
- * input box instead of submitting — the command just sits there as text. We
- * send the text first, then the Enter as a separate keystroke a tick later so
- * the prompt is registered and executed. Idle autonomous agents thus act on a
- * dispatched instruction on their own.
- *
- * Submissions to the same pty are serialized (and each settles for `settleMs`
- * after Enter) so concurrent callers can't jam their input together.
- *
- * The text is wrapped in bracketed-paste markers (ESC[200~ … ESC[201~) so the
- * TUI treats it as ONE paste: embedded newlines land as literal newlines in the
- * input box. Without them, every "\n" in a multi-line message acted as Enter —
- * the message submitted line-by-line in fragments (the agent saw only the last
- * chunk). The closing Enter, sent a tick later, submits the whole block. (#24) */
-function submitToPty(
-  ptyId: string,
-  text: string,
-  provider: AgentProvider,
-  settleMs = 250
-): Promise<LegacyTerminalDeliveryResult> {
-  void text;
-  void settleMs;
-  const prev = writeChains.get(ptyId) ?? Promise.resolve();
-  const next = prev.catch(() => { /* a failed prior write must not stall the chain */ }).then(async (): Promise<LegacyTerminalDeliveryResult> => {
-    await waitForTerminalReady(ptyId, provider);
-    // V0.8.9C/F: Primary AgentHub Renderer has no PTY write authority.
-    // Programmatic agent execution is routed strictly via Backend executeTask.
-    console.warn(`[useHive] Programmatic PTY write suppressed for ${ptyId} (AgentHub provider execution is Backend-only).`);
-    return {
-      status: 'blocked-by-authority',
-      reason: 'Primary Renderer PTY automation is disabled in AgentHub mode.'
-    };
-  });
-  writeChains.set(ptyId, next.then(() => {}));
-  return next;
-}
-
-/** Wrap a user message as an enrich task for the assistant. The assistant's
- *  system prompt has the full instructions; this just frames the one task. */
-function enrichTaskPrompt(text: string): string {
-  return [
-    `ENRICH TASK: ${text}`,
-    '',
-    '(Identify the relevant project, cd in, gather READ-ONLY context, then send the improved,',
-    'self-contained prompt to Michael via an outbox message with "to":"god". Do not do the task yourself.)'
-  ].join('\n');
-}
 
 function terminalWorkOrderPrompt(msg: {
   id: string;
@@ -279,52 +176,9 @@ export function useHive(config: HarnessConfig | null): void {
   // negligible next to a stalled agent. Evicting ids that have left the inbox would
   // bound it exactly; deliberately not done here to keep this fix minimal.
   const nudged = useRef<Record<string, Set<string>>>({});
-  // Per-agent context size at the last auto-/compact queued. See the latch note
-  // in the context-trigger effect: an idle agent's token count is frozen, so
-  // without this the pressure gate re-fires on the identical number every cycle.
-  const lastCompactUsed = useRef<Record<string, number>>({});
-  // Per-agent timestamp of the last queued-message we submitted. Guards against
-  // re-sending the next message before the agent's hooks have flipped it to
-  // 'working' (there's a short window where it still reads 'idle' right after we
-  // type into it). One message per cooldown keeps delivery strictly one-by-one.
-  const lastFlush = useRef<Record<string, number>>({});
-  // Queue-drain delivery tracking (#36): a message now stays IN the queue until
-  // its PTY write chain resolves, so `inFlightSends` (message ids mid-write)
-  // stops a store-update burst from double-sending the head, and `sendFailures`
-  // bounds retries — after MAX_SEND_ATTEMPTS failed writes the message is
-  // dropped WITH a console.warn instead of being silently destroyed.
-  const inFlightSends = useRef<Set<string>>(new Set());
-  const sendFailures = useRef<Record<string, number>>({});
-  // In-flight spawn guard so a re-render / StrictMode double-mount can't spawn
-  // Michael twice (the window between the listPtys check and spawnPty is racy).
   const godSpawning = useRef(false);
-  // Per-agent timestamp until which auto-typers (inbox-wake #3, queue-drain #4)
-  // must leave the agent alone — set while its boot sequence is typing so nothing
-  // collides with /remote-control + the orientation prompt.
-  const bootGraceUntil = useRef<Record<string, number>>({});
-  // Agents whose one-time TUI protocol seed (Crush, seedDelivery:'type-into-tui')
-  // has already been verified delivered. (V0.8.9F: split attempt tracking from verified delivery)
-  const seedAttemptedAt = useRef<Record<string, number>>({});
-  const deliveredSeeds = useRef<Set<string>>(new Set());
-  const authorityBlockedLogged = useRef<Record<string, string>>({});
   const seenTerminalHandoffs = useRef<Set<string>>(new Set());
-  // Reactive so the assistant bootstrap (effect #1b) re-runs once Michael is ready.
   const godStatus = useStore((s) => s.godStatus);
-  // Per-pty `lastOutputAt`, refreshed by the quiescence sweep (#2e) and read by
-  // the queue drain (#4) so it can tell a terminal parked at its prompt from one
-  // mid-turn. Kept here rather than fetched again in #4 — #2e already polls
-  // listPtys on exactly the cadence the drain needs, and one reading keeps the
-  // two loops from disagreeing about whether an agent is quiet.
-  const ptyLastOutput = useRef<Record<string, number>>({});
-    /** How long this terminal has been silent, or null when we have no reading
-   *  (never polled, PTY gone, or it has emitted nothing at all). canDeliverToAgent
-   *  fails closed on null — unmeasured silence is not evidence of silence.
-   *  Hook-level (not effect-local) because both the drain effect and the
-   *  context-trigger effect gate delivery through the same check. */
-  const ptyQuietMs = (ptyId: string, now: number): number | null => {
-    const last = ptyLastOutput.current[ptyId];
-    return typeof last === 'number' && last > 0 ? now - last : null;
-  };
   // #5C/#7C.4 — latest circuit-breaker level per agent. When 'constrained'/
   // 'stopped' the avatar is pinned to 'looping' and hook events must NOT flip it
   // back to 'working' (the flicker the spec calls out); only a genuine Stop clears it.
@@ -635,256 +489,7 @@ export function useHive(config: HarnessConfig | null): void {
     return () => clearInterval(iv);
   }, [config?.onboardingComplete]);
 
-  // 3b) Seed a fresh "type-into-tui" worker (Crush) with the hive protocol. Its
-  //     bare TUI rejects a positional seed (Cobra reads it as a subcommand →
-  //     `Unknown command`), so the main process spawns it bare and hands the
-  //     protocol back as `seedPrompt`; we TYPE it as the worker's first turn after a
-  //     boot-grace (TUI finished painting), ONCE per agent. Routed through the SAME
-  //     per-pty submit chain + boot-grace as the inbox-wake nudge so the seed and a
-  //     nudge can never jam onto one line. (god-as-Crush is seeded in its own boot
-  //     sequence above; this covers workers.) (ondev-b)
-  useEffect(() => {
-    if (!config?.onboardingComplete) return;
-    const SEED_ATTEMPT_INTERVAL_MS = 1500;
-    const SEED_ATTEMPT_COOLDOWN_MS = 10_000;
-    const iv = setInterval(() => {
-      const { agents } = useStore.getState();
-      const now = Date.now();
-      for (const a of agents) {
-        if (!a.ptyId || a.isGod || !a.seedPrompt || deliveredSeeds.current.has(a.id)) continue;
-        if (now - (seedAttemptedAt.current[a.id] ?? 0) < SEED_ATTEMPT_COOLDOWN_MS) continue;
-        seedAttemptedAt.current[a.id] = now;
-        const ptyId = a.ptyId;
-        const seed = a.seedPrompt;
-        // Hold the nudge/quiesce typers off this agent until the seed lands + settles.
-        bootGraceUntil.current[a.id] = now + BOOT_GRACE_MS;
-        // V0.8.9F: seedPrompt is strictly cleared only after verified delivery success ('sent').
-        // It is NOT cleared beforehand, ensuring zero data loss on blocked or failed writes.
-        setTimeout(() => {
-          // Permission-prompt safety (#5): if the worker surfaced an approval /
-          // needs-human prompt while its TUI booted ('waiting'/'blocked'), the
-          // seed's trailing Enter would confirm it. Let a later tick retry once
-          // the prompt clears; if the agent vanished (killed mid-boot), don't type
-          // into its orphaned pty at all.
-          const live = useStore.getState().agents.find((x) => x.id === a.id);
-          if (!live) return;
-          if (live.status === 'waiting' || live.status === 'blocked') {
-            delete seedAttemptedAt.current[a.id];
-            return;
-          }
-          submitToPty(
-            ptyId,
-            withStandingGoal(live, seed),
-            inferAgentProvider(live.command, live.provider)
-          )
-            .then((res) => {
-              if (res.status === 'sent') {
-                deliveredSeeds.current.add(a.id);
-                useStore.getState().updateAgent(a.id, { seedPrompt: undefined });
-              } else if (res.status === 'blocked-by-authority') {
-                console.warn(
-                  `[useHive:seed] seed not delivered for agent ${a.id} because Primary Renderer PTY automation is disabled; seed retained.`
-                );
-              }
-            })
-            .catch(() => { /* pty may have died */ });
-        }, SEED_BOOT_MS);
-      }
-    }, SEED_ATTEMPT_INTERVAL_MS);
-    return () => clearInterval(iv);
-  }, [config?.onboardingComplete]);
 
-  // 4) Drain each agent's queued messages to its terminal, one at a time, the
-  //    moment the agent goes idle. This is what lets the user keep sending
-  //    messages while the agent's "cloud terminal" is mid-run: the messages
-  //    park in the store and get typed in (and submitted) as soon as it's free.
-  useEffect(() => {
-    if (!config?.onboardingComplete) return;
-    const FLUSH_COOLDOWN_MS = 4500;
-    // A message that fails this many PTY writes (dead/crashed pty that the store
-    // still thinks is idle) is dropped WITH a console.warn — bounded so the drain
-    // never spins forever on a corpse, loud so the loss is diagnosable. (#113)
-    const MAX_SEND_ATTEMPTS = 3;
-    const inFlight = new Set<string>();
-    const sendFailures: Record<string, number> = {};
-
-
-    // Send the front of `srcId`'s queue into `target`'s pty (verbatim or wrapped),
-    // gated on the target being idle, free of interactive menus, and off
-    // cooldown. The queue item is acknowledged only after BOTH PTY writes
-    // succeed; failures stay visible and retry automatically (bounded by
-    // MAX_SEND_ATTEMPTS so the drain never spins forever on a corpse).
-    const dispatch = async (
-      srcId: string,
-      target: Agent | undefined,
-      wrap?: (m: QueuedMessage) => string
-    ): Promise<{ sent: boolean; message?: QueuedMessage }> => {
-      const { messageQueues, removeQueuedMessage } = useStore.getState();
-      const next = messageQueues[srcId]?.[0];
-      if (!next || !target?.ptyId) return { sent: false };
-      const now = Date.now();
-      // Idle, or breaker-pinned with a terminal that has genuinely gone quiet.
-      // This gate is a don't-type-mid-stream safety check, so `manual` does NOT
-      // bypass it — "send now" releases the auto-delivery PAUSE below, not this.
-      if (!canDeliverToAgent(target.status, ptyQuietMs(target.ptyId, now), QUIESCE_IDLE_MS)) {
-        return { sent: false };
-      }
-      const control = await window.cth.controlSnapshot(target.id);
-      // The pause gate holds everything EXCEPT messages the user explicitly
-      // released with "send now" (m.manual) — otherwise a paused floor leaves
-      // the queue with no escape hatch at all. Idle/draft/picker safety below
-      // still applies to manual messages; only the pause is bypassed.
-      if (control?.autoDeliveryPaused && !next.manual) return { sent: false };
-      // Hold queued messages until the target finishes its boot sequence.
-      if ((bootGraceUntil.current[target.id] ?? 0) >= now) return { sent: false };
-      // The user owns the prompt: a draft they are writing, or a menu they
-      // opened, holds delivery. Both blocks expire after half an hour, and when
-      // one does we simply type after whatever is there — automation never
-      // erases the user's text and never closes the user's menu.
-      if (!isTerminalAutomationSafe(target.ptyId, now)) return { sent: false };
-      if (now - (lastFlush.current[target.id] ?? 0) < FLUSH_COOLDOWN_MS) return { sent: false };
-      // Last gate before we type: re-check the message's delivery-time
-      // precondition. A queue item is decided at enqueue time and delivered an
-      // arbitrary interval later, and the inbox nudge is only worth sending if
-      // there is still something in the inbox — the agent routinely drains it in
-      // the very turn the nudge was queued from. Stale ones are DROPPED, not
-      // deferred, so they cannot park at the queue head and starve the rest.
-      if (await checkPrecondition(next, () => window.cth.hiveInbox(srcId)) === 'drop') {
-        removeQueuedMessage(srcId, next.id);
-        return { sent: false };
-      }
-      const flightKey = `${srcId}:${next.id}`;
-      if (inFlight.has(flightKey)) return { sent: false };
-      inFlight.add(flightKey);
-      lastFlush.current[target.id] = now;
-      try {
-        const outcome = await deliverWithAcknowledgement(
-          // `instruction` (when present) is the authoritative text to type into
-          // the PTY; UI/card surfaces continue to show the readable `text`.
-          () => submitToPty(
-            target.ptyId!,
-            withStandingGoal(
-              target,
-              wrap ? wrap(next) : (next.instruction ?? next.text)
-            ),
-            inferAgentProvider(target.command, target.provider)
-          ),
-          () => {
-            removeQueuedMessage(srcId, next.id);
-            // Zero the gauge on a DELIVERED /clear — the new session's context
-            // isn't known until statusLine fires after the first post-clear
-            // response, so leaving it at the old value shows a stale-full bar.
-            if (next.text.trim().toLowerCase() === '/clear') {
-              useStore.getState().updateAgent(target.id, {
-                contextTokens: 0,
-                contextLimit: undefined,
-                progress: 0
-              });
-            }
-          }
-        );
-        if (outcome.status === 'sent') {
-          delete sendFailures[next.id];
-          delete authorityBlockedLogged.current[next.id];
-          return { sent: true, message: next };
-        }
-        if (outcome.status === 'blocked-by-authority') {
-          // V0.8.9F: Legacy terminal delivery blocked by AgentHub authority policy;
-          // message is deliberately retained intact at queue head.
-          // Retry counter and MAX_SEND_ATTEMPTS are NOT touched.
-          if (authorityBlockedLogged.current[next.id] !== outcome.reason) {
-            authorityBlockedLogged.current[next.id] = outcome.reason ?? 'blocked';
-            console.warn(
-              `[queue-drain] legacy PTY delivery blocked by AgentHub authority policy for agent ${target.id}, message ${next.id}: ${outcome.reason}. Message remains queued.`
-            );
-          }
-          return { sent: false };
-        }
-        // Failed write (dead/crashed pty the store still thinks is idle): retry
-        // on the next cooldown-spaced flush, but only MAX_SEND_ATTEMPTS times —
-        // then drop LOUDLY so the loss is diagnosable. (#113/#36)
-        const attempts = (sendFailures[next.id] ?? 0) + 1;
-        sendFailures[next.id] = attempts;
-        if (attempts >= MAX_SEND_ATTEMPTS) {
-          delete sendFailures[next.id];
-          removeQueuedMessage(srcId, next.id);
-          console.warn(
-            `[queue-drain] dropping message ${next.id} for ${target.id} after ${attempts} failed pty writes ` +
-            `("${next.text.slice(0, 80)}${next.text.length > 80 ? '…' : ''}")`
-          );
-        }
-        return { sent: false };
-      } finally {
-        inFlight.delete(flightKey);
-      }
-    };
-
-    // Promote a genuine Slack-origin work item to a stamped kanban card the first
-    // time it's dispatched to the office. The card carries slack:{channel,thread_ts}
-    // (origin thread) so the main-process done-observer can post its one summary
-    // reply in-thread once the card later reaches 'done'. ADDITIVE + idempotent +
-    // best-effort: a failure here never affects the dispatch that already happened,
-    // and only dispatched work items land here (slash commands/acks never do).
-    type SlackTaskCard = Parameters<typeof window.cth.hiveAddTask>[0];
-    const ensureSlackCard = async (m: QueuedMessage): Promise<void> => {
-      const slack = m.slack;
-      if (!slack) return;
-      try {
-        const raw = await window.cth.hiveTasks();
-        const existing: SlackTaskCard[] =
-          raw && typeof raw === 'object' && Array.isArray((raw as { tasks?: unknown }).tasks)
-            ? (raw as { tasks: SlackTaskCard[] }).tasks
-            : [];
-        const id = `slack-${slack.thread_ts}-${m.id}`;
-        if (existing.some((t) => t.id === id)) return; // already promoted — no dup
-        const title = m.text.length > 80 ? `${m.text.slice(0, 79)}…` : m.text;
-        const card: SlackTaskCard = {
-          id,
-          title,
-          description: m.text,
-          status: 'todo',
-          dependsOn: [],
-          priority: 1,
-          createdAt: new Date().toISOString(),
-          slack
-        };
-        await window.cth.hiveAddTask(card);
-      } catch { /* best-effort: card promotion must never sink dispatch */ }
-    };
-
-    const flush = () => {
-      const { agents, messageQueues } = useStore.getState();
-      const byId = (id: string) => agents.find((a) => a.id === id);
-      const now = Date.now();
-
-      for (const a of agents) {
-        // Same gate as dispatch() — this pre-filter runs first, so relaxing only
-        // the one inside dispatch would have changed nothing.
-        if (!a.ptyId || !canDeliverToAgent(a.status, ptyQuietMs(a.ptyId, now), QUIESCE_IDLE_MS)) continue;
-        if (!messageQueues[a.id]?.length) continue;
-                void dispatch(a.id, a).then(({ sent, message }) => {
-          if (sent && message?.slack) void ensureSlackCard(message);
-          // Write the compact latch only once delivery genuinely happened — see
-          // the comment in fire() above.
-          if (sent && message?.compactUsed !== undefined) {
-            lastCompactUsed.current[a.id] = message.compactUsed;
-          }
-        });
-      }
-    };
-
-    // Run on every store change (status flips, new queue items) — debounced so a
-    // burst of pty-stream updates coalesces — plus a periodic backstop.
-    let debounce: ReturnType<typeof setTimeout> | null = null;
-    const schedule = () => {
-      if (debounce) return;
-      debounce = setTimeout(() => { debounce = null; flush(); }, 200);
-    };
-    const unsub = useStore.subscribe(schedule);
-    const iv = setInterval(flush, 3000);
-    schedule();
-    return () => { unsub(); if (debounce) clearTimeout(debounce); clearInterval(iv); };
-  }, [config?.onboardingComplete]);
 
   // 5) Pipe inbound Slack messages into Michael's queue. The main-process Slack
   //    webhook server pushes each verified message here via IPC; enqueueing to
@@ -1003,100 +608,7 @@ export function useHive(config: HarnessConfig | null): void {
     });
   }, [config?.onboardingComplete]);
 
-  // 6) CONTEXT TRIGGERS (compact / clear). Main decides WHEN — cadence, and which
-  //    half of the rule fired — and pushes `{action, rule}`; this decides WHO, then
-  //    queues the provider's own command so the drain (#4) delivers it only at an
-  //    idle prompt, never jamming a working terminal.
-  //
-  //    THE PRESSURE GATE. main/config.ts has long DOCUMENTED that auto-compact
-  //    "only compacts agents whose context has filled past a threshold (30% for
-  //    ~250k windows, 20% for ~1M windows)". No such check was ever implemented:
-  //    every live agent with a resolvable command got compacted on every tick,
-  //    hourly, however empty its window was. This makes the documented behaviour
-  //    real — `rule.minContextPct`, or `minContextPctLargeWindow` once the window
-  //    is >= LARGE_CONTEXT_WINDOW, must be met before an agent is interrupted.
-  //    (The shipped bars are now 60/40, twice the stale doc's numbers; see
-  //    DEFAULT_CONTEXT_TRIGGER. The doc comment in config.ts is still stale.)
-  //
-  //    Dedupe generalises to both actions: keyed on the command's own verb, so a
-  //    queued `/compact` blocks a second compact without blocking a `/clear`.
-  useEffect(() => {
-    if (!config?.onboardingComplete) return;
 
-       const fire = (action: 'compact' | 'clear', rule: ContextRule): void => {
-      const { agents, messageQueues, enqueueMessage } = useStore.getState();
-      const now = Date.now();
-      for (const a of agents) {
-        if (!a.ptyId) continue;
-        // Gate #109-2: don't enqueue a context command for an agent that cannot
-        // currently receive one (e.g. god 'blocked' on a human prompt). Enqueuing
-        // anyway left a stuck /compact at the head of the queue that dedupe then
-        // collapsed every subsequent hourly attempt against, forever — the exact
-        // same check the drain itself uses immediately before typing, so a
-        // command is never queued in a state the drain would refuse to deliver.
-        if (!canDeliverToAgent(a.status, ptyQuietMs(a.ptyId, now), QUIESCE_IDLE_MS)) continue;
-        const provider = inferAgentProvider(a.command, a.provider);
-        const command = action === 'clear'
-          ? clearCommandForProvider(provider, rule.message)
-          : compactionCommandForProvider(provider, rule.message);
-        // No trustworthy command for this CLI (Crush's palette-only TUI, Copilot's
-        // print mode, an unknown custom binary) — leave its terminal alone.
-        if (!command) continue;
-        if (!passesContextPressure(a, rule)) continue;
-        const verb = command.trimStart().split(/\s+/)[0];
-        const queued = messageQueues[a.id] ?? [];
-        if (queued.some((m) => m.text.trimStart().startsWith(verb))) continue;
-        // The latch, compact only. `used` reaches this gate from Claude's status
-        // line, which only reports after an API call. A /compact on an agent that
-        // has done nothing since the last one makes no call at all — Claude refuses
-        // it locally with "Not enough messages to compact" — so the count stays
-        // byte-identical and the pressure gate passes on the same number the next
-        // cycle, and the next. Seen in the wild: /compact every hour for 15 straight
-        // hours at exactly 400958 tokens, then 11 more at exactly 221772, each a
-        // no-op the agent still had to read and answer. Higher thresholds make it
-        // rarer, not absent: any agent parked above its bar repeats forever.
-        //
-        // So remember the count at the last compact queued and skip while it is
-        // byte-identical. Deliberately equality and not "hasn't grown": the rule's
-        // thresholds own that decision, and an agent still above them deserves its
-        // /compact whether the count moved up or down. A frozen count is the one
-        // state those thresholds cannot reason about, because nothing they could do
-        // would ever change it. /clear needs no equivalent — the queue drain zeroes
-        // the store reading when it lands.
-               const used = a.contextTokens ?? 0;
-        if (action === 'compact' && lastCompactUsed.current[a.id] === used) continue;
-        // The latch is written at successful DELIVERY (see the flush() dispatch
-        // callback below), not here. Writing it at enqueue time recorded
-        // "already compacted at N tokens" for a compaction that might never
-        // actually happen — e.g. blocked by the gate just above, or a failed
-        // send — silently latching out every future attempt at that count.
-        // compactUsed rides on the queued message so the delivery site knows
-        // which count to latch.
-        enqueueMessage(a.id, command, action === 'compact' ? { compactUsed: used } : undefined);
-      }
-    };
-
-    // The typed `onContextTrigger` arrives with the main-process/preload change
-    // that emits it; access it defensively so this lands independently of that.
-    const off = (window.cth as unknown as {
-      onContextTrigger?: (
-        cb: (p: { action: 'compact' | 'clear'; rule: ContextRule }) => void
-      ) => () => void;
-    }).onContextTrigger?.((p) => {
-      if (!p?.rule) return;
-      fire(p.action === 'clear' ? 'clear' : 'compact', p.rule);
-    });
-
-    // LEGACY fallback: main still emits the old parameterless auto-compact until
-    // it switches over. Treat it as the default compact rule so behaviour is
-    // continuous across that landing. Harmless if both fire — the dedupe above
-    // drops the duplicate.
-    const offLegacy = window.cth.onAutoCompact(
-      () => fire('compact', DEFAULT_CONTEXT_TRIGGER.compact)
-    );
-
-    return () => { off?.(); offLegacy?.(); };
-  }, [config?.onboardingComplete]);
 
   // Renderer-side auto-revive is intentionally disabled in AgentHub mode.
   // A dead legacy PTY is not proof that a runtime was restored; authoritative
