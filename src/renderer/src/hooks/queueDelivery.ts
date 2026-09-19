@@ -9,26 +9,69 @@ export interface DeliveryWithAcknowledgementResult {
   readonly reason?: string;
 }
 
+/** Runtime type guard: only structured, explicit delivery results are accepted.
+ *  void / undefined / null / malformed objects are NEVER considered valid.
+ *  V0.8.9G: No Explicit Delivery Proof → No Acknowledgement. */
+export function isLegacyTerminalDeliveryResult(
+  value: unknown
+): value is LegacyTerminalDeliveryResult {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const status = (value as { status?: unknown }).status;
+  if (status === 'sent') {
+    return true;
+  }
+  if (
+    (status === 'blocked-by-authority' || status === 'retryable-failure') &&
+    typeof (value as { reason?: unknown }).reason === 'string'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Run one queued delivery and acknowledge it only after the sender verifies sent.
- *  Blocked and retryable outcomes leave the queue item untouched. */
+ *  Blocked and retryable outcomes leave the queue item untouched.
+ *  V0.8.9G: sender must return Promise<LegacyTerminalDeliveryResult> (no | void).
+ *  void / undefined / null / malformed / unknown → NO ACK. */
 export async function deliverWithAcknowledgement(
-  send: () => Promise<LegacyTerminalDeliveryResult | void>,
+  send: () => Promise<LegacyTerminalDeliveryResult>,
   acknowledge: () => void
 ): Promise<DeliveryWithAcknowledgementResult> {
   try {
     const outcome = await send();
-    if (outcome && outcome.status !== 'sent') {
+
+    if (!isLegacyTerminalDeliveryResult(outcome)) {
       return {
-        status: outcome.status,
+        status: 'retryable-failure',
         acknowledged: false,
-        reason: outcome.reason
+        reason: 'INVALID_DELIVERY_RESULT'
       };
     }
-    acknowledge();
-    return {
-      status: 'sent',
-      acknowledged: true
-    };
+
+    switch (outcome.status) {
+      case 'sent':
+        acknowledge();
+        return {
+          status: 'sent',
+          acknowledged: true
+        };
+
+      case 'blocked-by-authority':
+        return {
+          status: 'blocked-by-authority',
+          acknowledged: false,
+          reason: outcome.reason
+        };
+
+      case 'retryable-failure':
+        return {
+          status: 'retryable-failure',
+          acknowledged: false,
+          reason: outcome.reason
+        };
+    }
   } catch (error) {
     return {
       status: 'retryable-failure',

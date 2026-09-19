@@ -89,21 +89,6 @@ describe('AgentHub Desktop V0.8.9F — Suppressed Delivery Acknowledgement Closu
       assert.equal(result.reason, 'Socket write failure');
       assert.equal(ackCalls, 0, 'acknowledge() must NOT be called when sender throws');
     });
-
-    it('handles legacy void return as sent for backwards compatibility', { timeout: TEST_TIMEOUT }, async () => {
-      let ackCalls = 0;
-      const sendVoid = async (): Promise<void> => {
-        // legacy resolves with void
-      };
-
-      const result = await deliverWithAcknowledgement(sendVoid, () => {
-        ackCalls += 1;
-      });
-
-      assert.equal(result.status, 'sent');
-      assert.equal(result.acknowledged, true);
-      assert.equal(ackCalls, 1);
-    });
   });
 
   // 2. Queue Simulation: Authority Block vs Retryable Failure (Section 27 - 29)
