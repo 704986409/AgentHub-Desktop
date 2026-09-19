@@ -19,7 +19,7 @@ import { isDurableRole, preferredAgentRole, roleForHiveSpawn } from '../../../sh
 import { inboxNudgeText } from '../../../shared/hiveNudge';
 import { resolveGodName } from '../../../shared/godIdentity';
 import { acquireTerminal, isTerminalAutomationSafe } from '@/components/terminalPool';
-import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition } from './queueDelivery';
+import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition, type LegacyTerminalDeliveryResult } from './queueDelivery';
 import { OFFICE_CAST, DEFAULT_CHARACTER } from '@/scene/office/cast';
 
 const GOD_ID = 'god';
@@ -119,21 +119,21 @@ function submitToPty(
   text: string,
   provider: AgentProvider,
   settleMs = 250
-): Promise<void> {
+): Promise<LegacyTerminalDeliveryResult> {
+  void text;
+  void settleMs;
   const prev = writeChains.get(ptyId) ?? Promise.resolve();
-  const next = prev.catch(() => { /* a failed prior write must not stall the chain */ }).then(async () => {
+  const next = prev.catch(() => { /* a failed prior write must not stall the chain */ }).then(async (): Promise<LegacyTerminalDeliveryResult> => {
     await waitForTerminalReady(ptyId, provider);
-    // Bracketed paste (ESC[200~ … ESC[201~) only matters for MULTI-LINE text, so a
-    // stray "\n" doesn't submit early (#24). Single-line text (nudges, slash
-    // commands) is sent raw — some TUIs (Antigravity's agy) treat the paste
-    // markers as literal input and never submit, so skipping them is more robust.
-    const payload = text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text;
-    // V0.8.9C: Primary AgentHub Renderer has no PTY write authority.
+    // V0.8.9C/F: Primary AgentHub Renderer has no PTY write authority.
     // Programmatic agent execution is routed strictly via Backend executeTask.
     console.warn(`[useHive] Programmatic PTY write suppressed for ${ptyId} (AgentHub provider execution is Backend-only).`);
-    return;
+    return {
+      status: 'blocked-by-authority',
+      reason: 'Primary Renderer PTY automation is disabled in AgentHub mode.'
+    };
   });
-  writeChains.set(ptyId, next);
+  writeChains.set(ptyId, next.then(() => {}));
   return next;
 }
 
@@ -303,8 +303,10 @@ export function useHive(config: HarnessConfig | null): void {
   // collides with /remote-control + the orientation prompt.
   const bootGraceUntil = useRef<Record<string, number>>({});
   // Agents whose one-time TUI protocol seed (Crush, seedDelivery:'type-into-tui')
-  // has already been typed — guards effect #3b against re-seeding. (ondev-b)
-  const seeded = useRef<Set<string>>(new Set());
+  // has already been verified delivered. (V0.8.9F: split attempt tracking from verified delivery)
+  const seedAttemptedAt = useRef<Record<string, number>>({});
+  const deliveredSeeds = useRef<Set<string>>(new Set());
+  const authorityBlockedLogged = useRef<Record<string, string>>({});
   const seenTerminalHandoffs = useRef<Set<string>>(new Set());
   // Reactive so the assistant bootstrap (effect #1b) re-runs once Michael is ready.
   const godStatus = useStore((s) => s.godStatus);
@@ -643,28 +645,31 @@ export function useHive(config: HarnessConfig | null): void {
   //     sequence above; this covers workers.) (ondev-b)
   useEffect(() => {
     if (!config?.onboardingComplete) return;
+    const SEED_ATTEMPT_INTERVAL_MS = 1500;
+    const SEED_ATTEMPT_COOLDOWN_MS = 10_000;
     const iv = setInterval(() => {
-      const { agents, updateAgent } = useStore.getState();
+      const { agents } = useStore.getState();
+      const now = Date.now();
       for (const a of agents) {
-        if (!a.ptyId || a.isGod || !a.seedPrompt || seeded.current.has(a.id)) continue;
-        seeded.current.add(a.id);
+        if (!a.ptyId || a.isGod || !a.seedPrompt || deliveredSeeds.current.has(a.id)) continue;
+        if (now - (seedAttemptedAt.current[a.id] ?? 0) < SEED_ATTEMPT_COOLDOWN_MS) continue;
+        seedAttemptedAt.current[a.id] = now;
         const ptyId = a.ptyId;
         const seed = a.seedPrompt;
         // Hold the nudge/quiesce typers off this agent until the seed lands + settles.
-        bootGraceUntil.current[a.id] = Date.now() + BOOT_GRACE_MS;
-        // Clear the record now so it isn't re-seen (the ref also guards) or persisted.
-        updateAgent(a.id, { seedPrompt: undefined });
+        bootGraceUntil.current[a.id] = now + BOOT_GRACE_MS;
+        // V0.8.9F: seedPrompt is strictly cleared only after verified delivery success ('sent').
+        // It is NOT cleared beforehand, ensuring zero data loss on blocked or failed writes.
         setTimeout(() => {
           // Permission-prompt safety (#5): if the worker surfaced an approval /
           // needs-human prompt while its TUI booted ('waiting'/'blocked'), the
-          // seed's trailing Enter would confirm it. Put the seed back and let a
-          // later tick retry once the prompt clears; if the agent vanished
-          // (killed mid-boot), don't type into its orphaned pty at all.
+          // seed's trailing Enter would confirm it. Let a later tick retry once
+          // the prompt clears; if the agent vanished (killed mid-boot), don't type
+          // into its orphaned pty at all.
           const live = useStore.getState().agents.find((x) => x.id === a.id);
           if (!live) return;
           if (live.status === 'waiting' || live.status === 'blocked') {
-            seeded.current.delete(a.id);
-            useStore.getState().updateAgent(a.id, { seedPrompt: seed });
+            delete seedAttemptedAt.current[a.id];
             return;
           }
           submitToPty(
@@ -672,10 +677,20 @@ export function useHive(config: HarnessConfig | null): void {
             withStandingGoal(live, seed),
             inferAgentProvider(live.command, live.provider)
           )
+            .then((res) => {
+              if (res.status === 'sent') {
+                deliveredSeeds.current.add(a.id);
+                useStore.getState().updateAgent(a.id, { seedPrompt: undefined });
+              } else if (res.status === 'blocked-by-authority') {
+                console.warn(
+                  `[useHive:seed] seed not delivered for agent ${a.id} because Primary Renderer PTY automation is disabled; seed retained.`
+                );
+              }
+            })
             .catch(() => { /* pty may have died */ });
         }, SEED_BOOT_MS);
       }
-    }, 1500);
+    }, SEED_ATTEMPT_INTERVAL_MS);
     return () => clearInterval(iv);
   }, [config?.onboardingComplete]);
 
@@ -743,7 +758,7 @@ export function useHive(config: HarnessConfig | null): void {
       inFlight.add(flightKey);
       lastFlush.current[target.id] = now;
       try {
-        const sent = await deliverWithAcknowledgement(
+        const outcome = await deliverWithAcknowledgement(
           // `instruction` (when present) is the authoritative text to type into
           // the PTY; UI/card surfaces continue to show the readable `text`.
           () => submitToPty(
@@ -768,9 +783,22 @@ export function useHive(config: HarnessConfig | null): void {
             }
           }
         );
-        if (sent) {
+        if (outcome.status === 'sent') {
           delete sendFailures[next.id];
+          delete authorityBlockedLogged.current[next.id];
           return { sent: true, message: next };
+        }
+        if (outcome.status === 'blocked-by-authority') {
+          // V0.8.9F: Legacy terminal delivery blocked by AgentHub authority policy;
+          // message is deliberately retained intact at queue head.
+          // Retry counter and MAX_SEND_ATTEMPTS are NOT touched.
+          if (authorityBlockedLogged.current[next.id] !== outcome.reason) {
+            authorityBlockedLogged.current[next.id] = outcome.reason ?? 'blocked';
+            console.warn(
+              `[queue-drain] legacy PTY delivery blocked by AgentHub authority policy for agent ${target.id}, message ${next.id}: ${outcome.reason}. Message remains queued.`
+            );
+          }
+          return { sent: false };
         }
         // Failed write (dead/crashed pty the store still thinks is idle): retry
         // on the next cooldown-spaced flush, but only MAX_SEND_ATTEMPTS times —

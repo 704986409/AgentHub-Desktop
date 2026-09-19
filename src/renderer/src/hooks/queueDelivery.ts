@@ -1,15 +1,40 @@
-/** Run one queued delivery and acknowledge it only after the sender resolves.
- * Rejections deliberately leave the queue item untouched for the next retry. */
+export type LegacyTerminalDeliveryResult =
+  | { readonly status: 'sent' }
+  | { readonly status: 'blocked-by-authority'; readonly reason: string }
+  | { readonly status: 'retryable-failure'; readonly reason: string };
+
+export interface DeliveryWithAcknowledgementResult {
+  readonly status: 'sent' | 'blocked-by-authority' | 'retryable-failure';
+  readonly acknowledged: boolean;
+  readonly reason?: string;
+}
+
+/** Run one queued delivery and acknowledge it only after the sender verifies sent.
+ *  Blocked and retryable outcomes leave the queue item untouched. */
 export async function deliverWithAcknowledgement(
-  send: () => Promise<void>,
+  send: () => Promise<LegacyTerminalDeliveryResult | void>,
   acknowledge: () => void
-): Promise<boolean> {
+): Promise<DeliveryWithAcknowledgementResult> {
   try {
-    await send();
+    const outcome = await send();
+    if (outcome && outcome.status !== 'sent') {
+      return {
+        status: outcome.status,
+        acknowledged: false,
+        reason: outcome.reason
+      };
+    }
     acknowledge();
-    return true;
-  } catch {
-    return false;
+    return {
+      status: 'sent',
+      acknowledged: true
+    };
+  } catch (error) {
+    return {
+      status: 'retryable-failure',
+      acknowledged: false,
+      reason: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 
