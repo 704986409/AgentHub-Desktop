@@ -200,7 +200,7 @@ describe('AgentHub Execute IPC request envelope', () => {
     const addr = server.address() as { port: number };
     const connection = {
       restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
-      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: { projects: [], agents: [], tasks: [], assignments: [] } })
+      syncAuthoritativeState: async () => ({ disposition: 'committed', snapshot: { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] } })
     } as unknown as AgentHubConnection;
     const execution = new AgentHubTaskExecution(connection);
     try {
@@ -635,7 +635,7 @@ describe('AgentHub Task Execution service', () => {
       restClient: new AgentHubRestClient({ baseUrl }),
       syncAuthoritativeState: async () => {
         syncCalls.n++;
-        return { disposition, snapshot: disposition === 'superseded-uncommitted' ? null : { projects: [], agents: [], tasks: [], assignments: [] } };
+        return { disposition, snapshot: disposition === 'superseded-uncommitted' ? null : { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] } };
       }
     } as unknown as AgentHubConnection;
     return { connection, syncCalls };
@@ -892,7 +892,7 @@ describe('AgentHub Task Execution service', () => {
       if (req.url === '/api/v1/state') {
         if (!armed) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, requestId: 's0', data: { projects: [], agents: [], tasks: [], assignments: [] } }));
+          res.end(JSON.stringify({ ok: true, requestId: 's0', data: { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] } }));
           return;
         }
         res.writeHead(500, { 'Content-Type': 'application/json' });

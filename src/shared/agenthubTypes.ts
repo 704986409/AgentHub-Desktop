@@ -2,11 +2,19 @@
  * Public Data Transfer Objects (DTOs) and runtime snapshotting for AgentHub Desktop.
  * 
  * Strict Invariants:
- * - Pinned to AgentHub 0.7.2A public contracts.
+ * - Pinned to AgentHub 0.7.3D public contracts for lifecycle-aware state.
  * - Runtime fail-closed sanitization: never return raw network objects.
  * - ZERO backend-private fields can cross into Desktop cache/IPC.
  * - Fail closed: do NOT synthesize defaults for missing/invalid required fields.
  */
+
+import { snapshotLifecycleStateFields } from './agenthubLifecycle';
+import type {
+  IntakeDto,
+  PlanDto,
+  PlanTaskRuntimeDto,
+  PlanDependencyDto
+} from './agenthubLifecycle';
 
 export interface AgentHubSuccessEnvelope<T> {
   readonly ok: true;
@@ -114,6 +122,10 @@ export interface AgentHubStateSnapshot {
   readonly agents: readonly AgentDto[];
   readonly tasks: readonly TaskDto[];
   readonly assignments: readonly AssignmentDto[];
+  readonly intakes: readonly IntakeDto[];
+  readonly plans: readonly PlanDto[];
+  readonly planTasks: readonly PlanTaskRuntimeDto[];
+  readonly planDependencies: readonly PlanDependencyDto[];
 }
 
 export interface AgentHubWsHelloMessage {
@@ -584,12 +596,17 @@ export function snapshotState(raw: unknown): AgentHubStateSnapshot {
   const agents = raw.agents.map(snapshotAgentDto);
   const tasks = raw.tasks.map(snapshotTaskDto);
   const assignments = raw.assignments.map(snapshotAssignmentDto);
+  const lifecycle = snapshotLifecycleStateFields(raw);
 
   return Object.freeze({
     projects: Object.freeze(projects),
     agents: Object.freeze(agents),
     tasks: Object.freeze(tasks),
-    assignments: Object.freeze(assignments)
+    assignments: Object.freeze(assignments),
+    intakes: lifecycle.intakes,
+    plans: lifecycle.plans,
+    planTasks: lifecycle.planTasks,
+    planDependencies: lifecycle.planDependencies
   });
 }
 
@@ -2315,3 +2332,53 @@ export function resolveProviderModelSuggestions(
     nativeEmpty: false
   };
 }
+
+export type {
+  CreateIntakeInputDto,
+  CreatePlanInputDto,
+  CreatePlanRevisionInputDto,
+  CreatePlanTaskInputDto,
+  CreatePlanDependencyInputDto,
+  PlanDecisionInputDto,
+  StartPlanInputDto,
+  CreateIntakeRequestDto,
+  CreatePlanRequestDto,
+  CreatePlanRevisionRequestDto,
+  PlanDecisionRequestDto,
+  StartPlanRequestDto,
+  IntakeDto,
+  PlanDto,
+  PlanTaskRuntimeDto,
+  PlanDependencyDto,
+  PlanVersionDto,
+  PlanAggregateDto,
+  PlanApprovalDecisionDto,
+  LifecycleMutationResult,
+  PlanState,
+  PlanTaskRuntimeState,
+  PlanDependencyState
+} from './agenthubLifecycle';
+
+export {
+  LIFECYCLE_SUPPORTED_BACKEND_VERSIONS,
+  HUMAN_BOSS_ACTOR_ID,
+  HUMAN_BOSS_CREATED_BY,
+  EMPTY_LIFECYCLE_SNAPSHOT,
+  isLifecycleCompatibleBackendVersion,
+  snapshotCreateIntakeInput,
+  snapshotCreatePlanInput,
+  snapshotCreatePlanRevisionInput,
+  snapshotPlanDecisionInput,
+  snapshotStartPlanInput,
+  snapshotCreateIntakeRequest,
+  snapshotCreatePlanRequest,
+  snapshotCreatePlanRevisionRequest,
+  snapshotPlanDecisionRequest,
+  snapshotStartPlanRequest,
+  snapshotIntakeDto,
+  snapshotPlanDto,
+  snapshotPlanTaskRuntimeDto,
+  snapshotPlanDependencyDto,
+  leadAgentLifecycleReferences,
+  shortenProposalHash
+} from './agenthubLifecycle';

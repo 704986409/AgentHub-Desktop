@@ -5,6 +5,8 @@ import { AgentHubTaskModal } from './AgentHubTaskModal';
 import { AgentHubExecuteModal } from './AgentHubExecuteModal';
 import { AgentHubReviewEvidenceModal } from './AgentHubReviewEvidenceModal';
 import { AgentHubAgentManagementModal } from './AgentHubAgentManagementModal';
+import { AgentHubLifecycleWorkspace } from './AgentHubLifecycleWorkspace';
+import { isLifecycleCompatibleBackendVersion } from '@shared/agenthubTypes';
 
 export function AgentHubBadge() {
   const {
@@ -23,6 +25,7 @@ export function AgentHubBadge() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
   const [isManageOpen, setIsManageOpen] = useState(false);
+  const [isLifecycleOpen, setIsLifecycleOpen] = useState(false);
 
   const reviewRecordCount = Object.keys(
     useAgentHubReviewSessionStore((s) => s.reviewReadyByTaskId)
@@ -38,6 +41,8 @@ export function AgentHubBadge() {
 
   const agentCount = snapshot?.agents?.length ?? 0;
   const taskCount = snapshot?.tasks?.length ?? 0;
+  const planCount = snapshot?.plans?.length ?? 0;
+  const lifecycleCompatible = health !== null && isLifecycleCompatibleBackendVersion(health.version);
 
   // Visual status indicators
   let dotColor = 'var(--cth-ink-400, #94a3b8)';
@@ -205,6 +210,27 @@ export function AgentHubBadge() {
                   type="button"
                   onClick={() => {
                     setHover(false);
+                    setIsLifecycleOpen(true);
+                  }}
+                  style={{
+                    marginTop: 6,
+                    width: '100%',
+                    padding: '5px 8px',
+                    background: 'var(--cth-paper-100, #ffffff)',
+                    border: '1px solid var(--cth-ink-900, #0f172a)',
+                    color: 'var(--cth-ink-900, #0f172a)',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    borderRadius: 2
+                  }}
+                >
+                  Lifecycle Workspace {lifecycleCompatible ? `(${planCount} plans)` : '(unavailable)'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHover(false);
                     setIsExecuteModalOpen(true);
                   }}
                   style={{
@@ -267,6 +293,10 @@ export function AgentHubBadge() {
       <AgentHubAgentManagementModal
         isOpen={isManageOpen}
         onClose={() => setIsManageOpen(false)}
+      />
+      <AgentHubLifecycleWorkspace
+        isOpen={isLifecycleOpen}
+        onClose={() => setIsLifecycleOpen(false)}
       />
     </span>
   );

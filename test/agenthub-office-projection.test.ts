@@ -57,7 +57,7 @@ describe('AgentHub Office State Projection', () => {
         { ...baseAgent, agentId: 'agent-2', name: 'Agent Two' }
       ],
       projects: [baseProject],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -82,7 +82,7 @@ describe('AgentHub Office State Projection', () => {
     const snapshot: AgentHubStateSnapshot = {
       agents: [{ ...baseAgent, agentId: 'hub-agent-1', name: 'Hub Agent' }],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -296,7 +296,7 @@ describe('AgentHub Office State Projection', () => {
         { ...baseAgent, agentId: 'a-5', providerId: 'custom-future-provider' }
       ],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -315,7 +315,7 @@ describe('AgentHub Office State Projection', () => {
     const snapshot: AgentHubStateSnapshot = {
       agents: [{ ...baseAgent, agentId: 'a-nomodel', modelId: 'claude-sonnet-4' }],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -338,7 +338,7 @@ describe('AgentHub Office State Projection', () => {
         { ...baseAgent, agentId: 'agent-a' }
       ],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -348,7 +348,7 @@ describe('AgentHub Office State Projection', () => {
         { ...baseAgent, agentId: 'agent-z' }
       ],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -448,7 +448,7 @@ describe('AgentHub Office State Projection', () => {
         { ...baseAgent, agentId: 'hub-2' }
       ],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -468,7 +468,7 @@ describe('AgentHub Office State Projection', () => {
     const updatedSnapshot: AgentHubStateSnapshot = {
       agents: [{ ...baseAgent, agentId: 'hub-2' }],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 

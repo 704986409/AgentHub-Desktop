@@ -37,7 +37,13 @@ import type {
   UpdateAgentRequestDto,
   AgentActionRequestDto,
   AgentMutationResult,
-  ProviderDto
+  ProviderDto,
+  CreateIntakeRequestDto,
+  CreatePlanRequestDto,
+  CreatePlanRevisionRequestDto,
+  PlanDecisionRequestDto,
+  StartPlanRequestDto,
+  LifecycleMutationResult
 } from '../shared/agenthubTypes';
 export type {
   AgentHubDesktopState,
@@ -53,7 +59,13 @@ export type {
   UpdateAgentRequestDto,
   AgentActionRequestDto,
   AgentMutationResult,
-  ProviderDto
+  ProviderDto,
+  CreateIntakeRequestDto,
+  CreatePlanRequestDto,
+  CreatePlanRevisionRequestDto,
+  PlanDecisionRequestDto,
+  StartPlanRequestDto,
+  LifecycleMutationResult
 } from '../shared/agenthubTypes';
 
 
@@ -1450,6 +1462,14 @@ export interface AgentHubPreloadApi {
   disableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   deleteAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   getProviders: () => Promise<readonly ProviderDto[]>;
+  resyncLifecycle: () => Promise<AgentHubDesktopState>;
+  createIntake: (request: CreateIntakeRequestDto) => Promise<LifecycleMutationResult>;
+  createPlan: (request: CreatePlanRequestDto) => Promise<LifecycleMutationResult>;
+  createPlanRevision: (request: CreatePlanRevisionRequestDto) => Promise<LifecycleMutationResult>;
+  approvePlan: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
+  requestPlanChanges: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
+  rejectPlan: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
+  startPlan: (request: StartPlanRequestDto) => Promise<LifecycleMutationResult>;
 }
 
 const agentHubApi: AgentHubPreloadApi = {
@@ -1479,7 +1499,23 @@ const agentHubApi: AgentHubPreloadApi = {
   deleteAgent: (request: AgentActionRequestDto): Promise<AgentMutationResult> =>
     ipcRenderer.invoke('agenthub:deleteAgent', request),
   getProviders: (): Promise<readonly ProviderDto[]> =>
-    ipcRenderer.invoke('agenthub:getProviders')
+    ipcRenderer.invoke('agenthub:getProviders'),
+  resyncLifecycle: (): Promise<AgentHubDesktopState> =>
+    ipcRenderer.invoke('agenthub:lifecycle:resync'),
+  createIntake: (request: CreateIntakeRequestDto): Promise<LifecycleMutationResult> =>
+    ipcRenderer.invoke('agenthub:lifecycle:create-intake', request),
+  createPlan: (request: CreatePlanRequestDto): Promise<LifecycleMutationResult> =>
+    ipcRenderer.invoke('agenthub:lifecycle:create-plan', request),
+  createPlanRevision: (request: CreatePlanRevisionRequestDto): Promise<LifecycleMutationResult> =>
+    ipcRenderer.invoke('agenthub:lifecycle:create-revision', request),
+  approvePlan: (request: PlanDecisionRequestDto): Promise<LifecycleMutationResult> =>
+    ipcRenderer.invoke('agenthub:lifecycle:approve', request),
+  requestPlanChanges: (request: PlanDecisionRequestDto): Promise<LifecycleMutationResult> =>
+    ipcRenderer.invoke('agenthub:lifecycle:request-changes', request),
+  rejectPlan: (request: PlanDecisionRequestDto): Promise<LifecycleMutationResult> =>
+    ipcRenderer.invoke('agenthub:lifecycle:reject', request),
+  startPlan: (request: StartPlanRequestDto): Promise<LifecycleMutationResult> =>
+    ipcRenderer.invoke('agenthub:lifecycle:start', request)
 };
 
 

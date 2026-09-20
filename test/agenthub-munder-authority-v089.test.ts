@@ -120,7 +120,7 @@ describe('V0.8.9 Munder authority reduction', () => {
     const snapshot: AgentHubStateSnapshot = {
       agents: [baseAgent],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
     const projection = projectAgentHubOffice(snapshot);

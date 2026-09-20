@@ -38,7 +38,7 @@ describe('AgentHub Office Shell Authority', () => {
     const snapshot: AgentHubStateSnapshot = {
       agents,
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -50,7 +50,7 @@ describe('AgentHub Office Shell Authority', () => {
     const snapshot: AgentHubStateSnapshot = {
       agents: [],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
 
@@ -68,7 +68,7 @@ describe('AgentHub Office Shell Authority', () => {
     const snapshotWithAgents: AgentHubStateSnapshot = {
       agents: [baseAgent],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
     const stateWithAgents = deriveAgentHubOfficeShellState(snapshotWithAgents);
@@ -77,7 +77,7 @@ describe('AgentHub Office Shell Authority', () => {
     const emptySnapshot: AgentHubStateSnapshot = {
       agents: [],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
     const stateEmpty = deriveAgentHubOfficeShellState(emptySnapshot);
@@ -91,7 +91,7 @@ describe('AgentHub Office Shell Authority', () => {
     const corruptedSnapshot = {
       agents: null as any,
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
     assert.deepEqual(deriveAgentHubOfficeShellState(corruptedSnapshot as any), { kind: 'unavailable' });

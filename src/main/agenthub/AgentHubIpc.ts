@@ -7,12 +7,14 @@ import type {
   TaskSubmissionResult,
   ReviewDecisionResult,
   AgentMutationResult,
-  ProviderDto
+  ProviderDto,
+  LifecycleMutationResult
 } from './AgentHubTypes';
 import { AgentHubTaskSubmission } from './AgentHubTaskSubmission';
 import { AgentHubTaskExecution } from './AgentHubTaskExecution';
 import { AgentHubReviewDecision } from './AgentHubReviewDecision';
 import { AgentHubAgentManagement } from './AgentHubAgentManagement';
+import { AgentHubLifecycle } from './AgentHubLifecycle';
 
 export const AGENTHUB_IPC_CHANNELS = {
   GET_STATE: 'agenthub:getConnectionState',
@@ -27,7 +29,15 @@ export const AGENTHUB_IPC_CHANNELS = {
   ENABLE_AGENT: 'agenthub:enableAgent',
   DISABLE_AGENT: 'agenthub:disableAgent',
   DELETE_AGENT: 'agenthub:deleteAgent',
-  GET_PROVIDERS: 'agenthub:getProviders'
+  GET_PROVIDERS: 'agenthub:getProviders',
+  LIFECYCLE_CREATE_INTAKE: 'agenthub:lifecycle:create-intake',
+  LIFECYCLE_CREATE_PLAN: 'agenthub:lifecycle:create-plan',
+  LIFECYCLE_CREATE_REVISION: 'agenthub:lifecycle:create-revision',
+  LIFECYCLE_APPROVE: 'agenthub:lifecycle:approve',
+  LIFECYCLE_REQUEST_CHANGES: 'agenthub:lifecycle:request-changes',
+  LIFECYCLE_REJECT: 'agenthub:lifecycle:reject',
+  LIFECYCLE_START: 'agenthub:lifecycle:start',
+  LIFECYCLE_RESYNC: 'agenthub:lifecycle:resync'
 } as const;
 
 export function registerAgentHubIpc(
@@ -35,12 +45,14 @@ export function registerAgentHubIpc(
   taskSubmission?: AgentHubTaskSubmission,
   taskExecution?: AgentHubTaskExecution,
   reviewDecision?: AgentHubReviewDecision,
-  agentManagement?: AgentHubAgentManagement
+  agentManagement?: AgentHubAgentManagement,
+  lifecycle?: AgentHubLifecycle
 ): () => void {
   const submission = taskSubmission ?? new AgentHubTaskSubmission(connection);
   const execution = taskExecution ?? new AgentHubTaskExecution(connection);
   const decision = reviewDecision ?? new AgentHubReviewDecision(connection);
   const management = agentManagement ?? new AgentHubAgentManagement(connection);
+  const lifecycleClient = lifecycle ?? new AgentHubLifecycle(connection);
 
 
   ipcMain.handle(AGENTHUB_IPC_CHANNELS.GET_STATE, (): AgentHubDesktopState => {
@@ -101,6 +113,41 @@ export function registerAgentHubIpc(
     AGENTHUB_IPC_CHANNELS.GET_PROVIDERS,
     async (): Promise<readonly ProviderDto[]> => connection.getProviders()
   );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_INTAKE,
+    async (_event, request: unknown): Promise<LifecycleMutationResult> => lifecycleClient.createIntake(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_PLAN,
+    async (_event, request: unknown): Promise<LifecycleMutationResult> => lifecycleClient.createPlan(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_REVISION,
+    async (_event, request: unknown): Promise<LifecycleMutationResult> => lifecycleClient.createRevision(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_APPROVE,
+    async (_event, request: unknown): Promise<LifecycleMutationResult> => lifecycleClient.approve(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_REQUEST_CHANGES,
+    async (_event, request: unknown): Promise<LifecycleMutationResult> => lifecycleClient.requestChanges(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_REJECT,
+    async (_event, request: unknown): Promise<LifecycleMutationResult> => lifecycleClient.reject(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_START,
+    async (_event, request: unknown): Promise<LifecycleMutationResult> => lifecycleClient.start(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.LIFECYCLE_RESYNC,
+    async (): Promise<AgentHubDesktopState> => {
+      await connection.refresh();
+      return connection.getState();
+    }
+  );
 
   const handleChange = (state: AgentHubDesktopState): void => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -121,6 +168,7 @@ export function registerAgentHubIpc(
     execution.stop();
     submission.stop();
     management.stop();
+    lifecycleClient.stop();
     connection.cache.off('change', handleChange);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_STATE);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_SNAPSHOT);
@@ -134,6 +182,14 @@ export function registerAgentHubIpc(
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.DISABLE_AGENT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.DELETE_AGENT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_PROVIDERS);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_INTAKE);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_PLAN);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_REVISION);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_APPROVE);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_REQUEST_CHANGES);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_REJECT);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_START);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_RESYNC);
   };
 
 }

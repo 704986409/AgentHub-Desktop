@@ -29,7 +29,7 @@ describe('AgentHubStateCache', () => {
       projects: [{ projectId: 'p1', name: 'P1', description: null, createdAt: '2026', updatedAt: '2026' }],
       agents: [],
       tasks: [],
-      assignments: []
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
     });
     assert.equal(cache.getState().connection, 'connecting', 'updateSnapshot must not infer connected status');
     assert.equal(cache.getState().snapshot?.projects.length, 1);
@@ -84,7 +84,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
               updatedAt: '2026'
             }],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -202,7 +202,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
           res.end(JSON.stringify({
             ok: true,
             requestId: 's1',
-            data: { projects: [], agents: [], tasks: [], assignments: [] }
+            data: { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
           }));
           return;
         }
@@ -262,7 +262,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
               projects: [{ projectId: 'stale-p', name: 'Stale', description: null, createdAt: '2026', updatedAt: '2026' }],
               agents: [],
               tasks: [],
-              assignments: []
+              assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
             }
           }));
         });
@@ -325,7 +325,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
             projects: [{ projectId: 'p-initial', name: 'Initial', description: null, createdAt: '2026', updatedAt: '2026' }],
             agents: [],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -414,7 +414,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
                 projects: [{ projectId: 'proj-A', name: 'Project A', description: null, createdAt: '2026', updatedAt: '2026' }],
                 agents: [],
                 tasks: [],
-                assignments: []
+                assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
               }
             }));
           });
@@ -430,7 +430,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
             projects: [{ projectId: `proj-B-${currentCall}`, name: 'Project B', description: null, createdAt: '2026', updatedAt: '2026' }],
             agents: [],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -537,7 +537,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
             projects: [{ projectId: 'p1', name: 'Proj', description: null, createdAt: '2026', updatedAt: '2026' }],
             agents: [],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -618,7 +618,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
                 projects: [{ projectId: 'p1', name: 'SlowSyncProj', description: null, createdAt: '2026', updatedAt: '2026' }],
                 agents: [],
                 tasks: [],
-                assignments: []
+                assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
               }
             }));
           });
@@ -633,7 +633,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
             projects: [{ projectId: 'p1', name: 'Proj1', description: null, createdAt: '2026', updatedAt: '2026' }],
             agents: [],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -751,7 +751,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
             projects: [{ projectId: 'p1', name: 'InitFailProj', description: null, createdAt: '2026', updatedAt: '2026' }],
             agents: [],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -840,7 +840,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
             projects: [],
             agents: [],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -969,7 +969,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
           res.end(JSON.stringify({
             ok: true,
             requestId: `s-${capturedPayload}-${racedStarts}`,
-            data: { projects: [], agents: [], tasks, assignments: [] }
+            data: { projects: [], agents: [], tasks, assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
           }));
         })();
         return;
@@ -1098,7 +1098,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
           res.end(JSON.stringify({
             ok: true,
             requestId: 's0',
-            data: { projects: [], agents: [], tasks: [], assignments: [] }
+            data: { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
           }));
           return;
         }
@@ -1114,7 +1114,7 @@ describe('AgentHubConnection Lifecycle and Failure Closures', () => {
           res.end(JSON.stringify({
             ok: true,
             requestId: `s-${n}`,
-            data: { projects: [], agents: [], tasks, assignments: [] }
+            data: { projects: [], agents: [], tasks, assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
           }));
         })();
         return;

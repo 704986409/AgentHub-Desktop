@@ -12,7 +12,14 @@ import type {
   ExecuteTaskInputDto,
   ExecuteTaskResultDto,
   ReviewDecisionLifecycleDto,
-  ProviderDto
+  ProviderDto,
+  CreateIntakeInputDto,
+  CreatePlanInputDto,
+  CreatePlanRevisionInputDto,
+  PlanDecisionInputDto,
+  StartPlanInputDto,
+  IntakeDto,
+  PlanDto
 } from './AgentHubTypes';
 import {
   snapshotState,
@@ -28,6 +35,13 @@ import {
   snapshotExecuteTaskResult,
   snapshotReviewDecisionLifecycleResult,
   snapshotProviderCatalog,
+  snapshotCreateIntakeInput,
+  snapshotCreatePlanInput,
+  snapshotCreatePlanRevisionInput,
+  snapshotPlanDecisionInput,
+  snapshotStartPlanInput,
+  snapshotIntakeDto,
+  snapshotPlanDto,
   AgentHubValidationError
 } from './AgentHubTypes';
 
@@ -408,6 +422,147 @@ export class AgentHubRestClient {
     }
   }
 
+  public async createIntake(
+    input: CreateIntakeInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<IntakeDto> {
+    const validated = snapshotCreateIntakeInput(input);
+    const data = await this.#post<unknown>(
+      '/api/v1/intakes',
+      boundedJson(validated),
+      requireIdempotencyKey(idempotencyKey),
+      201,
+      signal,
+      this.#timeoutMs
+    );
+    return this.#snapshotIntake(data);
+  }
+
+  public async createPlan(
+    input: CreatePlanInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<PlanDto> {
+    const validated = snapshotCreatePlanInput(input);
+    const data = await this.#post<unknown>(
+      '/api/v1/plans',
+      boundedJson(validated),
+      requireIdempotencyKey(idempotencyKey),
+      201,
+      signal,
+      this.#timeoutMs
+    );
+    return this.#snapshotPlan(data);
+  }
+
+  public async createPlanRevision(
+    planId: string,
+    input: CreatePlanRevisionInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<PlanDto> {
+    const validatedId = snapshotLifecyclePathId(planId, 'planId');
+    const validated = snapshotCreatePlanRevisionInput(input);
+    const data = await this.#post<unknown>(
+      `/api/v1/plans/${encodeURIComponent(validatedId)}/revisions`,
+      boundedJson(validated),
+      requireIdempotencyKey(idempotencyKey),
+      201,
+      signal,
+      this.#timeoutMs
+    );
+    return this.#snapshotPlan(data);
+  }
+
+  public async approvePlan(
+    planId: string,
+    input: PlanDecisionInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<PlanDto> {
+    return this.#decidePlan(planId, 'approve', input, idempotencyKey, signal);
+  }
+
+  public async requestPlanChanges(
+    planId: string,
+    input: PlanDecisionInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<PlanDto> {
+    return this.#decidePlan(planId, 'request-changes', input, idempotencyKey, signal);
+  }
+
+  public async rejectPlan(
+    planId: string,
+    input: PlanDecisionInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<PlanDto> {
+    return this.#decidePlan(planId, 'reject', input, idempotencyKey, signal);
+  }
+
+  public async startPlan(
+    planId: string,
+    input: StartPlanInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<PlanDto> {
+    const validatedId = snapshotLifecyclePathId(planId, 'planId');
+    const validated = snapshotStartPlanInput(input);
+    const data = await this.#post<unknown>(
+      `/api/v1/plans/${encodeURIComponent(validatedId)}/start`,
+      boundedJson(validated),
+      requireIdempotencyKey(idempotencyKey),
+      200,
+      signal,
+      this.#timeoutMs
+    );
+    return this.#snapshotPlan(data);
+  }
+
+  async #decidePlan(
+    planId: string,
+    action: 'approve' | 'request-changes' | 'reject',
+    input: PlanDecisionInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<PlanDto> {
+    const validatedId = snapshotLifecyclePathId(planId, 'planId');
+    const validated = snapshotPlanDecisionInput(input);
+    const data = await this.#post<unknown>(
+      `/api/v1/plans/${encodeURIComponent(validatedId)}/${action}`,
+      boundedJson(validated),
+      requireIdempotencyKey(idempotencyKey),
+      200,
+      signal,
+      this.#timeoutMs
+    );
+    return this.#snapshotPlan(data);
+  }
+
+  #snapshotIntake(data: unknown): IntakeDto {
+    try {
+      return snapshotIntakeDto(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_INTAKE', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
+    }
+  }
+
+  #snapshotPlan(data: unknown): PlanDto {
+    try {
+      return snapshotPlanDto(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_PLAN', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
+    }
+  }
+
   async #toggleAgent(
     agentId: string,
     action: 'enable' | 'disable',
@@ -461,9 +616,12 @@ export class AgentHubRestClient {
     if (
       path !== '/api/v1/tasks' &&
       path !== '/api/v1/agents' &&
+      path !== '/api/v1/intakes' &&
+      path !== '/api/v1/plans' &&
       !/^\/api\/v1\/tasks\/[^/]+\/execute$/.test(path) &&
       !/^\/api\/v1\/reviews\/[^/]+\/decision$/.test(path) &&
-      !/^\/api\/v1\/agents\/[^/]+\/(?:enable|disable)$/.test(path)
+      !/^\/api\/v1\/agents\/[^/]+\/(?:enable|disable)$/.test(path) &&
+      !/^\/api\/v1\/plans\/[^/]+\/(?:revisions|approve|request-changes|reject|start)$/.test(path)
     ) {
       throw new AgentHubContractError('FORBIDDEN_ROUTE', `POST path is not in the mutation allowlist: ${path}`);
     }
@@ -737,4 +895,11 @@ function snapshotAgentPathId(agentId: string): string {
     throw new AgentHubContractError('INVALID_AGENT_ID', 'Agent ID is invalid');
   }
   return agentId;
+}
+
+function snapshotLifecyclePathId(id: string, fieldName: string): string {
+  if (typeof id !== 'string' || id.trim().length === 0 || id.includes('/') || id.includes('\0')) {
+    throw new AgentHubContractError('INVALID_PLAN_ID', `${fieldName} is invalid`);
+  }
+  return id;
 }

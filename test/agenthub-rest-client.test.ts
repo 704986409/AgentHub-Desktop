@@ -142,7 +142,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
               createdAt: '2026-01-01',
               updatedAt: '2026-01-01'
             }],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -348,7 +348,7 @@ describe('AgentHubRestClient network and envelope validation', () => {
               updatedAt: '2026-01-01'
             }],
             tasks: [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
       } else if (req.url?.startsWith('/api/v1/events')) {

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAgentHubStore } from '../stores/agentHubStore';
 import { useAgentHubAgentMutationStore } from '../stores/agentHubAgentMutationStore';
-import type {
-  AgentMutationResult,
-  CreateAgentInputDto,
-  UpdateAgentInputDto,
-  ProviderDto
+import {
+  leadAgentLifecycleReferences,
+  type AgentMutationResult,
+  type CreateAgentInputDto,
+  type UpdateAgentInputDto,
+  type ProviderDto
 } from '@shared/agenthubTypes';
 import {
   AgentHubAgentForm,
@@ -236,6 +237,16 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
         {session?.status === 'failed' && (
           <div style={{ color: '#e11d48', marginBottom: 8 }}>
             {session.error?.code}: {session.error?.message}
+            {session.operation === 'delete' && selectedAgentId && snapshot && (() => {
+              const refs = leadAgentLifecycleReferences(selectedAgentId, snapshot);
+              if (refs.intakeIds.length === 0 && refs.planIds.length === 0) return null;
+              return (
+                <div>
+                  This Agent is still referenced as Lead Agent by Intake/Plan and cannot be deleted.
+                  Intakes: {refs.intakeIds.join(', ') || 'none'}; Plans: {refs.planIds.join(', ') || 'none'}.
+                </div>
+              );
+            })()}
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16 }}>

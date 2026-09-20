@@ -221,7 +221,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
             projects: [{ projectId: 'p-1', name: 'Project 1', description: null, createdAt: '2026', updatedAt: '2026' }],
             agents: [],
             tasks: taskCreateCount > 0 ? [mockTask] : [],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -324,7 +324,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
             projects: [{ projectId: 'p-1', name: 'Project 1', description: null, createdAt: '2026', updatedAt: '2026' }],
             agents: [],
             tasks: [mockTask],
-            assignments: []
+            assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: []
           }
         }));
         return;
@@ -397,7 +397,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
       }
       if (req.url === '/api/v1/state') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, requestId: 's', data: { projects: [], agents: [], tasks: [mockTask], assignments: [] } }));
+        res.end(JSON.stringify({ ok: true, requestId: 's', data: { projects: [], agents: [], tasks: [mockTask], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] } }));
         return;
       }
       if (req.url === '/api/v1/tasks' && req.method === 'POST') {
@@ -468,7 +468,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
           return;
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, requestId: 's', data: { projects: [], agents: [], tasks: [], assignments: [] } }));
+        res.end(JSON.stringify({ ok: true, requestId: 's', data: { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] } }));
         return;
       }
       if (req.url === '/api/v1/tasks' && req.method === 'POST') {
@@ -574,7 +574,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
         res.end(JSON.stringify({
           ok: true,
           requestId: 's',
-          data: { projects: [], agents: [], tasks: [stateTask], assignments: [] }
+          data: { projects: [], agents: [], tasks: [stateTask], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
         }));
         return;
       }
@@ -640,7 +640,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
         res.end(JSON.stringify({
           ok: true,
           requestId: 's',
-          data: { projects: [], agents: [], tasks: [mockTask], assignments: [] }
+          data: { projects: [], agents: [], tasks: [mockTask], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
         }));
         return;
       }
@@ -716,7 +716,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
         res.end(JSON.stringify({
           ok: true,
           requestId: 's',
-          data: { projects: [], agents: [], tasks: [], assignments: [] }
+          data: { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
         }));
         return;
       }
@@ -818,7 +818,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
           res.end(JSON.stringify({
             ok: true,
             requestId: `s-${capturedPayload}`,
-            data: { projects: [], agents: [], tasks, assignments: [] }
+            data: { projects: [], agents: [], tasks, assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
           }));
         })();
         return;
@@ -950,7 +950,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
           res.end(JSON.stringify({
             ok: true,
             requestId: 's0',
-            data: { projects: [], agents: [], tasks: [], assignments: [] }
+            data: { projects: [], agents: [], tasks: [], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
           }));
           return;
         }
@@ -964,7 +964,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
             res.end(JSON.stringify({
               ok: true,
               requestId: 's-pre',
-              data: { projects: [], agents: [], tasks: [preMutationTask], assignments: [] }
+              data: { projects: [], agents: [], tasks: [preMutationTask], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
             }));
           })();
           return;
@@ -1083,7 +1083,7 @@ describe('AgentHubTaskSubmission Idempotency and Authority', () => {
       restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
       syncAuthoritativeState: async () => ({
         disposition: 'committed',
-        snapshot: { projects: [], agents: [], tasks: [mockTask], assignments: [] }
+        snapshot: { projects: [], agents: [], tasks: [mockTask], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
       })
     } as unknown as AgentHubConnection;
     const submissionService = new AgentHubTaskSubmission(connection);
@@ -1404,7 +1404,7 @@ describe('AgentHub Create mutation certainty and settled replay', () => {
       restClient: new AgentHubRestClient({ baseUrl: `http://127.0.0.1:${addr.port}` }),
       syncAuthoritativeState: async () => ({
         disposition: 'committed',
-        snapshot: { projects: [], agents: [], tasks: [mockTask], assignments: [] }
+        snapshot: { projects: [], agents: [], tasks: [mockTask], assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [] }
       })
     } as unknown as AgentHubConnection;
     const submissionService = new AgentHubTaskSubmission(connection);

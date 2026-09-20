@@ -15,7 +15,13 @@ import type {
   UpdateAgentRequestDto,
   AgentActionRequestDto,
   AgentMutationResult,
-  ProviderDto
+  ProviderDto,
+  CreateIntakeRequestDto,
+  CreatePlanRequestDto,
+  CreatePlanRevisionRequestDto,
+  PlanDecisionRequestDto,
+  StartPlanRequestDto,
+  LifecycleMutationResult
 } from '@shared/agenthubTypes';
 
 export interface AgentHubStoreState {
@@ -45,6 +51,13 @@ export interface AgentHubStoreState {
   enableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   disableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   deleteAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
+  createIntake: (request: CreateIntakeRequestDto) => Promise<LifecycleMutationResult>;
+  createPlan: (request: CreatePlanRequestDto) => Promise<LifecycleMutationResult>;
+  createPlanRevision: (request: CreatePlanRevisionRequestDto) => Promise<LifecycleMutationResult>;
+  approvePlan: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
+  requestPlanChanges: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
+  rejectPlan: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
+  startPlan: (request: StartPlanRequestDto) => Promise<LifecycleMutationResult>;
 }
 
 
@@ -282,7 +295,14 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
   updateAgent: (request) => invokeAgentMutation('updateAgent', request),
   enableAgent: (request) => invokeAgentMutation('enableAgent', request),
   disableAgent: (request) => invokeAgentMutation('disableAgent', request),
-  deleteAgent: (request) => invokeAgentMutation('deleteAgent', request)
+  deleteAgent: (request) => invokeAgentMutation('deleteAgent', request),
+  createIntake: (request) => invokeLifecycleMutation('createIntake', request),
+  createPlan: (request) => invokeLifecycleMutation('createPlan', request),
+  createPlanRevision: (request) => invokeLifecycleMutation('createPlanRevision', request),
+  approvePlan: (request) => invokeLifecycleMutation('approvePlan', request),
+  requestPlanChanges: (request) => invokeLifecycleMutation('requestPlanChanges', request),
+  rejectPlan: (request) => invokeLifecycleMutation('rejectPlan', request),
+  startPlan: (request) => invokeLifecycleMutation('startPlan', request)
 }));
 
 async function invokeAgentMutation(
@@ -317,6 +337,61 @@ async function invokeAgentMutation(
       error: {
         code: 'IPC_LOST',
         message: (err as Error).message || 'Agent mutation IPC result was lost'
+      }
+    };
+  }
+}
+
+async function invokeLifecycleMutation(
+  method:
+    | 'createIntake'
+    | 'createPlan'
+    | 'createPlanRevision'
+    | 'approvePlan'
+    | 'requestPlanChanges'
+    | 'rejectPlan'
+    | 'startPlan',
+  request:
+    | CreateIntakeRequestDto
+    | CreatePlanRequestDto
+    | CreatePlanRevisionRequestDto
+    | PlanDecisionRequestDto
+    | StartPlanRequestDto
+): Promise<LifecycleMutationResult> {
+  if (typeof window === 'undefined' || !window.agentHub) {
+    return {
+      status: 'failed',
+      retryable: false,
+      error: { code: 'NO_PRELOAD', message: 'AgentHub preload bridge is unavailable' }
+    };
+  }
+  try {
+    if (method === 'createIntake') {
+      return await window.agentHub.createIntake(request as CreateIntakeRequestDto);
+    }
+    if (method === 'createPlan') {
+      return await window.agentHub.createPlan(request as CreatePlanRequestDto);
+    }
+    if (method === 'createPlanRevision') {
+      return await window.agentHub.createPlanRevision(request as CreatePlanRevisionRequestDto);
+    }
+    if (method === 'approvePlan') {
+      return await window.agentHub.approvePlan(request as PlanDecisionRequestDto);
+    }
+    if (method === 'requestPlanChanges') {
+      return await window.agentHub.requestPlanChanges(request as PlanDecisionRequestDto);
+    }
+    if (method === 'rejectPlan') {
+      return await window.agentHub.rejectPlan(request as PlanDecisionRequestDto);
+    }
+    return await window.agentHub.startPlan(request as StartPlanRequestDto);
+  } catch (err) {
+    return {
+      status: 'ambiguous',
+      retryable: true,
+      error: {
+        code: 'IPC_LOST',
+        message: (err as Error).message || 'Lifecycle mutation IPC result was lost'
       }
     };
   }

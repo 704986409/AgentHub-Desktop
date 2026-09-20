@@ -185,7 +185,7 @@ describe('AgentHub Desktop V0.8.9B — Renderer Provider Capability Closure', ()
     const snapshot: AgentHubStateSnapshot = {
       agents: [baseAgent],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
     const projection = projectAgentHubOffice(snapshot);

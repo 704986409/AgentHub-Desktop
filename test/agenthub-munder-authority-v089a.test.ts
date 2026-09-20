@@ -194,7 +194,7 @@ describe('AgentHub Desktop V0.8.9A — Munder Authority Closure', () => {
     const snapshot: AgentHubStateSnapshot = {
       agents: [baseAgent],
       projects: [],
-      assignments: [],
+      assignments: [], intakes: [], plans: [], planTasks: [], planDependencies: [],
       tasks: []
     };
     const projection = projectAgentHubOffice(snapshot);
