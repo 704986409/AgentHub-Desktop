@@ -40,8 +40,17 @@ Desktop base:
 Desktop Production:
 4beca72323652e7d1f8144e961f41e55f7353b64
 
+Desktop docs/main:
+5e2d04a3f776d2b39dff3b0d35b83d754274c00d
+
 Desktop tag:
 V0.8.10A
+
+Desktop tag object:
+69b1aae9de91e24903b766df04339cfa4433e2e8
+
+Desktop tag peeled:
+5e2d04a3f776d2b39dff3b0d35b83d754274c00d
 
 
 Lifecycle Review Identity Bridge:
