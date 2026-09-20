@@ -224,7 +224,7 @@ describe('AgentHub Desktop V0.8.10A lifecycle review recovery', () => {
     const { server, baseUrl } = await listen((req, res) => {
       if (req.url === '/api/v1/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(envelope({ status: 'ok', version: '0.7.3E' }));
+        res.end(envelope({ status: 'ok', version: '0.7.3F' }));
         return;
       }
       if (req.url === '/api/v1/state') {
@@ -278,7 +278,7 @@ describe('AgentHub Desktop V0.8.10A lifecycle review recovery', () => {
       const url = req.url ?? '';
       if (url === '/api/v1/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(envelope({ status: 'ok', version: '0.7.3E' }));
+        res.end(envelope({ status: 'ok', version: '0.7.3F' }));
         return;
       }
       if (url === '/api/v1/state') {

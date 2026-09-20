@@ -12,7 +12,7 @@ import {
   type TaskRisk
 } from './agenthubTypes';
 
-export const LIFECYCLE_SUPPORTED_BACKEND_VERSIONS = Object.freeze(['0.7.3E'] as const);
+export const LIFECYCLE_SUPPORTED_BACKEND_VERSIONS = Object.freeze(['0.7.3F'] as const);
 export type LifecycleSupportedBackendVersion = (typeof LIFECYCLE_SUPPORTED_BACKEND_VERSIONS)[number];
 
 export const HUMAN_BOSS_ACTOR_ID = 'human-boss';
@@ -51,6 +51,11 @@ export type PlanTaskRuntimeState = (typeof PLAN_TASK_RUNTIME_STATES)[number];
 
 export function isLifecycleCompatibleBackendVersion(version: string): boolean {
   return (LIFECYCLE_SUPPORTED_BACKEND_VERSIONS as readonly string[]).includes(version);
+}
+
+export function isPlanReviewReconciliationError(code: string | null | undefined): boolean {
+  return code === 'AGENTHUB_API_PLAN_REVIEW_RECONCILIATION_REQUIRED'
+    || code === 'PLAN_REVIEW_RECONCILIATION_REQUIRED';
 }
 
 export interface CreatePlanTaskInputDto {

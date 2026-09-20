@@ -6,6 +6,7 @@ import {
   TASK_COMPLEXITIES,
   TASK_RISKS,
   isLifecycleCompatibleBackendVersion,
+  isPlanReviewReconciliationError,
   lifecycleReviewEntryForTask,
   shortenProposalHash,
   type CreatePlanDependencyInputDto,
@@ -110,7 +111,9 @@ export function AgentHubLifecycleWorkspace({
   const intakes = snapshot?.intakes ?? [];
   const plans = snapshot?.plans ?? [];
   const lifecycleCompatible = health !== null && isLifecycleCompatibleBackendVersion(health.version);
-  const mutationsUsable = lifecycleCompatible && (connection === 'connected' || connection === 'degraded');
+  const reviewReconciliationRequired = isPlanReviewReconciliationError(lastError?.code);
+  const mutationsUsable = lifecycleCompatible && !reviewReconciliationRequired
+    && (connection === 'connected' || connection === 'degraded');
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [projectId, setProjectId] = useState('');
@@ -261,7 +264,7 @@ export function AgentHubLifecycleWorkspace({
         {!lifecycleCompatible && (
           <div style={{ marginTop: 12, padding: 10, background: '#fef3c7', border: '1px solid #ca8a04' }}>
             Lifecycle unavailable. Backend upgrade required.
-            {health ? ` Current version: ${health.version}. Supported: 0.7.3E.` : ' Health is unknown.'}
+            {health ? ` Current version: ${health.version}. Supported: 0.7.3F.` : ' Health is unknown.'}
             This is not an empty plan list.
           </div>
         )}
@@ -272,9 +275,11 @@ export function AgentHubLifecycleWorkspace({
           </div>
         )}
 
-        {lifecycleCompatible && lastError && snapshot === null && (
+        {lifecycleCompatible && lastError && (snapshot === null || reviewReconciliationRequired) && (
           <div style={{ marginTop: 12, padding: 10, background: '#fee2e2' }}>
-            Contract/state failure [{lastError.code}]: {lastError.message}
+            {reviewReconciliationRequired
+              ? `Backend review reconciliation required [${lastError.code}]: ${lastError.message}`
+              : `Contract/state failure [${lastError.code}]: ${lastError.message}`}
           </div>
         )}
 
@@ -303,7 +308,7 @@ export function AgentHubLifecycleWorkspace({
         {status === 'failed' && <div style={{ marginTop: 12, color: '#e11d48' }}>{errorMessage}</div>}
         {warningMessage && <div style={{ marginTop: 12, color: '#ca8a04' }}>{warningMessage}</div>}
 
-        {lifecycleCompatible && snapshot && (
+        {lifecycleCompatible && snapshot && !reviewReconciliationRequired && (
           <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, marginTop: 16 }}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Intakes</div>
