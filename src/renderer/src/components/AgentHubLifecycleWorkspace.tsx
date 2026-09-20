@@ -6,6 +6,7 @@ import {
   TASK_COMPLEXITIES,
   TASK_RISKS,
   isLifecycleCompatibleBackendVersion,
+  lifecycleReviewEntryForTask,
   shortenProposalHash,
   type CreatePlanDependencyInputDto,
   type CreatePlanTaskInputDto,
@@ -90,6 +91,7 @@ export function AgentHubLifecycleWorkspace({
     connection,
     health,
     snapshot,
+    lifecycleReviews,
     lastError,
     isRefreshing,
     refresh,
@@ -259,7 +261,7 @@ export function AgentHubLifecycleWorkspace({
         {!lifecycleCompatible && (
           <div style={{ marginTop: 12, padding: 10, background: '#fef3c7', border: '1px solid #ca8a04' }}>
             Lifecycle unavailable. Backend upgrade required.
-            {health ? ` Current version: ${health.version}. Supported: 0.7.3D.` : ' Health is unknown.'}
+            {health ? ` Current version: ${health.version}. Supported: 0.7.3E.` : ' Health is unknown.'}
             This is not an empty plan list.
           </div>
         )}
@@ -461,12 +463,31 @@ export function AgentHubLifecycleWorkspace({
                     Aggregate: {selectedPlan.aggregate.completed}/{selectedPlan.aggregate.total} completed · {selectedPlan.aggregate.blocked} blocked · {selectedPlan.aggregate.eligible} eligible · {selectedPlan.aggregate.reviewing} reviewing
                   </div>
                   <div style={{ marginTop: 8 }}>
-                    {selectedPlan.tasks.map((task) => (
-                      <div key={task.planTaskId} style={{ fontSize: 12, marginBottom: 4 }}>
-                        {task.title} · eligibility {task.dependencyState} · runtime {task.runtimeState}
-                        {task.runtimeState === 'REVIEWING' ? ' · review pending (open Review Evidence)' : ''}
-                      </div>
-                    ))}
+                    {selectedPlan.tasks.map((task) => {
+                      const entry = lifecycleReviewEntryForTask(
+                        task,
+                        lifecycleReviews ?? [],
+                        selectedPlan.planId
+                      );
+                      return (
+                        <div key={task.planTaskId} style={{ fontSize: 12, marginBottom: 8 }}>
+                          <div>
+                            {task.title} · eligibility {task.dependencyState} · runtime {task.runtimeState}
+                          </div>
+                          {entry.kind === 'review' && (
+                            <button
+                              type="button"
+                              onClick={() => openReviewModal(entry.runtimeTaskId)}
+                            >
+                              Review {entry.title}
+                            </button>
+                          )}
+                          {entry.kind === 'syncing' && (
+                            <div style={{ color: '#64748b' }}>Review evidence syncing / unavailable</div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   <label style={{ display: 'block', marginTop: 8 }}>
                     Decision summary
@@ -511,9 +532,6 @@ export function AgentHubLifecycleWorkspace({
                         }
                       }));
                     }}>Start</button>
-                  )}
-                  {(selectedPlan.state === 'EXECUTING' || selectedPlan.state === 'REVIEWING') && (
-                    <button type="button" onClick={() => openReviewModal()}>Open existing Review Evidence</button>
                   )}
                   {(selectedPlan.state === 'COMPLETED' || selectedPlan.state === 'FAILED' || selectedPlan.state === 'REJECTED') && (
                     <div style={{ fontSize: 12, color: '#64748b' }}>No illegal Plan mutations in {selectedPlan.state}.</div>

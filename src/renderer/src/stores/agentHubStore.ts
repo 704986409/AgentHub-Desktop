@@ -21,7 +21,8 @@ import type {
   CreatePlanRevisionRequestDto,
   PlanDecisionRequestDto,
   StartPlanRequestDto,
-  LifecycleMutationResult
+  LifecycleMutationResult,
+  LifecycleReviewDto
 } from '@shared/agenthubTypes';
 
 export interface AgentHubStoreState {
@@ -29,6 +30,7 @@ export interface AgentHubStoreState {
   connection: AgentHubConnectionStatus;
   health: AgentHubHealthDto | null;
   snapshot: AgentHubStateSnapshot | null;
+  lifecycleReviews: readonly LifecycleReviewDto[] | null;
   lastSyncAt: string | null;
   lastEventAt: string | null;
   lastError: { code: string; message: string } | null;
@@ -69,6 +71,31 @@ function reconcileSelectedAgent(
   return snapshot.agents.some((a) => a.agentId === prevSelectedId) ? prevSelectedId : null;
 }
 
+function applyDesktopState(
+  prevSelectedId: string | null,
+  state: AgentHubDesktopState
+): Pick<
+  AgentHubStoreState,
+  'connection' | 'health' | 'snapshot' | 'lifecycleReviews' | 'lastSyncAt' | 'lastEventAt' | 'lastError' | 'selectedAgentId'
+> {
+  if (state.lifecycleReviews !== null) {
+    useAgentHubReviewSessionStore.getState().hydrateAuthoritativeReviews(
+      state.lifecycleReviews,
+      state.snapshot?.planTasks ?? []
+    );
+  }
+  return {
+    connection: state.connection,
+    health: state.health,
+    snapshot: state.snapshot,
+    lifecycleReviews: state.lifecycleReviews,
+    lastSyncAt: state.lastSyncAt,
+    lastEventAt: state.lastEventAt,
+    lastError: state.lastError,
+    selectedAgentId: reconcileSelectedAgent(prevSelectedId, state.snapshot)
+  };
+}
+
 let inFlightCatalogPromise: Promise<void> | null = null;
 let catalogGeneration = 0;
 
@@ -76,6 +103,7 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
   connection: 'disconnected',
   health: null,
   snapshot: null,
+  lifecycleReviews: null,
   lastSyncAt: null,
   lastEventAt: null,
   lastError: null,
@@ -94,15 +122,7 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
     // Pull initial connection state from main
     void window.agentHub.getConnectionState()
       .then((state: AgentHubDesktopState) => {
-        set((s) => ({
-          connection: state.connection,
-          health: state.health,
-          snapshot: state.snapshot,
-          lastSyncAt: state.lastSyncAt,
-          lastEventAt: state.lastEventAt,
-          lastError: state.lastError,
-          selectedAgentId: reconcileSelectedAgent(s.selectedAgentId, state.snapshot)
-        }));
+        set((s) => applyDesktopState(s.selectedAgentId, state));
         if (state.connection === 'connected' || state.connection === 'degraded') {
           void get().refreshProviderCatalog();
         }
@@ -116,15 +136,7 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
 
     // Subscribe to pushed state updates
     const cleanup = window.agentHub.onChanged((state: AgentHubDesktopState) => {
-      set((s) => ({
-        connection: state.connection,
-        health: state.health,
-        snapshot: state.snapshot,
-        lastSyncAt: state.lastSyncAt,
-        lastEventAt: state.lastEventAt,
-        lastError: state.lastError,
-        selectedAgentId: reconcileSelectedAgent(s.selectedAgentId, state.snapshot)
-      }));
+      set((s) => applyDesktopState(s.selectedAgentId, state));
       if ((state.connection === 'connected' || state.connection === 'degraded') && !get().providerCatalog) {
         void get().refreshProviderCatalog();
       }
@@ -140,15 +152,7 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
     set({ isRefreshing: true });
     try {
       const state = await window.agentHub.refresh();
-      set((s) => ({
-        connection: state.connection,
-        health: state.health,
-        snapshot: state.snapshot,
-        lastSyncAt: state.lastSyncAt,
-        lastEventAt: state.lastEventAt,
-        lastError: state.lastError,
-        selectedAgentId: reconcileSelectedAgent(s.selectedAgentId, state.snapshot)
-      }));
+      set((s) => applyDesktopState(s.selectedAgentId, state));
     } catch (err) {
       set({
         lastError: { code: 'REFRESH_FAILED', message: (err as Error).message }

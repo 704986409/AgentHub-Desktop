@@ -3,6 +3,10 @@ import type {
   ExecuteReviewReadyDto,
   TaskExecutionResult
 } from '@shared/agenthubTypes';
+import type {
+  LifecycleReviewDto,
+  PlanTaskRuntimeDto
+} from '@shared/agenthubLifecycle';
 
 /**
  * Session-only record of a confirmed review-ready execution result.
@@ -147,6 +151,32 @@ export function captureReviewReadyResult(
   );
 }
 
+export function reduceAuthoritativeReviews(
+  current: Readonly<Record<string, AgentHubReviewSessionRecord>>,
+  reviews: readonly LifecycleReviewDto[],
+  planTasks: readonly PlanTaskRuntimeDto[]
+): Readonly<Record<string, AgentHubReviewSessionRecord>> {
+  const lifecycleTaskIds = new Set<string>();
+  const reviewingIds = new Set<string>();
+  for (const task of planTasks) {
+    if (typeof task.runtimeTaskId !== 'string' || task.runtimeTaskId.length === 0) continue;
+    lifecycleTaskIds.add(task.runtimeTaskId);
+    if (task.runtimeState === 'REVIEWING') reviewingIds.add(task.runtimeTaskId);
+  }
+  const byRuntime = new Map(reviews.map((review) => [review.runtimeTaskId, review]));
+  let next: Record<string, AgentHubReviewSessionRecord> = { ...current };
+  for (const taskId of lifecycleTaskIds) {
+    const review = byRuntime.get(taskId);
+    if (reviewingIds.has(taskId) && review !== undefined && review.review.taskId === taskId) {
+      next = captureReviewReadyDto(next, review.review, true, null) as Record<string, AgentHubReviewSessionRecord>;
+    } else if (Object.prototype.hasOwnProperty.call(next, taskId)) {
+      const { [taskId]: _removed, ...rest } = next;
+      next = rest;
+    }
+  }
+  return Object.freeze(next);
+}
+
 export interface AgentHubReviewSessionState {
   readonly reviewReadyByTaskId: Readonly<Record<string, AgentHubReviewSessionRecord>>;
   readonly selectedReviewTaskId: string | null;
@@ -157,6 +187,10 @@ export interface AgentHubReviewSessionState {
     review: ExecuteReviewReadyDto,
     stateSynchronized: boolean,
     warning?: { code: string; message: string } | null
+  ) => void;
+  hydrateAuthoritativeReviews: (
+    reviews: readonly LifecycleReviewDto[],
+    planTasks: readonly PlanTaskRuntimeDto[]
   ) => void;
   selectReviewTask: (taskId: string | null) => void;
   openModal: (taskId?: string) => void;
@@ -195,6 +229,20 @@ export const useAgentHubReviewSessionStore = create<AgentHubReviewSessionState>(
       reviewReadyByTaskId: next,
       selectedReviewTaskId: state.selectedReviewTaskId ?? review.taskId
     }));
+  },
+
+  hydrateAuthoritativeReviews: (
+    reviews: readonly LifecycleReviewDto[],
+    planTasks: readonly PlanTaskRuntimeDto[]
+  ) => {
+    const prev = get().reviewReadyByTaskId;
+    const next = reduceAuthoritativeReviews(prev, reviews, planTasks);
+    if (next === prev) return;
+    const selected = get().selectedReviewTaskId;
+    set({
+      reviewReadyByTaskId: next,
+      selectedReviewTaskId: selected && selected in next ? selected : (Object.keys(next)[0] ?? null)
+    });
   },
 
 

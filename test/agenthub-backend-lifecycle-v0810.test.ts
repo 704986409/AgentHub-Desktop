@@ -205,8 +205,9 @@ function mockConnection(options: {
   return {
     getState: () => ({
       connection: 'connected',
-      health: { status: 'ok', version: '0.7.3D' },
+      health: { status: 'ok', version: '0.7.3E' },
       snapshot,
+      lifecycleReviews: null,
       lastSyncAt: null,
       lastEventAt: null,
       lastError: null
@@ -217,11 +218,12 @@ function mockConnection(options: {
 }
 
 describe('AgentHub Desktop V0.8.10 backend lifecycle', () => {
-  test('1. Backend 0.7.3D health compatibility passes', { timeout: TIMEOUT }, () => {
-    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3D'), true);
+  test('1. Backend 0.7.3E health compatibility passes', { timeout: TIMEOUT }, () => {
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3E'), true);
   });
 
   test('2. older Backend lifecycle compatibility gate blocks lifecycle UI', { timeout: TIMEOUT }, () => {
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3D'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3C'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.2E'), false);
     const workspace = read('src/renderer/src/components/AgentHubLifecycleWorkspace.tsx');
@@ -641,7 +643,8 @@ describe('AgentHub Desktop V0.8.10 backend lifecycle', () => {
     assert.match(ipc, /REVIEW_DECISION: 'agenthub:reviewDecision'/);
     assert.equal(ipc.includes('agenthub:lifecycle:review'), false);
     const workspace = read('src/renderer/src/components/AgentHubLifecycleWorkspace.tsx');
-    assert.match(workspace, /openReviewModal/);
+    assert.match(workspace, /openReviewModal\(/);
+    assert.equal(workspace.includes('openReviewModal()'), false);
   });
 
   test('old 4-field /state fails closed instead of synthesizing empty lifecycle', { timeout: TIMEOUT }, () => {
@@ -658,7 +661,7 @@ describe('AgentHub Desktop V0.8.10 lifecycle HTTP client', () => {
     const server = http.createServer((req, res) => {
       if (req.url === '/api/v1/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, requestId: 'h', data: { status: 'ok', version: '0.7.3D' } }));
+        res.end(JSON.stringify({ ok: true, requestId: 'h', data: { status: 'ok', version: '0.7.3E' } }));
         return;
       }
       if (req.url === '/api/v1/state') {

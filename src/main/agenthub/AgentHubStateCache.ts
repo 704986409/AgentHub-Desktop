@@ -5,6 +5,7 @@ import type {
   AgentHubHealthDto,
   AgentHubStateSnapshot
 } from './AgentHubTypes';
+import type { LifecycleReviewDto } from '../../shared/agenthubLifecycle';
 
 export class AgentHubStateCache extends EventEmitter {
   #state: AgentHubDesktopState;
@@ -15,6 +16,7 @@ export class AgentHubStateCache extends EventEmitter {
       connection: 'disconnected',
       health: null,
       snapshot: null,
+      lifecycleReviews: null,
       lastSyncAt: null,
       lastEventAt: null,
       lastError: null
@@ -50,10 +52,18 @@ export class AgentHubStateCache extends EventEmitter {
    * Does NOT alter transport connection status.
    */
   public updateSnapshot(snapshot: AgentHubStateSnapshot): void {
+    this.commitAuthoritative(snapshot, this.#state.lifecycleReviews);
+  }
+
+  public commitAuthoritative(
+    snapshot: AgentHubStateSnapshot,
+    lifecycleReviews: readonly LifecycleReviewDto[] | null
+  ): void {
     const now = new Date().toISOString();
     this.#state = {
       ...this.#state,
       snapshot,
+      lifecycleReviews,
       lastSyncAt: now,
       lastError: null
     };

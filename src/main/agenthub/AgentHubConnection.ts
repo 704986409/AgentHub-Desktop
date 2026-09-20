@@ -2,14 +2,24 @@ import { AgentHubRestClient, AgentHubContractError } from './AgentHubRestClient'
 import { AgentHubRealtimeClient } from './AgentHubRealtimeClient';
 import { AgentHubStateCache } from './AgentHubStateCache';
 import type { AgentHubDesktopState, AgentHubStateSnapshot, ProviderDto } from './AgentHubTypes';
+import { isLifecycleCompatibleBackendVersion } from '../../shared/agenthubLifecycle';
+import type { LifecycleReviewDto } from '../../shared/agenthubLifecycle';
 
 const BACKOFF_DELAYS_MS = [1000, 2000, 5000, 10000];
 const RESYNC_DEBOUNCE_MS = 50;
 
 export type StateCommitResult =
-  | { readonly disposition: 'committed'; readonly snapshot: AgentHubStateSnapshot }
-  | { readonly disposition: 'superseded-by-committed'; readonly snapshot: AgentHubStateSnapshot }
-  | { readonly disposition: 'superseded-uncommitted'; readonly snapshot: null };
+  | {
+      readonly disposition: 'committed';
+      readonly snapshot: AgentHubStateSnapshot;
+      readonly lifecycleReviews: readonly LifecycleReviewDto[] | null;
+    }
+  | {
+      readonly disposition: 'superseded-by-committed';
+      readonly snapshot: AgentHubStateSnapshot;
+      readonly lifecycleReviews: readonly LifecycleReviewDto[] | null;
+    }
+  | { readonly disposition: 'superseded-uncommitted'; readonly snapshot: null; readonly lifecycleReviews: null };
 
 export interface AgentHubConnectionOptions {
   readonly baseUrl?: string;
@@ -188,25 +198,30 @@ export class AgentHubConnection {
    */
   public async syncAuthoritativeState(signal?: AbortSignal): Promise<StateCommitResult> {
     if (this.#isLifecycleStopped()) {
-      return { disposition: 'superseded-uncommitted', snapshot: null };
+      return { disposition: 'superseded-uncommitted', snapshot: null, lifecycleReviews: null };
     }
 
     const sequence = ++this.#stateRequestSequence;
     try {
       const snapshot = await this.#restClient.state(signal);
-      return this.#commitSnapshotIfCurrent(sequence, snapshot);
+      const lifecycleReviews = await this.#fetchReviewsIfCompatible(signal);
+      return this.#commitSnapshotIfCurrent(sequence, snapshot, lifecycleReviews);
     } catch (err) {
       if (this.#isLifecycleStopped()) {
-        return { disposition: 'superseded-uncommitted', snapshot: null };
+        return { disposition: 'superseded-uncommitted', snapshot: null, lifecycleReviews: null };
       }
       if (this.#latestCommittedSequence > sequence) {
-        const snapshot = this.#cache.getState().snapshot;
-        if (snapshot) {
-          return { disposition: 'superseded-by-committed', snapshot };
+        const current = this.#cache.getState();
+        if (current.snapshot) {
+          return {
+            disposition: 'superseded-by-committed',
+            snapshot: current.snapshot,
+            lifecycleReviews: current.lifecycleReviews
+          };
         }
       }
       this.#markAuthoritativeSyncFailure(err);
-      return { disposition: 'superseded-uncommitted', snapshot: null };
+      return { disposition: 'superseded-uncommitted', snapshot: null, lifecycleReviews: null };
     }
   }
 
@@ -214,30 +229,38 @@ export class AgentHubConnection {
     return !this.#isStarted && this.#generation > 0;
   }
 
-  #commitSnapshotIfCurrent(sequence: number, snapshot: AgentHubStateSnapshot): StateCommitResult {
+  #commitSnapshotIfCurrent(
+    sequence: number,
+    snapshot: AgentHubStateSnapshot,
+    lifecycleReviews: readonly LifecycleReviewDto[] | null
+  ): StateCommitResult {
     if (this.#isLifecycleStopped()) {
-      return { disposition: 'superseded-uncommitted', snapshot: null };
+      return { disposition: 'superseded-uncommitted', snapshot: null, lifecycleReviews: null };
     }
 
     // Case A: a newer request already committed a safer snapshot.
     if (sequence < this.#latestCommittedSequence) {
-      const current = this.#cache.getState().snapshot;
-      if (current) {
-        return { disposition: 'superseded-by-committed', snapshot: current };
+      const current = this.#cache.getState();
+      if (current.snapshot) {
+        return {
+          disposition: 'superseded-by-committed',
+          snapshot: current.snapshot,
+          lifecycleReviews: current.lifecycleReviews
+        };
       }
-      return { disposition: 'superseded-uncommitted', snapshot: null };
+      return { disposition: 'superseded-uncommitted', snapshot: null, lifecycleReviews: null };
     }
 
     // Case B: a newer request was issued but has not committed.
     // The older result is invalidated and must not heal cache or status.
     if (sequence < this.#stateRequestSequence) {
-      return { disposition: 'superseded-uncommitted', snapshot: null };
+      return { disposition: 'superseded-uncommitted', snapshot: null, lifecycleReviews: null };
     }
 
     // Case C: this is the current newest issued request.
-    this.#cache.updateSnapshot(snapshot);
+    this.#cache.commitAuthoritative(snapshot, lifecycleReviews);
     this.#latestCommittedSequence = sequence;
-    return { disposition: 'committed', snapshot };
+    return { disposition: 'committed', snapshot, lifecycleReviews };
   }
 
   #markAuthoritativeSyncFailure(err: unknown): void {
@@ -358,7 +381,9 @@ export class AgentHubConnection {
       const sequence = ++this.#stateRequestSequence;
       const snapshot = await this.#restClient.state(signal);
       if (!this.#isStarted || gen !== this.#generation) return;
-      this.#commitSnapshotIfCurrent(sequence, snapshot);
+      const lifecycleReviews = await this.#fetchReviewsIfCompatible(signal, health.version);
+      if (!this.#isStarted || gen !== this.#generation) return;
+      this.#commitSnapshotIfCurrent(sequence, snapshot, lifecycleReviews);
 
       // 3. Initiate WS connection
       // Status remains 'connecting' until WS hello is confirmed
@@ -447,8 +472,10 @@ export class AgentHubConnection {
       ]);
 
       if (!this.#isStarted || gen !== this.#generation) return null;
+      const lifecycleReviews = await this.#fetchReviewsIfCompatible(signal, health.version);
+      if (!this.#isStarted || gen !== this.#generation) return null;
 
-      const commit = this.#commitSnapshotIfCurrent(sequence, snapshot);
+      const commit = this.#commitSnapshotIfCurrent(sequence, snapshot, lifecycleReviews);
       if (commit.disposition !== 'committed') {
         return commit.disposition === 'superseded-by-committed'
           ? commit.snapshot
@@ -497,6 +524,22 @@ export class AgentHubConnection {
         }
       }
     }
+  }
+
+  async #fetchReviewsIfCompatible(
+    signal?: AbortSignal,
+    version?: string
+  ): Promise<readonly LifecycleReviewDto[] | null> {
+    let resolved = version ?? this.#cache.getState().health?.version;
+    if (typeof resolved !== 'string') {
+      const health = await this.#restClient.health(signal);
+      this.#cache.setHealth(health);
+      resolved = health.version;
+    }
+    if (!isLifecycleCompatibleBackendVersion(resolved)) {
+      return null;
+    }
+    return this.#restClient.lifecycleReviews(signal);
   }
 
   #clearTimers(): void {

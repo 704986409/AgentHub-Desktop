@@ -19,7 +19,8 @@ import type {
   PlanDecisionInputDto,
   StartPlanInputDto,
   IntakeDto,
-  PlanDto
+  PlanDto,
+  LifecycleReviewDto
 } from './AgentHubTypes';
 import {
   snapshotState,
@@ -42,6 +43,7 @@ import {
   snapshotStartPlanInput,
   snapshotIntakeDto,
   snapshotPlanDto,
+  snapshotLifecycleReviewList,
   AgentHubValidationError
 } from './AgentHubTypes';
 
@@ -201,6 +203,27 @@ export class AgentHubRestClient {
         throw new AgentHubContractError(err.code, err.message);
       }
       throw new AgentHubContractError('MALFORMED_SNAPSHOT', (err as Error).message);
+    }
+  }
+
+  /**
+   * GET /api/v1/reviews
+   */
+  public async lifecycleReviews(signal?: AbortSignal): Promise<readonly LifecycleReviewDto[]> {
+    const data = await this.#get<unknown>('/api/v1/reviews', signal);
+    try {
+      return snapshotLifecycleReviewList(data);
+    } catch (err) {
+      if (err instanceof AgentHubValidationError) {
+        throw new AgentHubContractError(err.code, err.message, {
+          phase: 'response-contract',
+          requestDispatched: true
+        });
+      }
+      throw new AgentHubContractError('MALFORMED_LIFECYCLE_REVIEW', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
     }
   }
 

@@ -2,7 +2,7 @@
  * Public Data Transfer Objects (DTOs) and runtime snapshotting for AgentHub Desktop.
  * 
  * Strict Invariants:
- * - Pinned to AgentHub 0.7.3D public contracts for lifecycle-aware state.
+ * - Pinned to AgentHub 0.7.3E public contracts for lifecycle-aware state.
  * - Runtime fail-closed sanitization: never return raw network objects.
  * - ZERO backend-private fields can cross into Desktop cache/IPC.
  * - Fail closed: do NOT synthesize defaults for missing/invalid required fields.
@@ -148,6 +148,7 @@ export interface AgentHubDesktopState {
   readonly connection: AgentHubConnectionStatus;
   readonly health: AgentHubHealthDto | null;
   readonly snapshot: AgentHubStateSnapshot | null;
+  readonly lifecycleReviews: readonly import('./agenthubLifecycle').LifecycleReviewDto[] | null;
   readonly lastSyncAt: string | null;
   readonly lastEventAt: string | null;
   readonly lastError: {
@@ -2353,6 +2354,8 @@ export type {
   PlanVersionDto,
   PlanAggregateDto,
   PlanApprovalDecisionDto,
+  LifecycleReviewDto,
+  LifecycleReviewEntry,
   LifecycleMutationResult,
   PlanState,
   PlanTaskRuntimeState,
@@ -2379,6 +2382,9 @@ export {
   snapshotPlanDto,
   snapshotPlanTaskRuntimeDto,
   snapshotPlanDependencyDto,
+  snapshotLifecycleReviewDto,
+  snapshotLifecycleReviewList,
+  lifecycleReviewEntryForTask,
   leadAgentLifecycleReferences,
   shortenProposalHash
 } from './agenthubLifecycle';

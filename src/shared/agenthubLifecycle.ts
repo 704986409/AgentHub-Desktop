@@ -4,13 +4,15 @@ import {
   parseRequiredNonBlankString,
   parseRequiredNullableString,
   parseRequiredStringArray,
+  snapshotExecuteReviewReadyDto,
   TASK_COMPLEXITIES,
   TASK_RISKS,
+  type ExecuteReviewReadyDto,
   type TaskComplexity,
   type TaskRisk
 } from './agenthubTypes';
 
-export const LIFECYCLE_SUPPORTED_BACKEND_VERSIONS = Object.freeze(['0.7.3D'] as const);
+export const LIFECYCLE_SUPPORTED_BACKEND_VERSIONS = Object.freeze(['0.7.3E'] as const);
 export type LifecycleSupportedBackendVersion = (typeof LIFECYCLE_SUPPORTED_BACKEND_VERSIONS)[number];
 
 export const HUMAN_BOSS_ACTOR_ID = 'human-boss';
@@ -192,6 +194,49 @@ export interface PlanDto {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly completedAt: string | null;
+}
+
+export interface LifecycleReviewDto {
+  readonly planId: string;
+  readonly planVersion: number;
+  readonly planTaskId: string;
+  readonly runtimeTaskId: string;
+  readonly assignmentId: string;
+  readonly agentId: string;
+  readonly review: ExecuteReviewReadyDto;
+}
+
+export type LifecycleReviewEntry =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'syncing'; readonly planTaskId: string; readonly title: string }
+  | { readonly kind: 'review'; readonly planTaskId: string; readonly runtimeTaskId: string; readonly title: string };
+
+export function lifecycleReviewEntryForTask(
+  task: PlanTaskRuntimeDto,
+  reviews: readonly LifecycleReviewDto[],
+  selectedPlanId: string
+): LifecycleReviewEntry {
+  if (task.planId !== selectedPlanId || task.runtimeState !== 'REVIEWING') {
+    return { kind: 'none' };
+  }
+  if (typeof task.runtimeTaskId !== 'string' || task.runtimeTaskId.length === 0) {
+    return { kind: 'syncing', planTaskId: task.planTaskId, title: task.title };
+  }
+  const match = reviews.find((review) =>
+    review.planId === selectedPlanId
+    && review.planTaskId === task.planTaskId
+    && review.runtimeTaskId === task.runtimeTaskId
+    && review.review.taskId === task.runtimeTaskId
+  );
+  if (match === undefined) {
+    return { kind: 'syncing', planTaskId: task.planTaskId, title: task.title };
+  }
+  return {
+    kind: 'review',
+    planTaskId: task.planTaskId,
+    runtimeTaskId: match.runtimeTaskId,
+    title: task.title
+  };
 }
 
 export interface CreateIntakeRequestDto {
@@ -673,6 +718,56 @@ export function snapshotPlanAggregateDto(raw: unknown): PlanAggregateDto {
     failed: snapshotNonNegativeInteger(raw, 'failed', 'MALFORMED_PLAN_AGGREGATE'),
     state: snapshotEnum(raw.state, 'state', PLAN_STATES, 'MALFORMED_PLAN_AGGREGATE')
   });
+}
+
+const LIFECYCLE_REVIEW_DTO_KEYS = [
+  'planId',
+  'planVersion',
+  'planTaskId',
+  'runtimeTaskId',
+  'assignmentId',
+  'agentId',
+  'review'
+] as const;
+
+export function snapshotLifecycleReviewDto(raw: unknown): LifecycleReviewDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_LIFECYCLE_REVIEW', 'Lifecycle review must be an object');
+  }
+  rejectUnexpectedKeys(raw, LIFECYCLE_REVIEW_DTO_KEYS, 'MALFORMED_LIFECYCLE_REVIEW', 'lifecycle review');
+  const planVersion = parseFiniteNumber(raw, 'planVersion');
+  if (!Number.isSafeInteger(planVersion) || planVersion < 1) {
+    throw new AgentHubValidationError('MALFORMED_LIFECYCLE_REVIEW', "Field 'planVersion' must be a positive integer");
+  }
+  const runtimeTaskId = exactBoundedText(raw.runtimeTaskId, 'runtimeTaskId', 256, 'MALFORMED_LIFECYCLE_REVIEW');
+  const assignmentId = exactBoundedText(raw.assignmentId, 'assignmentId', 256, 'MALFORMED_LIFECYCLE_REVIEW');
+  const agentId = exactBoundedText(raw.agentId, 'agentId', 256, 'MALFORMED_LIFECYCLE_REVIEW');
+  const review = snapshotExecuteReviewReadyDto(raw.review);
+  if (review.taskId !== runtimeTaskId) {
+    throw new AgentHubValidationError('MALFORMED_LIFECYCLE_REVIEW', "Field 'runtimeTaskId' must equal review.taskId");
+  }
+  if (review.assignmentId !== assignmentId) {
+    throw new AgentHubValidationError('MALFORMED_LIFECYCLE_REVIEW', "Field 'assignmentId' must equal review.assignmentId");
+  }
+  if (review.agentId !== agentId) {
+    throw new AgentHubValidationError('MALFORMED_LIFECYCLE_REVIEW', "Field 'agentId' must equal review.agentId");
+  }
+  return Object.freeze({
+    planId: exactBoundedText(raw.planId, 'planId', 256, 'MALFORMED_LIFECYCLE_REVIEW'),
+    planVersion,
+    planTaskId: exactBoundedText(raw.planTaskId, 'planTaskId', 256, 'MALFORMED_LIFECYCLE_REVIEW'),
+    runtimeTaskId,
+    assignmentId,
+    agentId,
+    review
+  });
+}
+
+export function snapshotLifecycleReviewList(raw: unknown): readonly LifecycleReviewDto[] {
+  if (!Array.isArray(raw) || raw.length > 1000) {
+    throw new AgentHubValidationError('MALFORMED_LIFECYCLE_REVIEW', 'Lifecycle reviews must be an array with at most 1000 items');
+  }
+  return Object.freeze(raw.map((item) => snapshotLifecycleReviewDto(item)));
 }
 
 export function snapshotPlanDto(raw: unknown): PlanDto {
