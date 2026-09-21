@@ -1569,10 +1569,28 @@ describe('TaskSubmissionIdLifecycle', () => {
     const nextAfterFailed = failedLife.beginSubmit();
     assert.notEqual(nextAfterFailed, failedId);
 
+    const appliedLife = new TaskSubmissionIdLifecycle(() => `id-${++n}`);
+    const appliedId = appliedLife.beginSubmit();
+    appliedLife.onResult('applied');
+    assert.equal(appliedLife.phase, 'applied');
+    assert.notEqual(appliedLife.id, appliedId);
+    const nextAfterApplied = appliedLife.beginSubmit();
+    assert.equal(nextAfterApplied, appliedLife.id);
+    assert.notEqual(nextAfterApplied, appliedId);
+    assert.equal(appliedLife.phase, 'submitting');
+
     const editLife = new TaskSubmissionIdLifecycle(() => `id-${++n}`);
     const ambId = editLife.beginSubmit();
     editLife.onResult('ambiguous');
     const afterEdit = editLife.onEdit();
     assert.notEqual(afterEdit, ambId);
+
+    const editAppliedLife = new TaskSubmissionIdLifecycle(() => `id-${++n}`);
+    editAppliedLife.beginSubmit();
+    editAppliedLife.onResult('applied');
+    const idBeforeEdit = editAppliedLife.id;
+    const afterEditApplied = editAppliedLife.onEdit();
+    assert.equal(editAppliedLife.phase, 'idle');
+    assert.notEqual(afterEditApplied, idBeforeEdit);
   });
 });

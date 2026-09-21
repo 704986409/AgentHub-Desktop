@@ -1,4 +1,4 @@
-export type TaskFormPhase = 'idle' | 'submitting' | 'created' | 'ambiguous' | 'failed';
+export type TaskFormPhase = 'idle' | 'submitting' | 'created' | 'applied' | 'ambiguous' | 'failed';
 
 export class InvalidSubmissionTransitionError extends Error {
   constructor(message: string) {
@@ -52,7 +52,7 @@ export class TaskSubmissionIdLifecycle {
     return this.#id;
   }
 
-  onResult(status: 'created' | 'ambiguous' | 'failed'): string {
+  onResult(status: 'created' | 'applied' | 'ambiguous' | 'failed'): string {
     this.#phase = status;
     if (status !== 'ambiguous') {
       this.#id = this.#generateId();
@@ -61,7 +61,12 @@ export class TaskSubmissionIdLifecycle {
   }
 
   onEdit(): string {
-    if (this.#phase === 'ambiguous' || this.#phase === 'failed' || this.#phase === 'created') {
+    if (
+      this.#phase === 'ambiguous' ||
+      this.#phase === 'failed' ||
+      this.#phase === 'created' ||
+      this.#phase === 'applied'
+    ) {
       this.#id = this.#generateId();
       this.#phase = 'idle';
     }

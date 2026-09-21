@@ -174,41 +174,57 @@ export function AgentHubLifecycleWorkspace({
 
   const applyResult = (result: LifecycleMutationResult): void => {
     if (result.status === 'applied') {
+      lifecycleRef.current.onResult('applied');
+      setMutationId(lifecycleRef.current.id);
       setStatus('applied');
       setErrorMessage(null);
       setWarningMessage(result.stateSynchronized ? null : result.warning.message);
-      lifecycleRef.current.onEdit();
-      setMutationId(lifecycleRef.current.id);
       return;
     }
     if (result.status === 'failed') {
+      lifecycleRef.current.onResult('failed');
+      setMutationId(lifecycleRef.current.id);
       setStatus('failed');
       setErrorMessage(`${result.error.code}: ${result.error.message}`);
       return;
     }
+    lifecycleRef.current.onResult('ambiguous');
+    setMutationId(lifecycleRef.current.id);
     setStatus('ambiguous');
     setErrorMessage(`${result.error.code}: ${result.error.message}`);
   };
 
   const runMutation = async (fn: (id: string) => Promise<LifecycleMutationResult>, retry = false): Promise<void> => {
     if (!mutationsUsable || status === 'submitting') return;
+    let id: string;
     try {
-      const id = retry ? lifecycleRef.current.beginRetry() : lifecycleRef.current.beginSubmit();
-      setMutationId(id);
-      setStatus('submitting');
-      setErrorMessage(null);
-      setWarningMessage(null);
-      lastMutationRef.current = fn;
-      applyResult(await fn(id));
+      id = retry ? lifecycleRef.current.beginRetry() : lifecycleRef.current.beginSubmit();
     } catch (err) {
       if (err instanceof InvalidSubmissionTransitionError) {
         setStatus('failed');
         setErrorMessage(err.message);
         return;
       }
-      setStatus('ambiguous');
-      setErrorMessage((err as Error).message);
+      throw err;
     }
+    setMutationId(id);
+    setStatus('submitting');
+    setErrorMessage(null);
+    setWarningMessage(null);
+    lastMutationRef.current = fn;
+
+    let result: LifecycleMutationResult;
+    try {
+      result = await fn(id);
+    } catch (err: any) {
+      lifecycleRef.current.onResult('ambiguous');
+      setMutationId(lifecycleRef.current.id);
+      setStatus('ambiguous');
+      setErrorMessage(err?.message || 'Lifecycle mutation outcome is unknown');
+      return;
+    }
+
+    applyResult(result);
   };
 
   const boundDecision = (plan: PlanDto) => ({
