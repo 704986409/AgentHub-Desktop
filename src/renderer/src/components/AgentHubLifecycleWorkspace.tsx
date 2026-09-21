@@ -264,7 +264,7 @@ export function AgentHubLifecycleWorkspace({
         {!lifecycleCompatible && (
           <div style={{ marginTop: 12, padding: 10, background: '#fef3c7', border: '1px solid #ca8a04' }}>
             Lifecycle unavailable. Backend upgrade required.
-            {health ? ` Current version: ${health.version}. Supported: 0.7.3F.` : ' Health is unknown.'}
+            {health ? ` Current version: ${health.version}. Supported: 0.7.3K.` : ' Health is unknown.'}
             This is not an empty plan list.
           </div>
         )}
