@@ -42,3 +42,38 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+
+  backend-smoke:
+    name: Real Backend 0.7.3K Smoke
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Desktop
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Checkout Backend 0.7.3K
+        uses: actions/checkout@v4
+        with:
+          repository: 704986409/AgentHub
+          path: backend
+          ref: d3ec66605d469e5328caff2317a8605a69419b7c
+          fetch-depth: 0
+      - name: Fetch Backend tags
+        working-directory: backend
+        run: git fetch --tags origin
+      - name: Install Backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Build Backend
+        working-directory: backend
+        run: npm run build
+      - name: Install Desktop dependencies
+        run: npm ci
+      - name: Run Real Backend 0.7.3K Smoke
+        env:
+          AGENTHUB_REAL_BACKEND_SMOKE: '1'
+          AGENTHUB_BACKEND_ROOT: ${{ github.workspace }}/backend
+        run: npm run test:agenthub:smoke

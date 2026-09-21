@@ -21,6 +21,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test:focused": "node --test test/*.test.cjs",
     "test:agenthub": "tsx --test test/agenthub-*.test.ts",
+    "test:agenthub:smoke": "tsx --test test/agenthub-lifecycle-review-v0810d.test.ts",
     "check:links": "node tools/check-release-links.cjs",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
