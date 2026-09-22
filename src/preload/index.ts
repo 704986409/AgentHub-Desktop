@@ -37,6 +37,8 @@ import type {
   UpdateAgentRequestDto,
   AgentActionRequestDto,
   AgentMutationResult,
+  CreateProjectRequestDto,
+  ProjectMutationResult,
   ProviderDto,
   CreateIntakeRequestDto,
   CreatePlanRequestDto,
@@ -59,6 +61,8 @@ export type {
   UpdateAgentRequestDto,
   AgentActionRequestDto,
   AgentMutationResult,
+  CreateProjectRequestDto,
+  ProjectMutationResult,
   ProviderDto,
   CreateIntakeRequestDto,
   CreatePlanRequestDto,
@@ -1457,6 +1461,7 @@ export interface AgentHubPreloadApi {
   executeTask: (request: ExecuteTaskRequestDto) => Promise<TaskExecutionResult>;
   reviewDecision: (request: ReviewDecisionRequestDto) => Promise<ReviewDecisionResult>;
   createAgent: (request: CreateAgentRequestDto) => Promise<AgentMutationResult>;
+  createProject: (request: CreateProjectRequestDto) => Promise<ProjectMutationResult>;
   updateAgent: (request: UpdateAgentRequestDto) => Promise<AgentMutationResult>;
   enableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   disableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
@@ -1490,6 +1495,8 @@ const agentHubApi: AgentHubPreloadApi = {
     ipcRenderer.invoke('agenthub:reviewDecision', request),
   createAgent: (request: CreateAgentRequestDto): Promise<AgentMutationResult> =>
     ipcRenderer.invoke('agenthub:createAgent', request),
+  createProject: (request: CreateProjectRequestDto): Promise<ProjectMutationResult> =>
+    ipcRenderer.invoke('agenthub:createProject', request),
   updateAgent: (request: UpdateAgentRequestDto): Promise<AgentMutationResult> =>
     ipcRenderer.invoke('agenthub:updateAgent', request),
   enableAgent: (request: AgentActionRequestDto): Promise<AgentMutationResult> =>

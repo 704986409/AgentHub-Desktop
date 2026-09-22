@@ -3,6 +3,7 @@ import { useAgentHubStore } from '../stores/agentHubStore';
 import {
   TASK_COMPLEXITIES,
   TASK_RISKS,
+  nextAuthoritativeProjectId,
   snapshotCreateTaskInput,
   type TaskComplexity,
   type TaskRisk,
@@ -13,9 +14,10 @@ import { TaskSubmissionIdLifecycle, InvalidSubmissionTransitionError } from '@sh
 interface AgentHubTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onRequestCreateProject?: () => void;
 }
 
-export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): React.ReactElement | null {
+export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: AgentHubTaskModalProps): React.ReactElement | null {
   const { snapshot, connection, submitTask } = useAgentHubStore();
   const projects = snapshot?.projects ?? [];
 
@@ -35,12 +37,12 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastSubmittedInput, setLastSubmittedInput] = useState<CreateTaskInputDto | null>(null);
+  const hasAuthoritativeProject = projects.some((project) => project.projectId === projectId);
 
   // Initialize or default projectId when projects load
   useEffect(() => {
-    if (!projectId && projects.length > 0) {
-      setProjectId(projects[0].projectId);
-    }
+    const next = nextAuthoritativeProjectId(projects, projectId);
+    if (next !== projectId) setProjectId(next);
   }, [projects, projectId]);
 
   if (!isOpen) return null;
@@ -80,7 +82,7 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (status === 'submitting' || status === 'ambiguous') return;
-    if (!projects.some((p) => p.projectId === projectId)) return;
+    if (!hasAuthoritativeProject) return;
 
     let input: CreateTaskInputDto;
     try {
@@ -298,7 +300,14 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
               </select>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--cth-ink-500, #64748b)' }}>
-                No authoritative projects are available. Refresh AgentHub state first.
+                <div>No authoritative Project exists on this Backend.</div>
+                <div>Create a Project before submitting a Task.</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  {onRequestCreateProject && (
+                    <button type="button" onClick={onRequestCreateProject}>Create Project</button>
+                  )}
+                  <button type="button" onClick={() => { void useAgentHubStore.getState().refresh(); }}>Refresh</button>
+                </div>
               </div>
             )}
           </div>
@@ -499,7 +508,7 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
                 status === 'ambiguous' ||
                 connection === 'disconnected' ||
                 !title.trim() ||
-                !projects.some((p) => p.projectId === projectId)
+                !hasAuthoritativeProject
               }
               style={{
                 padding: '6px 14px',
@@ -510,7 +519,7 @@ export function AgentHubTaskModal({ isOpen, onClose }: AgentHubTaskModalProps): 
                   status === 'submitting' ||
                   status === 'ambiguous' ||
                   !title.trim() ||
-                  !projects.some((p) => p.projectId === projectId)
+                  !hasAuthoritativeProject
                     ? 'not-allowed'
                     : 'pointer',
                 fontWeight: 600,

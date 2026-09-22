@@ -6,6 +6,7 @@ import { AgentHubExecuteModal } from './AgentHubExecuteModal';
 import { AgentHubReviewEvidenceModal } from './AgentHubReviewEvidenceModal';
 import { AgentHubAgentManagementModal } from './AgentHubAgentManagementModal';
 import { AgentHubLifecycleWorkspace } from './AgentHubLifecycleWorkspace';
+import { AgentHubProjectCreateModal } from './AgentHubProjectCreateModal';
 import { isLifecycleCompatibleBackendVersion } from '@shared/agenthubTypes';
 
 export function AgentHubBadge() {
@@ -26,6 +27,7 @@ export function AgentHubBadge() {
   const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [isLifecycleOpen, setIsLifecycleOpen] = useState(false);
+  const [isProjectCreateOpen, setIsProjectCreateOpen] = useState(false);
 
   const reviewRecordCount = Object.keys(
     useAgentHubReviewSessionStore((s) => s.reviewReadyByTaskId)
@@ -189,6 +191,28 @@ export function AgentHubBadge() {
                   type="button"
                   onClick={() => {
                     setHover(false);
+                    setIsProjectCreateOpen(true);
+                  }}
+                  style={{
+                    marginTop: 6,
+                    width: '100%',
+                    padding: '5px 8px',
+                    background: 'var(--cth-paper-100, #ffffff)',
+                    border: '1px solid var(--cth-ink-900, #0f172a)',
+                    color: 'var(--cth-ink-900, #0f172a)',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    borderRadius: 2
+                  }}
+                >
+                  + Create Project
+                </button>
+                <div style={{ marginTop: 4, fontSize: 11 }}>Projects ({snapshot?.projects.length ?? 0})</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHover(false);
                     setIsManageOpen(true);
                   }}
                   style={{
@@ -281,6 +305,7 @@ export function AgentHubBadge() {
       <AgentHubTaskModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onRequestCreateProject={() => setIsProjectCreateOpen(true)}
       />
       <AgentHubExecuteModal
         isOpen={isExecuteModalOpen}
@@ -297,6 +322,11 @@ export function AgentHubBadge() {
       <AgentHubLifecycleWorkspace
         isOpen={isLifecycleOpen}
         onClose={() => setIsLifecycleOpen(false)}
+        onRequestCreateProject={() => setIsProjectCreateOpen(true)}
+      />
+      <AgentHubProjectCreateModal
+        isOpen={isProjectCreateOpen}
+        onClose={() => setIsProjectCreateOpen(false)}
       />
     </span>
   );

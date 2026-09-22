@@ -7,6 +7,7 @@ import type {
   TaskSubmissionResult,
   ReviewDecisionResult,
   AgentMutationResult,
+  ProjectMutationResult,
   ProviderDto,
   LifecycleMutationResult
 } from './AgentHubTypes';
@@ -15,6 +16,7 @@ import { AgentHubTaskExecution } from './AgentHubTaskExecution';
 import { AgentHubReviewDecision } from './AgentHubReviewDecision';
 import { AgentHubAgentManagement } from './AgentHubAgentManagement';
 import { AgentHubLifecycle } from './AgentHubLifecycle';
+import { AgentHubProjectManagement } from './AgentHubProjectManagement';
 
 export const AGENTHUB_IPC_CHANNELS = {
   GET_STATE: 'agenthub:getConnectionState',
@@ -29,6 +31,7 @@ export const AGENTHUB_IPC_CHANNELS = {
   ENABLE_AGENT: 'agenthub:enableAgent',
   DISABLE_AGENT: 'agenthub:disableAgent',
   DELETE_AGENT: 'agenthub:deleteAgent',
+  CREATE_PROJECT: 'agenthub:createProject',
   GET_PROVIDERS: 'agenthub:getProviders',
   LIFECYCLE_CREATE_INTAKE: 'agenthub:lifecycle:create-intake',
   LIFECYCLE_CREATE_PLAN: 'agenthub:lifecycle:create-plan',
@@ -46,13 +49,15 @@ export function registerAgentHubIpc(
   taskExecution?: AgentHubTaskExecution,
   reviewDecision?: AgentHubReviewDecision,
   agentManagement?: AgentHubAgentManagement,
-  lifecycle?: AgentHubLifecycle
+  lifecycle?: AgentHubLifecycle,
+  projectManagement?: AgentHubProjectManagement
 ): () => void {
   const submission = taskSubmission ?? new AgentHubTaskSubmission(connection);
   const execution = taskExecution ?? new AgentHubTaskExecution(connection);
   const decision = reviewDecision ?? new AgentHubReviewDecision(connection);
   const management = agentManagement ?? new AgentHubAgentManagement(connection);
   const lifecycleClient = lifecycle ?? new AgentHubLifecycle(connection);
+  const projects = projectManagement ?? new AgentHubProjectManagement(connection);
 
 
   ipcMain.handle(AGENTHUB_IPC_CHANNELS.GET_STATE, (): AgentHubDesktopState => {
@@ -108,6 +113,10 @@ export function registerAgentHubIpc(
   ipcMain.handle(
     AGENTHUB_IPC_CHANNELS.DELETE_AGENT,
     async (_event, request: unknown): Promise<AgentMutationResult> => management.deleteAgent(request)
+  );
+  ipcMain.handle(
+    AGENTHUB_IPC_CHANNELS.CREATE_PROJECT,
+    async (_event, request: unknown): Promise<ProjectMutationResult> => projects.createProject(request)
   );
   ipcMain.handle(
     AGENTHUB_IPC_CHANNELS.GET_PROVIDERS,
@@ -168,6 +177,7 @@ export function registerAgentHubIpc(
     execution.stop();
     submission.stop();
     management.stop();
+    projects.stop();
     lifecycleClient.stop();
     connection.cache.off('change', handleChange);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_STATE);
@@ -181,6 +191,7 @@ export function registerAgentHubIpc(
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.ENABLE_AGENT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.DISABLE_AGENT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.DELETE_AGENT);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.CREATE_PROJECT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_PROVIDERS);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_INTAKE);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.LIFECYCLE_CREATE_PLAN);

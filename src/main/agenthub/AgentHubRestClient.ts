@@ -20,13 +20,17 @@ import type {
   StartPlanInputDto,
   IntakeDto,
   PlanDto,
-  LifecycleReviewDto
+  LifecycleReviewDto,
+  ProjectDto,
+  CreateProjectInputDto
 } from './AgentHubTypes';
 import {
   snapshotState,
   snapshotEventDto,
   snapshotTaskDto,
   snapshotAgentDto,
+  snapshotProjectDto,
+  snapshotCreateProjectInput,
   snapshotAgentDeleteDto,
   snapshotCreateTaskInput,
   snapshotCreateAgentInput,
@@ -383,6 +387,25 @@ export class AgentHubRestClient {
     return this.#snapshotAgent(data);
   }
 
+  public async createProject(
+    input: CreateProjectInputDto,
+    idempotencyKey: string,
+    signal?: AbortSignal
+  ): Promise<ProjectDto> {
+    const validatedInput = snapshotCreateProjectInput(input);
+    const key = requireIdempotencyKey(idempotencyKey);
+    const bodyString = boundedJson(validatedInput);
+    const data = await this.#post<unknown>('/api/v1/projects', bodyString, key, 201, signal, this.#timeoutMs);
+    try {
+      return snapshotProjectDto(data);
+    } catch (err) {
+      throw new AgentHubContractError('MALFORMED_PROJECT', (err as Error).message, {
+        phase: 'response-contract',
+        requestDispatched: true
+      });
+    }
+  }
+
   public async updateAgent(
     agentId: string,
     input: UpdateAgentInputDto,
@@ -638,6 +661,7 @@ export class AgentHubRestClient {
   ): Promise<T> {
     if (
       path !== '/api/v1/tasks' &&
+      path !== '/api/v1/projects' &&
       path !== '/api/v1/agents' &&
       path !== '/api/v1/intakes' &&
       path !== '/api/v1/plans' &&

@@ -482,6 +482,15 @@ export function sanitizeEventPayload(val: unknown, depth = 0): AgentHubPublicVal
   throw new AgentHubValidationError('MALFORMED_PAYLOAD', `Unsupported payload type: ${typeof val}`);
 }
 
+export function nextAuthoritativeProjectId(
+  projects: readonly { readonly projectId: string }[],
+  projectId: string
+): string {
+  if (projects.length === 0) return '';
+  if (!projects.some((project) => project.projectId === projectId)) return projects[0]?.projectId ?? '';
+  return projectId;
+}
+
 export function snapshotProjectDto(raw: unknown): ProjectDto {
   if (!isRecord(raw)) {
     throw new AgentHubValidationError('MALFORMED_PROJECT', 'Project must be an object');
@@ -494,6 +503,94 @@ export function snapshotProjectDto(raw: unknown): ProjectDto {
     createdAt: parseRequiredNonBlankString(raw, 'createdAt'),
     updatedAt: parseRequiredNonBlankString(raw, 'updatedAt')
   });
+}
+
+export interface CreateProjectInputDto {
+  readonly name: string;
+  readonly description: string | null;
+}
+
+export interface CreateProjectRequestDto {
+  readonly mutationId: string;
+  readonly input: CreateProjectInputDto;
+}
+
+export type ProjectMutationResult =
+  | {
+      readonly status: 'applied';
+      readonly project: ProjectDto;
+      readonly stateSynchronized: true;
+    }
+  | {
+      readonly status: 'applied';
+      readonly project: ProjectDto;
+      readonly stateSynchronized: false;
+      readonly warning: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'ambiguous';
+      readonly retryable: boolean;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    }
+  | {
+      readonly status: 'failed';
+      readonly retryable: false;
+      readonly error: {
+        readonly code: string;
+        readonly message: string;
+      };
+    };
+
+const PROJECT_NAME_MAX_BYTES = 256;
+const PROJECT_DESCRIPTION_MAX_BYTES = 16 * 1024;
+const PROJECT_MUTATION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const ALLOWED_CREATE_PROJECT_INPUT_KEYS = new Set(['name', 'description']);
+const ALLOWED_CREATE_PROJECT_REQUEST_KEYS = new Set(['mutationId', 'input']);
+
+export function snapshotCreateProjectInput(raw: unknown): CreateProjectInputDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', 'Create Project input must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_CREATE_PROJECT_INPUT_KEYS, 'MALFORMED_INPUT', 'create Project input');
+  if (!Object.hasOwn(raw, 'name') || !Object.hasOwn(raw, 'description')) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', "Create Project input requires 'name' and 'description'");
+  }
+  return Object.freeze({
+    name: snapshotExactBoundedText(raw.name, 'name', PROJECT_NAME_MAX_BYTES),
+    description: snapshotNullableBoundedText(raw.description, 'description', PROJECT_DESCRIPTION_MAX_BYTES)
+  });
+}
+
+export function snapshotCreateProjectRequest(raw: unknown): CreateProjectRequestDto {
+  if (!isRecord(raw)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', 'Create Project request must be an object');
+  }
+  rejectUnexpectedKeys(raw, ALLOWED_CREATE_PROJECT_REQUEST_KEYS, 'MALFORMED_REQUEST', 'create Project request');
+  if (typeof raw.mutationId !== 'string' || !PROJECT_MUTATION_ID_RE.test(raw.mutationId)) {
+    throw new AgentHubValidationError('MALFORMED_REQUEST', "Field 'mutationId' must match ^[A-Za-z0-9_-]{1,128}$");
+  }
+  return Object.freeze({
+    mutationId: raw.mutationId,
+    input: snapshotCreateProjectInput(raw.input)
+  });
+}
+
+function snapshotNullableBoundedText(value: unknown, fieldName: string, maxBytes: number): string | null {
+  if (value === null) return null;
+  if (typeof value !== 'string') {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' must be a string or null`);
+  }
+  rejectIfContainsNul(value, fieldName);
+  if (getUtf8Bytes(value) > maxBytes) {
+    throw new AgentHubValidationError('MALFORMED_INPUT', `Field '${fieldName}' exceeds maximum length (${maxBytes} bytes)`);
+  }
+  return value;
 }
 
 export function snapshotAgentDto(raw: unknown): AgentDto {

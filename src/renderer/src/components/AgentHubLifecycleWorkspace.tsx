@@ -9,6 +9,7 @@ import {
   isPlanReviewReconciliationError,
   lifecycleReviewEntryForTask,
   shortenProposalHash,
+  nextAuthoritativeProjectId,
   type CreatePlanDependencyInputDto,
   type CreatePlanTaskInputDto,
   type LifecycleMutationResult,
@@ -21,6 +22,7 @@ import { TaskSubmissionIdLifecycle, InvalidSubmissionTransitionError } from '@sh
 interface AgentHubLifecycleWorkspaceProps {
   isOpen: boolean;
   onClose: () => void;
+  onRequestCreateProject?: () => void;
 }
 
 interface DraftTask {
@@ -86,7 +88,8 @@ function toCreateDeps(edges: readonly DraftEdge[]): CreatePlanDependencyInputDto
 
 export function AgentHubLifecycleWorkspace({
   isOpen,
-  onClose
+  onClose,
+  onRequestCreateProject
 }: AgentHubLifecycleWorkspaceProps): React.ReactElement | null {
   const {
     connection,
@@ -137,9 +140,8 @@ export function AgentHubLifecycleWorkspace({
   );
 
   useEffect(() => {
-    if (!projectId && projects.length > 0) {
-      setProjectId(projects[0].projectId);
-    }
+    const next = nextAuthoritativeProjectId(projects, projectId);
+    if (next !== projectId) setProjectId(next);
   }, [projectId, projects]);
 
   useEffect(() => {
@@ -371,6 +373,23 @@ export function AgentHubLifecycleWorkspace({
 
             <div>
               <div style={{ fontWeight: 700 }}>Compose Intake / Plan</div>
+              {projects.length === 0 && (
+                <div style={{ marginTop: 8, fontSize: 13 }}>
+                  <div>No authoritative Project exists.</div>
+                  <div>Create a Project before creating an Intake.</div>
+                  {onRequestCreateProject && (
+                    <button type="button" onClick={onRequestCreateProject}>Create Project</button>
+                  )}
+                </div>
+              )}
+              {projects.length > 0 && agents.length === 0 && (
+                <div style={{ marginTop: 8, fontSize: 13 }}>
+                  No authoritative Agent is available. Create and enable an Agent before creating an Intake.
+                </div>
+              )}
+              {projects.length > 0 && agents.length > 0 && goal.trim().length === 0 && (
+                <div style={{ marginTop: 8, fontSize: 13 }}>Enter a goal before creating an Intake.</div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
                 <label>
                   Project
@@ -395,8 +414,15 @@ export function AgentHubLifecycleWorkspace({
               </label>
               <button
                 type="button"
-                disabled={!mutationsUsable || status === 'submitting'}
+                disabled={
+                  !mutationsUsable ||
+                  status === 'submitting' ||
+                  !projects.some((project) => project.projectId === projectId) ||
+                  !agents.some((agent) => agent.agentId === leadAgentId) ||
+                  goal.trim().length === 0
+                }
                 onClick={() => {
+                  if (!projects.some((project) => project.projectId === projectId)) return;
                   void runMutation((id) => createIntake({
                     mutationId: id,
                     input: { projectId, createdBy: HUMAN_BOSS_ACTOR_ID, goal, leadAgentId }

@@ -15,6 +15,8 @@ import type {
   UpdateAgentRequestDto,
   AgentActionRequestDto,
   AgentMutationResult,
+  CreateProjectRequestDto,
+  ProjectMutationResult,
   ProviderDto,
   CreateIntakeRequestDto,
   CreatePlanRequestDto,
@@ -53,6 +55,7 @@ export interface AgentHubStoreState {
   enableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   disableAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
   deleteAgent: (request: AgentActionRequestDto) => Promise<AgentMutationResult>;
+  createProject: (request: CreateProjectRequestDto) => Promise<ProjectMutationResult>;
   createIntake: (request: CreateIntakeRequestDto) => Promise<LifecycleMutationResult>;
   createPlan: (request: CreatePlanRequestDto) => Promise<LifecycleMutationResult>;
   createPlanRevision: (request: CreatePlanRevisionRequestDto) => Promise<LifecycleMutationResult>;
@@ -300,6 +303,23 @@ export const useAgentHubStore = create<AgentHubStoreState>((set, get) => ({
   enableAgent: (request) => invokeAgentMutation('enableAgent', request),
   disableAgent: (request) => invokeAgentMutation('disableAgent', request),
   deleteAgent: (request) => invokeAgentMutation('deleteAgent', request),
+  createProject: (request) => {
+    if (typeof window === 'undefined' || !window.agentHub) {
+      return Promise.resolve({
+        status: 'failed' as const,
+        retryable: false as const,
+        error: { code: 'NO_PRELOAD', message: 'AgentHub preload bridge is unavailable' }
+      });
+    }
+    return window.agentHub.createProject(request).catch((err: unknown) => ({
+      status: 'ambiguous' as const,
+      retryable: true,
+      error: {
+        code: 'IPC_LOST',
+        message: (err as Error).message || 'Project creation IPC result was lost'
+      }
+    }));
+  },
   createIntake: (request) => invokeLifecycleMutation('createIntake', request),
   createPlan: (request) => invokeLifecycleMutation('createPlan', request),
   createPlanRevision: (request) => invokeLifecycleMutation('createPlanRevision', request),
