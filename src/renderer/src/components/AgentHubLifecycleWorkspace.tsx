@@ -10,6 +10,11 @@ import {
   lifecycleReviewEntryForTask,
   shortenProposalHash,
   nextAuthoritativeProjectId,
+  projectBoundLeadAgents,
+  nextProjectBoundLeadId,
+  selectedLeadIsProjectBound,
+  canCreateLifecycleIntake,
+  lifecycleLeadNotice,
   type CreatePlanDependencyInputDto,
   type CreatePlanTaskInputDto,
   type LifecycleMutationResult,
@@ -121,6 +126,10 @@ export function AgentHubLifecycleWorkspace({
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [projectId, setProjectId] = useState('');
   const [leadAgentId, setLeadAgentId] = useState('');
+  const projectLeadAgents = useMemo(
+    () => projectBoundLeadAgents(agents, projectId),
+    [agents, projectId]
+  );
   const [intakeId, setIntakeId] = useState('');
   const [goal, setGoal] = useState('');
   const [summary, setSummary] = useState('');
@@ -145,10 +154,9 @@ export function AgentHubLifecycleWorkspace({
   }, [projectId, projects]);
 
   useEffect(() => {
-    if (!leadAgentId && agents.length > 0) {
-      setLeadAgentId(agents[0].agentId);
-    }
-  }, [agents, leadAgentId]);
+    const next = nextProjectBoundLeadId(projectLeadAgents, leadAgentId);
+    if (next !== leadAgentId) setLeadAgentId(next);
+  }, [projectLeadAgents, leadAgentId]);
 
   useEffect(() => {
     if (!intakeId && intakes.length > 0) {
@@ -234,6 +242,13 @@ export function AgentHubLifecycleWorkspace({
     proposalHash: plan.current.proposalHash,
     actorId: HUMAN_BOSS_ACTOR_ID,
     summary: decisionSummary
+  });
+
+  const leadNotice = lifecycleLeadNotice({
+    projectCount: projects.length,
+    agentCount: agents.length,
+    boundLeadCount: projectLeadAgents.length,
+    goal
   });
 
   return (
@@ -382,12 +397,18 @@ export function AgentHubLifecycleWorkspace({
                   )}
                 </div>
               )}
-              {projects.length > 0 && agents.length === 0 && (
+              {leadNotice === 'no-agent' && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>
                   No authoritative Agent is available. Create and enable an Agent before creating an Intake.
                 </div>
               )}
-              {projects.length > 0 && agents.length > 0 && goal.trim().length === 0 && (
+              {leadNotice === 'unbound' && (
+                <div style={{ marginTop: 8, fontSize: 13 }}>
+                  <div>No Agent is assigned to this Project.</div>
+                  <div>Create or assign a Project-bound Agent before creating an Intake.</div>
+                </div>
+              )}
+              {leadNotice === 'blank-goal' && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>Enter a goal before creating an Intake.</div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
@@ -401,8 +422,12 @@ export function AgentHubLifecycleWorkspace({
                 </label>
                 <label>
                   Lead Agent
-                  <select value={leadAgentId} onChange={(e) => { rotateAfterEdit(); setLeadAgentId(e.target.value); }}>
-                    {agents.map((agent) => (
+                  <select
+                    value={leadAgentId}
+                    disabled={projectLeadAgents.length === 0}
+                    onChange={(e) => { rotateAfterEdit(); setLeadAgentId(e.target.value); }}
+                  >
+                    {projectLeadAgents.map((agent) => (
                       <option key={agent.agentId} value={agent.agentId}>{agent.name}</option>
                     ))}
                   </select>
@@ -414,15 +439,16 @@ export function AgentHubLifecycleWorkspace({
               </label>
               <button
                 type="button"
-                disabled={
-                  !mutationsUsable ||
-                  status === 'submitting' ||
-                  !projects.some((project) => project.projectId === projectId) ||
-                  !agents.some((agent) => agent.agentId === leadAgentId) ||
-                  goal.trim().length === 0
-                }
+                disabled={!canCreateLifecycleIntake({
+                  mutationsUsable,
+                  status,
+                  hasAuthoritativeProject: projects.some((project) => project.projectId === projectId),
+                  selectedLeadIsProjectBound: selectedLeadIsProjectBound(agents, projectId, leadAgentId),
+                  goal
+                })}
                 onClick={() => {
                   if (!projects.some((project) => project.projectId === projectId)) return;
+                  if (!selectedLeadIsProjectBound(agents, projectId, leadAgentId)) return;
                   void runMutation((id) => createIntake({
                     mutationId: id,
                     input: { projectId, createdBy: HUMAN_BOSS_ACTOR_ID, goal, leadAgentId }

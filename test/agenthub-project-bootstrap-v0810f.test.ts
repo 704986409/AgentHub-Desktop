@@ -216,7 +216,9 @@ describe('Desktop V0.8.10F project bootstrap', () => {
     assert.match(task, /if \(!hasAuthoritativeProject\) return;/);
     assert.match(lifecycle, /No authoritative Project exists/);
     assert.match(lifecycle, /No authoritative Agent is available/);
-    assert.match(lifecycle, /goal\.trim\(\)\.length === 0/);
+    assert.match(lifecycle, /lifecycleLeadNotice\(/);
+    assert.match(lifecycle, /canCreateLifecycleIntake\(/);
+    assert.match(read('src/shared/agenthubTypes.ts'), /goal\.trim\(\)\.length === 0/);
     assert.match(badge, /setIsProjectCreateOpen\(true\)/);
     assert.doesNotMatch(store, /localStorage/);
     assert.doesNotMatch(store, /projects\.push/);

@@ -491,6 +491,58 @@ export function nextAuthoritativeProjectId(
   return projectId;
 }
 
+export function projectBoundLeadAgents<T extends { readonly projectId: string | null }>(
+  agents: readonly T[],
+  projectId: string
+): T[] {
+  return agents.filter((agent) => agent.projectId === projectId);
+}
+
+export function nextProjectBoundLeadId(
+  candidates: readonly { readonly agentId: string }[],
+  leadAgentId: string
+): string {
+  if (candidates.some((agent) => agent.agentId === leadAgentId)) return leadAgentId;
+  return candidates[0]?.agentId ?? '';
+}
+
+export function selectedLeadIsProjectBound(
+  agents: readonly { readonly agentId: string; readonly projectId: string | null }[],
+  projectId: string,
+  leadAgentId: string
+): boolean {
+  return agents.some((agent) => agent.agentId === leadAgentId && agent.projectId === projectId);
+}
+
+export function canCreateLifecycleIntake(input: {
+  readonly mutationsUsable: boolean;
+  readonly status: string;
+  readonly hasAuthoritativeProject: boolean;
+  readonly selectedLeadIsProjectBound: boolean;
+  readonly goal: string;
+}): boolean {
+  return input.mutationsUsable
+    && input.status !== 'submitting'
+    && input.hasAuthoritativeProject
+    && input.selectedLeadIsProjectBound
+    && input.goal.trim().length > 0;
+}
+
+export type LifecycleLeadNotice = 'no-agent' | 'unbound' | 'blank-goal';
+
+export function lifecycleLeadNotice(input: {
+  readonly projectCount: number;
+  readonly agentCount: number;
+  readonly boundLeadCount: number;
+  readonly goal: string;
+}): LifecycleLeadNotice | null {
+  if (input.projectCount === 0) return null;
+  if (input.agentCount === 0) return 'no-agent';
+  if (input.boundLeadCount === 0) return 'unbound';
+  if (input.goal.trim().length === 0) return 'blank-goal';
+  return null;
+}
+
 export function snapshotProjectDto(raw: unknown): ProjectDto {
   if (!isRecord(raw)) {
     throw new AgentHubValidationError('MALFORMED_PROJECT', 'Project must be an object');

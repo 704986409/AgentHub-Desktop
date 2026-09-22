@@ -599,7 +599,7 @@ describe('AgentHub Desktop V0.8.10 backend lifecycle', () => {
 
   test('38. lifecycle Lead comes from Backend Agent DTO', { timeout: TIMEOUT }, () => {
     const workspace = read('src/renderer/src/components/AgentHubLifecycleWorkspace.tsx');
-    assert.match(workspace, /agents\.map\(\(agent\) =>/);
+    assert.match(workspace, /projectLeadAgents\.map\(\(agent\) =>/);
     assert.match(workspace, /agent\.agentId/);
     assert.equal(workspace.includes('fakeLead'), false);
   });
