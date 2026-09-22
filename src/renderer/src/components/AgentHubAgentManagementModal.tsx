@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useAgentHubStore } from '../stores/agentHubStore';
+import { AGENTHUB_MODAL_Z } from './agentHubPanel';
 import { useAgentHubAgentMutationStore } from '../stores/agentHubAgentMutationStore';
 import {
   leadAgentLifecycleReferences,
@@ -25,6 +28,7 @@ interface AgentHubAgentManagementModalProps {
 }
 
 export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentManagementModalProps) {
+  const { t } = useTranslation();
   const snapshot = useAgentHubStore((s) => s.snapshot);
   const connection = useAgentHubStore((s) => s.connection);
   const providerCatalog = useAgentHubStore((s) => s.providerCatalog);
@@ -195,9 +199,9 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
   const isFormCreateEnabledUsable = isProviderUsable(form.providerId, providerCatalog);
   const canConfirmCreate = mutationsUsable && !submitting && !ambiguous && (!form.enabled || isFormCreateEnabledUsable);
 
-  return (
+  return createPortal(
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(15,23,42,0.35)',
+      position: 'fixed', inset: 0, zIndex: AGENTHUB_MODAL_Z, background: 'rgba(15,23,42,0.35)',
       display: 'flex', alignItems: 'center', justifyContent: 'center'
     }}>
       <div style={{
@@ -205,7 +209,7 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
         background: '#fff', border: '3px solid #0f172a', boxShadow: '6px 6px 0 #0f172a', padding: 16
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <strong>AGENTHUB AGENTS</strong>
+          <strong>{t('agenthub.agent.title', 'AGENTHUB AGENTS')}</strong>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
               type="button"
@@ -213,9 +217,9 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
               onClick={() => { void refreshProviderCatalog(); }}
               style={{ fontSize: 12, padding: '2px 8px' }}
             >
-              {providerCatalogStatus === 'loading' ? 'Refreshing Providers...' : 'Refresh Providers'}
+              {providerCatalogStatus === 'loading' ? t('agenthub.agent.refreshing', 'Refreshing Providers...') : t('agenthub.agent.refreshProviders', 'Refresh Providers')}
             </button>
-            <button type="button" onClick={onClose}>Close</button>
+            <button type="button" onClick={onClose}>{t('agenthub.common.close', 'Close')}</button>
           </div>
         </div>
         {snapshot === null && <div>AGENTHUB STATE UNAVAILABLE</div>}
@@ -223,13 +227,13 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
         {syncWarning && <div style={{ color: '#ca8a04', marginBottom: 8 }}>{syncWarning}</div>}
         {ambiguous && (
           <div style={{ marginBottom: 8 }}>
-            <div style={{ fontWeight: 700 }}>AGENT MUTATION OUTCOME UNKNOWN</div>
+            <div style={{ fontWeight: 700 }}>{t('agenthub.agent.unknown', 'AGENT MUTATION OUTCOME UNKNOWN')}</div>
             <div>{session?.error?.code}: {session?.error?.message}</div>
             {isReconciliation ? (
               <div>Refresh or restart AgentHub before another Agent mutation.</div>
             ) : (
               <button type="button" onClick={() => { void retrySame(); }} disabled={!mutationsUsable || submitting}>
-                Retry Same Mutation
+                {t('agenthub.agent.retry', 'Retry Same Mutation')}
               </button>
             )}
           </div>
@@ -279,7 +283,7 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                 setConfirmKind(null);
               }}
             >
-              Create Agent
+              {t('agenthub.agent.create', 'Create Agent')}
             </button>
           </div>
           <div>
@@ -303,12 +307,12 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                       disabled={!canConfirmCreate}
                       onClick={() => { void submitCreate(); }}
                     >
-                      Confirm Create
+                      {t('agenthub.agent.confirmCreate', 'Confirm Create')}
                     </button>
                   </div>
                 ) : (
                   <button type="button" disabled={!mutationsUsable || submitting || ambiguous} onClick={() => setConfirmKind('create')}>
-                    Review Create
+                    {t('agenthub.agent.reviewCreate', 'Review Create')}
                   </button>
                 )}
               </>
@@ -355,39 +359,40 @@ export function AgentHubAgentManagementModal({ isOpen, onClose }: AgentHubAgentM
                 ) : (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" disabled={!canEdit} onClick={() => { setMode('edit'); setForm(formFromAgent(selected)); setConfirmKind(null); }}>
-                      Edit
+                      {t('agenthub.agent.edit', 'Edit')}
                     </button>
                     <button
                       type="button"
                       disabled={!canEnable}
                       onClick={() => { void submitAction('enable'); }}
                     >
-                      Enable
+                      {t('agenthub.agent.enable', 'Enable')}
                     </button>
                     {confirmKind === 'disable' ? (
                       <div>
                         Disabling removes this Agent from future scheduling. It does not delete Agent history.
-                        <button type="button" disabled={!canDisable} onClick={() => { void submitAction('disable'); }}>Confirm Disable</button>
+                        <button type="button" disabled={!canDisable} onClick={() => { void submitAction('disable'); }}>{t('agenthub.agent.confirmDisable', 'Confirm Disable')}</button>
                       </div>
                     ) : (
-                      <button type="button" disabled={!canDisable} onClick={() => setConfirmKind('disable')}>Disable</button>
+                      <button type="button" disabled={!canDisable} onClick={() => setConfirmKind('disable')}>{t('agenthub.agent.disable', 'Disable')}</button>
                     )}
                     {confirmKind === 'delete' ? (
                       <div>
-                        Only Agents with no Assignment history can be deleted. Use Disable for Agents that have history.
-                        <button type="button" disabled={!canDelete} onClick={() => { void submitAction('delete'); }}>Confirm Delete</button>
+                        {t('agenthub.agent.deleteHint', 'Only Agents with no Assignment history can be deleted. Use Disable for Agents that have history.')}
+                        <button type="button" disabled={!canDelete} onClick={() => { void submitAction('delete'); }}>{t('agenthub.agent.confirmDelete', 'Confirm Delete')}</button>
                       </div>
                     ) : (
-                      <button type="button" disabled={!canDelete} onClick={() => setConfirmKind('delete')}>Delete</button>
+                      <button type="button" disabled={!canDelete} onClick={() => setConfirmKind('delete')}>{t('agenthub.agent.delete', 'Delete')}</button>
                     )}
                   </div>
                 )}
               </>
             )}
-            {mode !== 'create' && !selected && <div>Select an Agent or create one.</div>}
+            {mode !== 'create' && !selected && <div>{t('agenthub.agent.empty', 'Select an Agent or create one.')}</div>}
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

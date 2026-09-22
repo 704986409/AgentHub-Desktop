@@ -219,7 +219,7 @@ describe('Desktop V0.8.10F project bootstrap', () => {
     assert.match(lifecycle, /lifecycleLeadNotice\(/);
     assert.match(lifecycle, /canCreateLifecycleIntake\(/);
     assert.match(read('src/shared/agenthubTypes.ts'), /goal\.trim\(\)\.length === 0/);
-    assert.match(badge, /setIsProjectCreateOpen\(true\)/);
+    assert.match(badge, /openAgentHubDialog\('create-project'\)/);
     assert.doesNotMatch(store, /localStorage/);
     assert.doesNotMatch(store, /projects\.push/);
     const draft = { title: 'PRE E2E Happy Task', description: 'kept', criteria: 'Complete the provider task successfully.' };

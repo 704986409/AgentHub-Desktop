@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAgentHubStore } from '../stores/agentHubStore';
 import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionStore';
+import {
+  AGENTHUB_PANEL_Z,
+  isOutsideAgentHubPanel,
+  reduceAgentHubPanel,
+  type AgentHubDialogKind,
+  type AgentHubPanelState
+} from './agentHubPanel';
 import { AgentHubTaskModal } from './AgentHubTaskModal';
 import { AgentHubExecuteModal } from './AgentHubExecuteModal';
 import { AgentHubReviewEvidenceModal } from './AgentHubReviewEvidenceModal';
@@ -22,17 +30,15 @@ export function AgentHubBadge() {
     init,
     refresh
   } = useAgentHubStore();
+  const { t } = useTranslation();
 
-  const [hover, setHover] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelState, setPanelState] = useState<AgentHubPanelState>({ open: false, dialog: null });
   const [testMode, setTestMode] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetNotice, setResetNotice] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
-  const [isManageOpen, setIsManageOpen] = useState(false);
-  const [isLifecycleOpen, setIsLifecycleOpen] = useState(false);
-  const [isProjectCreateOpen, setIsProjectCreateOpen] = useState(false);
 
   const reviewRecordCount = Object.keys(
     useAgentHubReviewSessionStore((s) => s.reviewReadyByTaskId)
@@ -45,6 +51,47 @@ export function AgentHubBadge() {
     const cleanup = init();
     return cleanup;
   }, [init]);
+
+  const isAgentHubPanelOpen = panelState.open;
+  const activeDialog = panelState.dialog;
+
+  const openAgentHubDialog = (kind: AgentHubDialogKind): void => {
+    setPanelState((current) => reduceAgentHubPanel(current, { type: 'open-dialog', dialog: kind }));
+    if (kind === 'reviews') openReviewModal();
+  };
+
+  const closeAgentHubDialog = (): void => {
+    setPanelState((current) => reduceAgentHubPanel(current, { type: 'close-dialog' }));
+    closeReviewModal();
+  };
+
+  const toggleAgentHubPanel = (): void => {
+    setPanelState((current) => reduceAgentHubPanel(current, { type: 'toggle' }));
+  };
+
+  useEffect(() => {
+    if (!isAgentHubPanelOpen && activeDialog === null && !isReviewModalOpen) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      if (activeDialog !== null || isReviewModalOpen) {
+        closeAgentHubDialog();
+        return;
+      }
+      setPanelState((current) => reduceAgentHubPanel(current, { type: 'escape' }));
+    };
+    const onDocumentPointerDown = (event: PointerEvent): void => {
+      if (!isAgentHubPanelOpen) return;
+      const target = event.target instanceof Node ? event.target : null;
+      if (!isOutsideAgentHubPanel(target, triggerRef.current, panelRef.current)) return;
+      setPanelState((current) => reduceAgentHubPanel(current, { type: 'outside' }));
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
+    };
+  }, [isAgentHubPanelOpen, activeDialog, isReviewModalOpen, closeReviewModal]);
 
   useEffect(() => {
     const api = window.agentHub;
@@ -110,16 +157,13 @@ export function AgentHubBadge() {
   return (
     <span
       style={{ position: 'relative', display: 'inline-flex' }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => {
-        if (!confirmReset && !resetting) setHover(false);
-      }}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="cth-titlebar-nodrag"
-        onClick={() => { void refresh(); }}
-        title="点击刷新 AgentHub 数据"
+        onClick={toggleAgentHubPanel}
+        title={t('agenthub.badge.toggle', '点击打开或关闭 AgentHub')}
         aria-label={label}
         style={{
           display: 'inline-flex',
@@ -155,16 +199,19 @@ export function AgentHubBadge() {
       </button>
 
       {/* Hover tooltip card */}
-      {(hover || confirmReset || resetting) && (
+      {isAgentHubPanelOpen && (
         <div
-          role="tooltip"
+          ref={panelRef}
+          role="dialog"
           className="cth-titlebar-nodrag"
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
             left: 0,
-            zIndex: 400,
+            zIndex: AGENTHUB_PANEL_Z,
             width: 360,
+            maxHeight: '70vh',
+            overflowY: 'auto',
             padding: '10px 12px',
             background: 'var(--cth-paper-100, #ffffff)',
             color: INK,
@@ -203,10 +250,7 @@ export function AgentHubBadge() {
               <>
                 <button
                   type="button"
-                  onClick={() => {
-                    setHover(false);
-                    setIsModalOpen(true);
-                  }}
+                  onClick={() => openAgentHubDialog('submit-task')}
                   style={{
                     marginTop: 8,
                     width: '100%',
@@ -224,10 +268,7 @@ export function AgentHubBadge() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setHover(false);
-                    setIsProjectCreateOpen(true);
-                  }}
+                  onClick={() => openAgentHubDialog('create-project')}
                   style={{
                     marginTop: 6,
                     width: '100%',
@@ -246,10 +287,7 @@ export function AgentHubBadge() {
                 <div style={{ marginTop: 4, fontSize: 11 }}>项目（{projectCount}）</div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setHover(false);
-                    setIsManageOpen(true);
-                  }}
+                  onClick={() => openAgentHubDialog('agents')}
                   style={{
                     marginTop: 6,
                     width: '100%',
@@ -267,10 +305,7 @@ export function AgentHubBadge() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setHover(false);
-                    setIsLifecycleOpen(true);
-                  }}
+                  onClick={() => openAgentHubDialog('lifecycle')}
                   style={{
                     marginTop: 6,
                     width: '100%',
@@ -288,10 +323,7 @@ export function AgentHubBadge() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setHover(false);
-                    setIsExecuteModalOpen(true);
-                  }}
+                  onClick={() => openAgentHubDialog('execute-task')}
                   style={{
                     marginTop: 6,
                     width: '100%',
@@ -311,10 +343,7 @@ export function AgentHubBadge() {
             )}
             <button
               type="button"
-              onClick={() => {
-                setHover(false);
-                openReviewModal();
-              }}
+              onClick={() => openAgentHubDialog('reviews')}
               style={{
                 marginTop: 6,
                 width: '100%',
@@ -427,30 +456,30 @@ export function AgentHubBadge() {
       )}
 
       <AgentHubTaskModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onRequestCreateProject={() => setIsProjectCreateOpen(true)}
+        isOpen={activeDialog === 'submit-task'}
+        onClose={closeAgentHubDialog}
+        onRequestCreateProject={() => openAgentHubDialog('create-project')}
       />
       <AgentHubExecuteModal
-        isOpen={isExecuteModalOpen}
-        onClose={() => setIsExecuteModalOpen(false)}
+        isOpen={activeDialog === 'execute-task'}
+        onClose={closeAgentHubDialog}
       />
       <AgentHubReviewEvidenceModal
         isOpen={isReviewModalOpen}
-        onClose={closeReviewModal}
+        onClose={closeAgentHubDialog}
       />
       <AgentHubAgentManagementModal
-        isOpen={isManageOpen}
-        onClose={() => setIsManageOpen(false)}
+        isOpen={activeDialog === 'agents'}
+        onClose={closeAgentHubDialog}
       />
       <AgentHubLifecycleWorkspace
-        isOpen={isLifecycleOpen}
-        onClose={() => setIsLifecycleOpen(false)}
-        onRequestCreateProject={() => setIsProjectCreateOpen(true)}
+        isOpen={activeDialog === 'lifecycle'}
+        onClose={closeAgentHubDialog}
+        onRequestCreateProject={() => openAgentHubDialog('create-project')}
       />
       <AgentHubProjectCreateModal
-        isOpen={isProjectCreateOpen}
-        onClose={() => setIsProjectCreateOpen(false)}
+        isOpen={activeDialog === 'create-project'}
+        onClose={closeAgentHubDialog}
       />
     </span>
   );

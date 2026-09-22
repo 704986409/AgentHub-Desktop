@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   AgentAuthorityDto,
   AgentDto,
@@ -144,6 +145,7 @@ export function AgentHubAgentForm({
   disabled = false,
   onChange
 }: AgentHubAgentFormProps) {
+  const { t } = useTranslation();
   const [manualModel, setManualModel] = useState(true);
   const providerCatalog = useAgentHubStore((s) => s.providerCatalog);
 
@@ -174,7 +176,7 @@ export function AgentHubAgentForm({
 
   return (
     <div style={{ display: 'grid', gap: 10 }}>
-      {field('Name', (
+      {field(t('agenthub.form.name', 'Name'), (
         <input
           value={value.name}
           disabled={disabled}
@@ -182,7 +184,7 @@ export function AgentHubAgentForm({
         />
       ))}
       {mode === 'create'
-        ? field('Scope / Project', (
+        ? field(t('agenthub.form.scope', 'Scope / Project'), (
           <select
             value={value.projectId ?? ''}
             disabled={disabled}
@@ -191,16 +193,16 @@ export function AgentHubAgentForm({
               projectId: event.target.value === '' ? null : event.target.value
             })}
           >
-            <option value="">Global</option>
+            <option value="">{t('agenthub.form.global', 'Global')}</option>
             {projects.map((project) => (
               <option key={project.projectId} value={project.projectId}>{project.name}</option>
             ))}
           </select>
         ))
-        : field('Project Scope', (
+        : field(t('agenthub.form.projectScope', 'Project Scope'), (
           <input value={value.projectId ?? 'Global'} disabled />
         ))}
-      {field('Provider', (
+      {field(t('agenthub.form.provider', 'Provider'), (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {KNOWN_AGENT_PROVIDER_IDS.map((id) => {
@@ -254,7 +256,7 @@ export function AgentHubAgentForm({
           )}
         </div>
       ))}
-      {field('Model', (
+      {field(t('agenthub.form.model', 'Model'), (
         <div style={{ display: 'grid', gap: 6 }}>
           <select
             value={modelSuggestions.some((item) => item.id === value.modelId) ? value.modelId : ''}
@@ -264,7 +266,7 @@ export function AgentHubAgentForm({
               if (event.target.value) onChange({ ...value, modelId: event.target.value });
             }}
           >
-            <option value="">Manual modelId</option>
+            <option value="">{t('agenthub.form.manualModel', 'Manual modelId')}</option>
             {modelSuggestions.filter((item) => item.id).map((item) => (
               <option key={item.id} value={item.id}>{item.label} ({item.id})</option>
             ))}
@@ -272,7 +274,7 @@ export function AgentHubAgentForm({
           <input
             value={value.modelId}
             disabled={disabled}
-            placeholder="Exact modelId"
+            placeholder={t('agenthub.form.modelPlaceholder', 'Exact modelId')}
             onChange={(event) => {
               setManualModel(true);
               onChange({ ...value, modelId: event.target.value });
@@ -280,15 +282,15 @@ export function AgentHubAgentForm({
           />
           {nativeEmpty && (
             <span style={{ color: '#64748b', fontSize: 11 }}>
-              当前 Provider 原生模型发现结果为空
+              {t('agenthub.form.nativeEmpty', '当前 Provider 原生模型发现结果为空')}
             </span>
           )}
           {isOfflineFallback && modelSuggestions.length > 0 && (
-            <span style={{ color: '#ea580c', fontSize: 11 }}>Offline fallback — may be stale</span>
+            <span style={{ color: '#ea580c', fontSize: 11 }}>{t('agenthub.form.offline', 'Offline fallback — may be stale')}</span>
           )}
           {manualModel && (
             <span style={{ color: '#64748b', fontSize: 11 }}>
-              Manual modelId is preserved exactly. Catalog rows are suggestions only.
+              {t('agenthub.form.manualExact', 'Manual modelId is preserved exactly. Catalog rows are suggestions only.')}
             </span>
           )}
         </div>
@@ -300,7 +302,7 @@ export function AgentHubAgentForm({
           onChange={(event) => onChange({ ...value, position: event.target.value })}
         />
       ))}
-      {field('Allowed Complexities', (
+      {field(t('agenthub.form.complexities', 'Allowed Complexities'), (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {TASK_COMPLEXITIES.map((item) => (
             <label key={item} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
@@ -315,7 +317,7 @@ export function AgentHubAgentForm({
           ))}
         </div>
       ))}
-      {field('Allowed Risk Levels', (
+      {field(t('agenthub.form.risks', 'Allowed Risk Levels'), (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {TASK_RISKS.map((item) => (
             <label key={item} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
@@ -330,23 +332,23 @@ export function AgentHubAgentForm({
           ))}
         </div>
       ))}
-      {field('Capabilities', (
+      {field(t('agenthub.form.capabilities', 'Capabilities'), (
         <input
           value={value.capabilities}
           disabled={disabled}
-          placeholder="comma-separated"
+          placeholder={t('agenthub.form.comma', 'comma-separated')}
           onChange={(event) => onChange({ ...value, capabilities: event.target.value })}
         />
       ))}
-      {field('Specialties', (
+      {field(t('agenthub.form.specialties', 'Specialties'), (
         <input
           value={value.specialties}
           disabled={disabled}
-          placeholder="comma-separated"
+          placeholder={t('agenthub.form.comma', 'comma-separated')}
           onChange={(event) => onChange({ ...value, specialties: event.target.value })}
         />
       ))}
-      {field('Authority', (
+      {field(t('agenthub.form.authority', 'Authority'), (
         <select
           value={value.authority}
           disabled={disabled}
@@ -355,7 +357,7 @@ export function AgentHubAgentForm({
           {AGENT_AUTHORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
       ))}
-      {field('Routing Priority', (
+      {field(t('agenthub.form.routing', 'Routing Priority'), (
         <input
           type="number"
           min={0}
@@ -374,7 +376,7 @@ export function AgentHubAgentForm({
               disabled={disabled || !isCurrentProviderUsable}
               onChange={(event) => onChange({ ...value, enabled: event.target.checked })}
             />
-            <span>Enable immediately</span>
+            <span>{t('agenthub.form.enableNow', 'Enable immediately')}</span>
           </label>
           {!isCurrentProviderUsable && (
             <span style={{ color: '#ea580c', fontSize: 11 }}>

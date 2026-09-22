@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   ReviewVerdictDto,
   ReviewFindingSeverityDto,
@@ -40,6 +41,7 @@ export function AgentHubReviewDecisionSection({
   reviewHandle,
   stateSynchronized: _initialSyncState
 }: AgentHubReviewDecisionSectionProps) {
+  const { t } = useTranslation();
   const session = useAgentHubReviewActionStore((s) => s.sessionsByTaskId[taskId]);
   const isHandleUnavailable = useAgentHubReviewActionStore((s) =>
     s.isHandleUnavailable(reviewHandle)
@@ -157,10 +159,10 @@ export function AgentHubReviewDecisionSection({
     switch (input.verdict) {
       case 'ACCEPT':
         return {
-          title: 'Confirm Accept',
+          title: t('agenthub.review.confirmAccept', 'Confirm Accept'),
           message:
             'Accepting this review may complete the task and, if the merge gate passes, merge its committed changes into the configured target branch immediately.',
-          confirmText: 'Confirm Accept'
+          confirmText: t('agenthub.review.confirmAccept', 'Confirm Accept')
         };
       case 'REQUEST_REVISION':
         return {

@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useAgentHubStore } from '../stores/agentHubStore';
+import { AGENTHUB_MODAL_Z } from './agentHubPanel';
 import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionStore';
 import {
   HUMAN_BOSS_ACTOR_ID,
@@ -96,6 +99,7 @@ export function AgentHubLifecycleWorkspace({
   onClose,
   onRequestCreateProject
 }: AgentHubLifecycleWorkspaceProps): React.ReactElement | null {
+  const { t } = useTranslation();
   const {
     connection,
     health,
@@ -251,12 +255,12 @@ export function AgentHubLifecycleWorkspace({
     goal
   });
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 500,
+        zIndex: AGENTHUB_MODAL_Z,
         background: 'rgba(15,23,42,0.35)',
         display: 'flex',
         alignItems: 'center',
@@ -279,17 +283,17 @@ export function AgentHubLifecycleWorkspace({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 700 }}>Backend Lifecycle Workspace</div>
+            <div style={{ fontWeight: 700 }}>{t('agenthub.lifecycle.title', 'Backend Lifecycle Workspace')}</div>
             <div style={{ fontSize: 12, color: '#64748b' }}>
               Human Boss decides. Backend Lead Agent owns the Plan. Specialists execute Backend-created Tasks.
             </div>
           </div>
           <div>
             <button type="button" onClick={() => { void refresh(); }} disabled={isRefreshing}>
-              Refresh
+              {t('agenthub.common.refresh', 'Refresh')}
             </button>
             <button type="button" onClick={onClose} style={{ marginLeft: 8 }}>
-              Close
+              {t('agenthub.common.close', 'Close')}
             </button>
           </div>
         </div>
@@ -344,8 +348,8 @@ export function AgentHubLifecycleWorkspace({
         {lifecycleCompatible && snapshot && !reviewReconciliationRequired && (
           <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, marginTop: 16 }}>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Intakes</div>
-              {intakes.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>No intakes on this compatible Backend.</div>}
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>{t('agenthub.lifecycle.intakes', 'Intakes')}</div>
+              {intakes.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>{t('agenthub.lifecycle.noIntakes', 'No intakes on this compatible Backend.')}</div>}
               {intakes.map((intake) => (
                 <button
                   key={intake.intakeId}
@@ -363,8 +367,8 @@ export function AgentHubLifecycleWorkspace({
                   <div style={{ fontSize: 11, color: '#64748b' }}>Lead {intake.leadAgentId}</div>
                 </button>
               ))}
-              <div style={{ fontWeight: 700, margin: '16px 0 8px' }}>Plans</div>
-              {plans.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>No plans on this compatible Backend.</div>}
+              <div style={{ fontWeight: 700, margin: '16px 0 8px' }}>{t('agenthub.lifecycle.plans', 'Plans')}</div>
+              {plans.length === 0 && <div style={{ fontSize: 12, color: '#64748b' }}>{t('agenthub.lifecycle.noPlans', 'No plans on this compatible Backend.')}</div>}
               {plans.map((plan) => (
                 <button
                   key={plan.planId}
@@ -380,36 +384,36 @@ export function AgentHubLifecycleWorkspace({
                 >
                   {plan.current.summary.slice(0, 72)}
                   <div style={{ fontSize: 11, color: '#64748b' }}>
-                    {plan.state} · v{plan.currentVersion} · {shortenProposalHash(plan.current.proposalHash)}
+                    {t(`agenthub.state.${plan.state}`, plan.state)} · v{plan.currentVersion} · {shortenProposalHash(plan.current.proposalHash)}
                   </div>
                 </button>
               ))}
             </div>
 
             <div>
-              <div style={{ fontWeight: 700 }}>Compose Intake / Plan</div>
+              <div style={{ fontWeight: 700 }}>{t('agenthub.lifecycle.compose', 'Compose Intake / Plan')}</div>
               {projects.length === 0 && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>
-                  <div>No authoritative Project exists.</div>
-                  <div>Create a Project before creating an Intake.</div>
+                  <div>{t('agenthub.lifecycle.noProject', 'No authoritative Project exists.')}</div>
+                  <div>{t('agenthub.lifecycle.createProjectFirst', 'Create a Project before creating an Intake.')}</div>
                   {onRequestCreateProject && (
-                    <button type="button" onClick={onRequestCreateProject}>Create Project</button>
+                    <button type="button" onClick={onRequestCreateProject}>{t('agenthub.project.create', 'Create Project')}</button>
                   )}
                 </div>
               )}
               {leadNotice === 'no-agent' && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>
-                  No authoritative Agent is available. Create and enable an Agent before creating an Intake.
+                  {t('agenthub.lifecycle.noAgent', 'No authoritative Agent is available. Create and enable an Agent before creating an Intake.')}
                 </div>
               )}
               {leadNotice === 'unbound' && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>
-                  <div>No Agent is assigned to this Project.</div>
-                  <div>Create or assign a Project-bound Agent before creating an Intake.</div>
+                  <div>{t('agenthub.lifecycle.unbound', 'No Agent is assigned to this Project.')}</div>
+                  <div>{t('agenthub.lifecycle.unboundNext', 'Create or assign a Project-bound Agent before creating an Intake.')}</div>
                 </div>
               )}
               {leadNotice === 'blank-goal' && (
-                <div style={{ marginTop: 8, fontSize: 13 }}>Enter a goal before creating an Intake.</div>
+                <div style={{ marginTop: 8, fontSize: 13 }}>{t('agenthub.lifecycle.blankGoal', 'Enter a goal before creating an Intake.')}</div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
                 <label>
@@ -455,7 +459,7 @@ export function AgentHubLifecycleWorkspace({
                   }));
                 }}
               >
-                Create Intake
+                {t('agenthub.lifecycle.createIntake', 'Create Intake')}
               </button>
 
               <label style={{ display: 'block', marginTop: 12 }}>
@@ -528,8 +532,8 @@ export function AgentHubLifecycleWorkspace({
 
               {selectedPlan && (
                 <div style={{ marginTop: 16, borderTop: '1px solid #cbd5e1', paddingTop: 12 }}>
-                  <div style={{ fontWeight: 700 }}>Selected Plan</div>
-                  <div>State: {selectedPlan.state}</div>
+                  <div style={{ fontWeight: 700 }}>{t('agenthub.lifecycle.selected', 'Selected Plan')}</div>
+                  <div>{t('agenthub.lifecycle.state', 'State:')} {t(`agenthub.state.${selectedPlan.state}`, selectedPlan.state)}</div>
                   <div>Version {selectedPlan.currentVersion} · Proposal {shortenProposalHash(selectedPlan.current.proposalHash)}</div>
                   <div style={{ fontFamily: 'monospace', fontSize: 11 }}>{selectedPlan.current.proposalHash}</div>
                   <div>
@@ -570,13 +574,13 @@ export function AgentHubLifecycleWorkspace({
                     <>
                       <button type="button" disabled={!mutationsUsable || status === 'submitting'} onClick={() => {
                         void runMutation((id) => approvePlan({ mutationId: id, planId: selectedPlan.planId, input: boundDecision(selectedPlan) }));
-                      }}>Approve</button>
+                      }}>{t('agenthub.lifecycle.approve', 'Approve')}</button>
                       <button type="button" disabled={!mutationsUsable || status === 'submitting'} onClick={() => {
                         void runMutation((id) => requestPlanChanges({ mutationId: id, planId: selectedPlan.planId, input: boundDecision(selectedPlan) }));
-                      }}>Request Changes</button>
+                      }}>{t('agenthub.lifecycle.requestChanges', 'Request Changes')}</button>
                       <button type="button" disabled={!mutationsUsable || status === 'submitting'} onClick={() => {
                         void runMutation((id) => rejectPlan({ mutationId: id, planId: selectedPlan.planId, input: boundDecision(selectedPlan) }));
-                      }}>Reject</button>
+                      }}>{t('agenthub.lifecycle.reject', 'Reject')}</button>
                     </>
                   )}
                   {selectedPlan.state === 'CHANGES_REQUESTED' && (
@@ -592,7 +596,7 @@ export function AgentHubLifecycleWorkspace({
                           dependencies: toCreateDeps(edges)
                         }
                       }));
-                    }}>Create Revision</button>
+                    }}>{t('agenthub.lifecycle.revision', 'Create Revision')}</button>
                   )}
                   {selectedPlan.state === 'APPROVED' && (
                     <button type="button" disabled={!mutationsUsable || status === 'submitting'} onClick={() => {
@@ -604,10 +608,10 @@ export function AgentHubLifecycleWorkspace({
                           proposalHash: selectedPlan.current.proposalHash
                         }
                       }));
-                    }}>Start</button>
+                    }}>{t('agenthub.lifecycle.start', 'Start')}</button>
                   )}
                   {(selectedPlan.state === 'COMPLETED' || selectedPlan.state === 'FAILED' || selectedPlan.state === 'REJECTED') && (
-                    <div style={{ fontSize: 12, color: '#64748b' }}>No illegal Plan mutations in {selectedPlan.state}.</div>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>{t('agenthub.lifecycle.noIllegal', 'No illegal Plan mutations in this state.')}</div>
                   )}
                 </div>
               )}
@@ -615,6 +619,7 @@ export function AgentHubLifecycleWorkspace({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

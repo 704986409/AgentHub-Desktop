@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useAgentHubStore } from '../stores/agentHubStore';
+import { AGENTHUB_MODAL_Z } from './agentHubPanel';
 import {
   TASK_COMPLEXITIES,
   TASK_RISKS,
@@ -18,6 +21,7 @@ interface AgentHubTaskModalProps {
 }
 
 export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: AgentHubTaskModalProps): React.ReactElement | null {
+  const { t } = useTranslation();
   const { snapshot, connection, submitTask } = useAgentHubStore();
   const projects = snapshot?.projects ?? [];
 
@@ -187,7 +191,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
 
   const INK = 'var(--cth-ink-900, #0f172a)';
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -196,7 +200,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1000,
+        zIndex: AGENTHUB_MODAL_Z,
         fontFamily: 'var(--cth-font-ui, sans-serif)'
       }}
       onClick={onClose}
@@ -215,7 +219,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>AgentHub — Submit New Task</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{t('agenthub.task.title', 'AgentHub — Submit New Task')}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -242,8 +246,8 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
               borderRadius: 2
             }}
           >
-            <strong>Task Created Successfully!</strong>
-            <div>Task ID: <code>{createdTaskId}</code></div>
+            <strong>{t('agenthub.task.created', 'Task Created Successfully!')}</strong>
+            <div>{t('agenthub.task.taskId', 'Task ID:')} <code>{createdTaskId}</code></div>
             {warningMessage && (
               <div style={{ color: 'var(--cth-amber-dark, #ca8a04)', marginTop: 4 }}>
                 {warningMessage}
@@ -272,7 +276,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
           {/* Project selector */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Project *
+              {t('agenthub.task.project', 'Project *')}
             </label>
             {projects.length > 0 ? (
               <select
@@ -289,7 +293,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
               >
                 {!projects.some((p) => p.projectId === projectId) && (
                   <option value="" disabled>
-                    Select an authoritative project
+                    {t('agenthub.task.selectProject', 'Select an authoritative project')}
                   </option>
                 )}
                 {projects.map((p) => (
@@ -300,13 +304,13 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
               </select>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--cth-ink-500, #64748b)' }}>
-                <div>No authoritative Project exists on this Backend.</div>
-                <div>Create a Project before submitting a Task.</div>
+                <div>{t('agenthub.task.noProject', 'No authoritative Project exists on this Backend.')}</div>
+                <div>{t('agenthub.task.createFirst', 'Create a Project before submitting a Task.')}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   {onRequestCreateProject && (
-                    <button type="button" onClick={onRequestCreateProject}>Create Project</button>
+                    <button type="button" onClick={onRequestCreateProject}>{t('agenthub.project.create', 'Create Project')}</button>
                   )}
-                  <button type="button" onClick={() => { void useAgentHubStore.getState().refresh(); }}>Refresh</button>
+                  <button type="button" onClick={() => { void useAgentHubStore.getState().refresh(); }}>{t('agenthub.common.refresh', 'Refresh')}</button>
                 </div>
               </div>
             )}
@@ -315,13 +319,13 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
           {/* Title */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Title *
+              {t('agenthub.task.titleField', 'Title *')}
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => onFieldChange(setTitle, e.target.value)}
-              placeholder="e.g. Implement authentication endpoint"
+              placeholder={t('agenthub.task.titlePlaceholder', 'e.g. Implement authentication endpoint')}
               disabled={status === 'submitting'}
               required
               style={{
@@ -337,12 +341,12 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
           {/* Description */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Description
+              {t('agenthub.task.description', 'Description')}
             </label>
             <textarea
               value={description}
               onChange={(e) => onFieldChange(setDescription, e.target.value)}
-              placeholder="Detailed task description..."
+              placeholder={t('agenthub.task.descriptionPlaceholder', 'Detailed task description...')}
               rows={3}
               disabled={status === 'submitting'}
               style={{
@@ -360,7 +364,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
           <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-                Complexity
+                {t('agenthub.task.complexity', 'Complexity')}
               </label>
               <select
                 value={complexity}
@@ -381,7 +385,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
             </div>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-                Risk
+                {t('agenthub.task.risk', 'Risk')}
               </label>
               <select
                 value={risk}
@@ -405,13 +409,13 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
           {/* Required Capabilities */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Required Capabilities (comma or line separated)
+              {t('agenthub.task.capabilities', 'Required Capabilities (comma or line separated)')}
             </label>
             <input
               type="text"
               value={capabilitiesRaw}
               onChange={(e) => onFieldChange(setCapabilitiesRaw, e.target.value)}
-              placeholder="e.g. typescript, nodejs"
+              placeholder={t('agenthub.task.capabilitiesPlaceholder', 'e.g. typescript, nodejs')}
               disabled={status === 'submitting'}
               style={{
                 width: '100%',
@@ -426,13 +430,13 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
           {/* Required Specialties */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Required Specialties (comma or line separated)
+              {t('agenthub.task.specialties', 'Required Specialties (comma or line separated)')}
             </label>
             <input
               type="text"
               value={specialtiesRaw}
               onChange={(e) => onFieldChange(setSpecialtiesRaw, e.target.value)}
-              placeholder="e.g. backend, security"
+              placeholder={t('agenthub.task.specialtiesPlaceholder', 'e.g. backend, security')}
               disabled={status === 'submitting'}
               style={{
                 width: '100%',
@@ -447,12 +451,12 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
           {/* Acceptance Criteria */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Acceptance Criteria (one per line)
+              {t('agenthub.task.criteria', 'Acceptance Criteria (one per line)')}
             </label>
             <textarea
               value={criteriaRaw}
               onChange={(e) => onFieldChange(setCriteriaRaw, e.target.value)}
-              placeholder="e.g. Endpoint passes all unit tests"
+              placeholder={t('agenthub.task.criteriaPlaceholder', 'e.g. Endpoint passes all unit tests')}
               rows={2}
               disabled={status === 'submitting'}
               style={{
@@ -480,7 +484,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
                 fontSize: 13
               }}
             >
-              Cancel
+              {t('agenthub.common.cancel', 'Cancel')}
             </button>
 
             {status === 'ambiguous' && (
@@ -497,7 +501,7 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
                   fontSize: 13
                 }}
               >
-                Retry Same Submission
+                {t('agenthub.task.retry', 'Retry Same Submission')}
               </button>
             )}
 
@@ -527,11 +531,12 @@ export function AgentHubTaskModal({ isOpen, onClose, onRequestCreateProject }: A
                 boxShadow: `2px 2px 0 ${INK}`
               }}
             >
-              {status === 'submitting' ? 'Submitting...' : 'Submit Task'}
+              {status === 'submitting' ? t('agenthub.task.submitting', 'Submitting...') : t('agenthub.task.submit', 'Submit Task')}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

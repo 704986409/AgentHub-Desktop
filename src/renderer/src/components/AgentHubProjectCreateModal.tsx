@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useAgentHubStore } from '../stores/agentHubStore';
 import { TaskSubmissionIdLifecycle, InvalidSubmissionTransitionError } from '@shared/agenthubSubmissionLifecycle';
+import { AGENTHUB_MODAL_Z } from './agentHubPanel';
 
 const INK = 'var(--cth-ink-900, #0f172a)';
 
@@ -10,6 +13,7 @@ interface AgentHubProjectCreateModalProps {
 }
 
 export function AgentHubProjectCreateModal({ isOpen, onClose }: AgentHubProjectCreateModalProps): React.ReactElement | null {
+  const { t } = useTranslation();
   const { connection, createProject } = useAgentHubStore();
   const lifecycleRef = React.useRef(new TaskSubmissionIdLifecycle());
   const [mutationId, setMutationId] = useState(lifecycleRef.current.id);
@@ -60,12 +64,12 @@ export function AgentHubProjectCreateModal({ isOpen, onClose }: AgentHubProjectC
     setErrorMessage(result.error.message);
   };
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 420, background: '#fff', border: `2px solid ${INK}`, padding: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>Create Project</div>
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: AGENTHUB_MODAL_Z, background: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 420, maxHeight: '90vh', overflowY: 'auto', background: '#fff', border: `2px solid ${INK}`, padding: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 12 }}>{t('agenthub.project.title', 'Create Project')}</div>
         <label style={{ display: 'block', fontWeight: 600, fontSize: 13 }}>
-          Name *
+          {t('agenthub.project.name', 'Name *')}
           <input
             value={name}
             disabled={status === 'submitting'}
@@ -74,7 +78,7 @@ export function AgentHubProjectCreateModal({ isOpen, onClose }: AgentHubProjectC
           />
         </label>
         <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginTop: 10 }}>
-          Description
+          {t('agenthub.project.description', 'Description')}
           <textarea
             value={description}
             disabled={status === 'submitting'}
@@ -85,29 +89,29 @@ export function AgentHubProjectCreateModal({ isOpen, onClose }: AgentHubProjectC
         </label>
         {status === 'applied' && created && (
           <div style={{ marginTop: 12, fontSize: 13 }}>
-            <div>Project created</div>
-            <div>Name: {created.name}</div>
-            <div>Project ID: {created.projectId}</div>
+            <div>{t('agenthub.project.created', 'Project created')}</div>
+            <div>{t('agenthub.project.projectName', 'Name:')} {created.name}</div>
+            <div>{t('agenthub.project.projectId', 'Project ID:')} {created.projectId}</div>
             {warning && (
               <div>
-                Project created on Backend. State refresh failed. Use Refresh before creating another Project.
+                {t('agenthub.project.refreshFailed', 'Project created on Backend. State refresh failed. Use Refresh before creating another Project.')}
               </div>
             )}
           </div>
         )}
         {status === 'ambiguous' && (
           <div style={{ marginTop: 12, fontSize: 13 }}>
-            Outcome is unknown. The Backend may already have created this Project.
+            {t('agenthub.project.unknown', 'Outcome is unknown. The Backend may already have created this Project.')}
           </div>
         )}
         {errorMessage && status === 'failed' && <div style={{ marginTop: 12, fontSize: 13 }}>{errorMessage}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <button type="button" onClick={onClose}>Close</button>
+          <button type="button" onClick={onClose}>{t('agenthub.common.close', 'Close')}</button>
           {status === 'ambiguous' && (
             <button type="button" onClick={() => { void submit(true).catch((error: unknown) => {
               if (error instanceof InvalidSubmissionTransitionError) setErrorMessage(error.message);
             }); }}>
-              Retry same mutation
+              {t('agenthub.project.retry', 'Retry same mutation')}
             </button>
           )}
           <button
@@ -117,11 +121,12 @@ export function AgentHubProjectCreateModal({ isOpen, onClose }: AgentHubProjectC
               if (error instanceof InvalidSubmissionTransitionError) setErrorMessage(error.message);
             }); }}
           >
-            Create Project
+            {t('agenthub.project.create', 'Create Project')}
           </button>
         </div>
         <div style={{ display: 'none' }}>{mutationId}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

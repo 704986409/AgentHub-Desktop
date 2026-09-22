@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useAgentHubStore } from '../stores/agentHubStore';
+import { AGENTHUB_MODAL_Z } from './agentHubPanel';
 import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionStore';
 import type { ExecuteTaskInputDto, ExecuteTaskResultDto, TaskDto } from '@shared/agenthubTypes';
 import { TaskExecutionIdLifecycle } from '@shared/agenthubExecutionLifecycle';
@@ -50,6 +53,7 @@ function executionOutcomeSummary(result: ExecuteTaskResultDto): React.ReactEleme
 }
 
 export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalProps): React.ReactElement | null {
+  const { t } = useTranslation();
   const { snapshot, connection, executeTask } = useAgentHubStore();
   const tasks = snapshot?.tasks ?? [];
 
@@ -202,7 +206,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
     status !== 'executing' &&
     status !== 'ambiguous';
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -211,7 +215,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1000,
+        zIndex: AGENTHUB_MODAL_Z,
         fontFamily: 'var(--cth-font-ui, sans-serif)'
       }}
       onClick={onClose}
@@ -230,7 +234,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>AgentHub — Execute Task</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{t('agenthub.execute.title', 'AgentHub — Execute Task')}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -344,7 +348,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
 
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Base Ref *
+              {t('agenthub.execute.baseRef', 'Base Ref *')}
             </label>
             <input
               type="text"
@@ -364,7 +368,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
 
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              Prompt *
+              {t('agenthub.execute.prompt', 'Prompt *')}
             </label>
             <textarea
               value={prompt}
@@ -396,7 +400,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
                 cursor: canSubmit ? 'pointer' : 'not-allowed'
               }}
             >
-              {status === 'executing' ? 'Executing…' : 'Execute'}
+              {status === 'executing' ? t('agenthub.execute.executing', 'Executing…') : t('agenthub.execute.execute', 'Execute')}
             </button>
             {status === 'ambiguous' && (
               <button
@@ -421,6 +425,7 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

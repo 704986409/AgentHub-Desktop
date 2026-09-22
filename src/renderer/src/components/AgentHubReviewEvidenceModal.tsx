@@ -1,5 +1,8 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionStore';
+import { AGENTHUB_MODAL_Z } from './agentHubPanel';
 import { useAgentHubStore } from '../stores/agentHubStore';
 import {
   formatCommittedPatch,
@@ -21,6 +24,7 @@ export function AgentHubReviewEvidenceModal({
   isOpen: propIsOpen,
   onClose: propOnClose
 }: AgentHubReviewEvidenceModalProps) {
+  const { t } = useTranslation();
   const storeIsOpen = useAgentHubReviewSessionStore((s) => s.isModalOpen);
   const closeModal = useAgentHubReviewSessionStore((s) => s.closeModal);
   const reviewReadyByTaskId = useAgentHubReviewSessionStore(
@@ -67,7 +71,7 @@ export function AgentHubReviewEvidenceModal({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -76,7 +80,7 @@ export function AgentHubReviewEvidenceModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1000,
+        zIndex: AGENTHUB_MODAL_Z,
         fontFamily: 'var(--cth-font-ui, sans-serif)'
       }}
       onClick={handleClose}
@@ -106,7 +110,7 @@ export function AgentHubReviewEvidenceModal({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-                AgentHub — Review Evidence
+                {t('agenthub.review.title', 'AgentHub — Review Evidence')}
               </h2>
               <span
                 style={{
@@ -168,7 +172,7 @@ export function AgentHubReviewEvidenceModal({
                 color: INK
               }}
             >
-              No review evidence captured in this Desktop session.
+              {t('agenthub.review.empty', 'No review evidence captured in this Desktop session.')}
             </div>
             <div
               style={{
@@ -832,12 +836,13 @@ export function AgentHubReviewEvidenceModal({
                   cursor: 'pointer'
                 }}
               >
-                Close
+                {t('agenthub.review.close', 'Close')}
               </button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
