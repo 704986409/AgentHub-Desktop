@@ -12,7 +12,7 @@ import {
   type TaskRisk
 } from './agenthubTypes';
 
-export const LIFECYCLE_SUPPORTED_BACKEND_VERSIONS = Object.freeze(['0.7.3K'] as const);
+export const LIFECYCLE_SUPPORTED_BACKEND_VERSIONS = Object.freeze(['0.7.4C'] as const);
 export type LifecycleSupportedBackendVersion = (typeof LIFECYCLE_SUPPORTED_BACKEND_VERSIONS)[number];
 
 export const HUMAN_BOSS_ACTOR_ID = 'human-boss';

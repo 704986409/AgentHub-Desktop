@@ -205,7 +205,7 @@ function mockConnection(options: {
   return {
     getState: () => ({
       connection: 'connected',
-      health: { status: 'ok', version: '0.7.3K' },
+      health: { status: 'ok', version: '0.7.4C' },
       snapshot,
       lifecycleReviews: null,
       lastSyncAt: null,
@@ -219,7 +219,8 @@ function mockConnection(options: {
 
 describe('AgentHub Desktop V0.8.10 backend lifecycle', () => {
   test('1. Backend sealed health compatibility passes', { timeout: TIMEOUT }, () => {
-    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.4C'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3F'), false);
   });
 
@@ -663,7 +664,7 @@ describe('AgentHub Desktop V0.8.10 lifecycle HTTP client', () => {
     const server = http.createServer((req, res) => {
       if (req.url === '/api/v1/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, requestId: 'h', data: { status: 'ok', version: '0.7.3K' } }));
+        res.end(JSON.stringify({ ok: true, requestId: 'h', data: { status: 'ok', version: '0.7.4C' } }));
         return;
       }
       if (req.url === '/api/v1/state') {

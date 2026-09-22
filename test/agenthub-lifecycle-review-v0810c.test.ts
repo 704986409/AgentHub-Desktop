@@ -83,7 +83,8 @@ function reviewingTask(runtimeTaskId: string, title: string, planTaskId: string)
 
 describe('AgentHub Desktop V0.8.10C backend 0.7.3K compatibility', () => {
   test('C1-C5. exact 0.7.3K gate; older and future versions fail closed', { timeout: TIMEOUT }, () => {
-    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.4C'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3J'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3I'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3H'), false);
@@ -99,7 +100,7 @@ describe('AgentHub Desktop V0.8.10C backend 0.7.3K compatibility', () => {
   test('C6. UI supported version text is 0.7.3K', { timeout: TIMEOUT }, () => {
     const workspace = read('src/renderer/src/components/AgentHubLifecycleWorkspace.tsx');
     assert.match(workspace, /Lifecycle unavailable\. Backend upgrade required\./);
-    assert.match(workspace, /Supported: 0\.7\.3K\./);
+    assert.match(workspace, /Supported: 0\.7\.4C\./);
     assert.match(workspace, /This is not an empty plan list/);
     assert.equal(workspace.includes('Supported: 0.7.3F.'), false);
   });
@@ -144,6 +145,7 @@ describe('AgentHub Desktop V0.8.10C backend 0.7.3K compatibility', () => {
   });
 
   test('historical V0.8.10C smoke superseded by V0.8.10D authoritative review closure', { timeout: TIMEOUT }, () => {
-    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.4C'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), false);
   });
 });

@@ -94,7 +94,8 @@ function reviewingTask(runtimeTaskId: string, title: string, planTaskId: string)
 
 describe('AgentHub Desktop V0.8.10A lifecycle review contract', () => {
   test('1. exact compatible Backend version is the current sealed pin', { timeout: TIMEOUT }, () => {
-    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.4C'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3F'), false);
   });
 

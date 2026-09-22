@@ -2,7 +2,7 @@
  * Public Data Transfer Objects (DTOs) and runtime snapshotting for AgentHub Desktop.
  * 
  * Strict Invariants:
- * - Pinned to AgentHub 0.7.3K public contracts for lifecycle-aware state.
+ * - Pinned to AgentHub 0.7.4C public contracts for lifecycle-aware state.
  * - Runtime fail-closed sanitization: never return raw network objects.
  * - ZERO backend-private fields can cross into Desktop cache/IPC.
  * - Fail closed: do NOT synthesize defaults for missing/invalid required fields.

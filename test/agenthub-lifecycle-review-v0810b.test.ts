@@ -16,7 +16,8 @@ function read(rel: string): string {
 
 describe('AgentHub Desktop V0.8.10B lifecycle compatibility', () => {
   test('compatibility gate historical V0.8.10B pin is superseded by current contract tests', { timeout: TIMEOUT }, () => {
-    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.4C'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3F'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3E'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3D'), false);
@@ -34,7 +35,7 @@ describe('AgentHub Desktop V0.8.10B lifecycle compatibility', () => {
     assert.equal(isPlanReviewReconciliationError('SYNC_FAILED'), false);
     const workspace = read('src/renderer/src/components/AgentHubLifecycleWorkspace.tsx');
     assert.match(workspace, /Backend review reconciliation required/);
-    assert.match(workspace, /Supported: 0\.7\.3K\./);
+    assert.match(workspace, /Supported: 0\.7\.4C\./);
     assert.equal(workspace.includes('openReviewModal()'), false);
     assert.equal(workspace.includes('fabricateReview'), false);
   });

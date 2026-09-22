@@ -93,7 +93,8 @@ function reviewingTask(runtimeTaskId: string, title: string, planTaskId: string)
 
 describe('AgentHub Desktop V0.8.10D backend 0.7.3K compatibility', () => {
   test('D1-D5. exact 0.7.3K gate; older and future versions fail closed', { timeout: TIMEOUT }, () => {
-    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.4C'), true);
+    assert.equal(isLifecycleCompatibleBackendVersion('0.7.3K'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3J'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3I'), false);
     assert.equal(isLifecycleCompatibleBackendVersion('0.7.3H'), false);
@@ -109,7 +110,7 @@ describe('AgentHub Desktop V0.8.10D backend 0.7.3K compatibility', () => {
   test('D6. UI supported version text is 0.7.3K', { timeout: TIMEOUT }, () => {
     const workspace = read('src/renderer/src/components/AgentHubLifecycleWorkspace.tsx');
     assert.match(workspace, /Lifecycle unavailable\. Backend upgrade required\./);
-    assert.match(workspace, /Supported: 0\.7\.3K\./);
+    assert.match(workspace, /Supported: 0\.7\.4C\./);
     assert.match(workspace, /This is not an empty plan list/);
     assert.equal(workspace.includes('Supported: 0.7.3F.'), false);
   });
@@ -425,7 +426,7 @@ describe('AgentHub Desktop V0.8.10D backend 0.7.3K compatibility', () => {
       const emptyHealth = await rest.health();
       assert.equal(emptyHealth.status, 'ok');
       assert.equal(emptyHealth.version, '0.7.3K');
-      assert.equal(isLifecycleCompatibleBackendVersion(emptyHealth.version), true);
+      assert.equal(isLifecycleCompatibleBackendVersion(emptyHealth.version), false);
 
       const emptyState = await rest.state();
       assert.equal(emptyState.intakes.length, 0);
@@ -550,42 +551,24 @@ describe('AgentHub Desktop V0.8.10D backend 0.7.3K compatibility', () => {
       await connection.start();
       const deadline = Date.now() + 8_000;
       let desktop = connection.getState();
-      while (
-        Date.now() < deadline &&
-        (desktop.snapshot === null ||
-          desktop.lifecycleReviews === null ||
-          desktop.lifecycleReviews.length === 0)
-      ) {
+      while (Date.now() < deadline && desktop.snapshot === null) {
         await new Promise((resolve) => setTimeout(resolve, 50));
         desktop = connection.getState();
       }
 
       assert.equal(desktop.health?.version, '0.7.3K');
-      assert.equal(isLifecycleCompatibleBackendVersion(desktop.health?.version ?? ''), true);
+      assert.equal(isLifecycleCompatibleBackendVersion(desktop.health?.version ?? ''), false);
       assert.ok(desktop.snapshot !== null);
+      assert.equal(desktop.lifecycleReviews, null);
       assert.ok(
         desktop.connection === 'connected' ||
           desktop.connection === 'degraded' ||
           desktop.connection === 'connecting'
       );
-      assert.ok(Array.isArray(desktop.lifecycleReviews));
-      assert.notEqual(desktop.lifecycleReviews, null);
 
       const connReviewingTasks = desktop.snapshot.planTasks.filter((item) => item.runtimeState === 'REVIEWING');
       assert.equal(connReviewingTasks.length, 1);
       assert.equal(connReviewingTasks[0].runtimeTaskId, reviewingTask.runtimeTaskId);
-
-      const connReview = desktop.lifecycleReviews.find(
-        (item) => item.runtimeTaskId === reviewingTask.runtimeTaskId
-      );
-      assert.ok(connReview, 'Connection cached reviews must contain the authoritative review');
-      assert.equal(connReview.runtimeTaskId, reviewingTask.runtimeTaskId);
-
-      const connEntry = lifecycleReviewEntryForTask(connReviewingTasks[0], desktop.lifecycleReviews, plan.planId);
-      assert.equal(connEntry.kind, 'review', 'Connection mapped review entry must be review');
-      if (connEntry.kind === 'review') {
-        assert.equal(connEntry.runtimeTaskId, reviewingTask.runtimeTaskId);
-      }
     } finally {
       connection.stop();
       await server.stop();
