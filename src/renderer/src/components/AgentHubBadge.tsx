@@ -14,6 +14,7 @@ export function AgentHubBadge() {
     connection,
     health,
     snapshot,
+    lifecycleReviews,
     lastSyncAt,
     lastEventAt,
     lastError,
@@ -23,6 +24,10 @@ export function AgentHubBadge() {
   } = useAgentHubStore();
 
   const [hover, setHover] = useState(false);
+  const [testMode, setTestMode] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetNotice, setResetNotice] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
   const [isManageOpen, setIsManageOpen] = useState(false);
@@ -41,36 +46,61 @@ export function AgentHubBadge() {
     return cleanup;
   }, [init]);
 
+  useEffect(() => {
+    const api = window.agentHub;
+    if (!api?.isTestMode) return;
+    let active = true;
+    void api.isTestMode().then((enabled) => {
+      if (active) setTestMode(enabled);
+    }).catch(() => {
+      if (active) setTestMode(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const agentCount = snapshot?.agents?.length ?? 0;
   const taskCount = snapshot?.tasks?.length ?? 0;
   const planCount = snapshot?.plans?.length ?? 0;
   const lifecycleCompatible = health !== null && isLifecycleCompatibleBackendVersion(health.version);
 
+  const projectCount = snapshot?.projects.length ?? 0;
+  const assignmentCount = snapshot?.assignments.length ?? 0;
+  const reviewCount = lifecycleReviews?.length ?? reviewRecordCount;
+  const connectionLabel = connection === 'connected'
+    ? '已连接'
+    : connection === 'connecting'
+      ? '连接中'
+      : connection === 'degraded'
+        ? '降级'
+        : '未连接';
+
   // Visual status indicators
   let dotColor = 'var(--cth-ink-400, #94a3b8)';
-  let label = 'AgentHub: Offline';
+  let label = 'AgentHub：离线';
   let chipBg = 'transparent';
 
   switch (connection) {
     case 'connected':
       dotColor = 'var(--cth-mint-dark, #16a34a)';
-      label = `AgentHub (${agentCount} agents · ${taskCount} tasks)`;
+      label = `AgentHub（${agentCount} 个 Agent · ${taskCount} 个任务）`;
       chipBg = 'var(--cth-mint-light, #d0f0e0)';
       break;
     case 'connecting':
       dotColor = 'var(--cth-amber-dark, #ca8a04)';
-      label = isRefreshing ? 'AgentHub: Refreshing...' : 'AgentHub: Connecting...';
+      label = isRefreshing ? 'AgentHub：正在刷新' : 'AgentHub：连接中';
       chipBg = 'var(--cth-amber-light, #f6e2b3)';
       break;
     case 'degraded':
       dotColor = 'var(--cth-peach-dark, #ea580c)';
-      label = `AgentHub: Degraded (${agentCount} cached)`;
+      label = `AgentHub：降级（已缓存 ${agentCount}）`;
       chipBg = 'var(--cth-peach-light, #fed7aa)';
       break;
     case 'disconnected':
     default:
       dotColor = 'var(--cth-ink-400, #94a3b8)';
-      label = 'AgentHub: Offline';
+      label = 'AgentHub：离线';
       chipBg = 'transparent';
       break;
   }
@@ -81,13 +111,15 @@ export function AgentHubBadge() {
     <span
       style={{ position: 'relative', display: 'inline-flex' }}
       onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseLeave={() => {
+        if (!confirmReset && !resetting) setHover(false);
+      }}
     >
       <button
         type="button"
         className="cth-titlebar-nodrag"
         onClick={() => { void refresh(); }}
-        title="AgentHub Connection — Click to refresh"
+        title="点击刷新 AgentHub 数据"
         aria-label={label}
         style={{
           display: 'inline-flex',
@@ -123,7 +155,7 @@ export function AgentHubBadge() {
       </button>
 
       {/* Hover tooltip card */}
-      {hover && (
+      {(hover || confirmReset || resetting) && (
         <div
           role="tooltip"
           className="cth-titlebar-nodrag"
@@ -132,7 +164,7 @@ export function AgentHubBadge() {
             top: 'calc(100% + 6px)',
             left: 0,
             zIndex: 400,
-            width: 320,
+            width: 360,
             padding: '10px 12px',
             background: 'var(--cth-paper-100, #ffffff)',
             color: INK,
@@ -145,23 +177,26 @@ export function AgentHubBadge() {
           }}
         >
           <div style={{ fontFamily: 'var(--cth-font-mono, monospace)', fontWeight: 700, fontSize: 12.5 }}>
-            AgentHub Desktop Bridge
+            AgentHub 桌面连接
           </div>
           <div style={{ marginTop: 4, color: 'var(--cth-ink-700, #334155)' }}>
-            <div><strong>Endpoint:</strong> http://127.0.0.1:3210</div>
-            <div><strong>Status:</strong> {connection}</div>
+            <div><strong>后端地址：</strong> http://127.0.0.1:3210</div>
+            <div><strong>连接状态：</strong> {connectionLabel}</div>
             {health && (
-              <div><strong>Backend Version:</strong> {health.version} ({health.status})</div>
+              <div>
+                <strong>后端版本：</strong> {health.version}
+                {health.status === 'ok' && lifecycleCompatible ? '（兼容）' : ''}
+              </div>
             )}
             {lastSyncAt && (
-              <div><strong>Last Sync:</strong> {new Date(lastSyncAt).toLocaleTimeString()}</div>
+              <div><strong>上次同步：</strong> {new Date(lastSyncAt).toLocaleTimeString()}</div>
             )}
             {lastEventAt && (
-              <div><strong>Last Event:</strong> {new Date(lastEventAt).toLocaleTimeString()}</div>
+              <div><strong>最近事件：</strong> {new Date(lastEventAt).toLocaleTimeString()}</div>
             )}
             {lastError && (
               <div style={{ color: 'var(--cth-rose-dark, #e11d48)', marginTop: 4 }}>
-                <strong>Error [{lastError.code}]:</strong> {lastError.message}
+                <strong>错误 [{lastError.code}]：</strong> {lastError.message}
               </div>
             )}
             {connection !== 'disconnected' && (
@@ -185,7 +220,7 @@ export function AgentHubBadge() {
                     borderRadius: 2
                   }}
                 >
-                  + Submit New Task
+                  + 提交新任务
                 </button>
                 <button
                   type="button"
@@ -206,9 +241,9 @@ export function AgentHubBadge() {
                     borderRadius: 2
                   }}
                 >
-                  + Create Project
+                  + 创建项目
                 </button>
-                <div style={{ marginTop: 4, fontSize: 11 }}>Projects ({snapshot?.projects.length ?? 0})</div>
+                <div style={{ marginTop: 4, fontSize: 11 }}>项目（{projectCount}）</div>
                 <button
                   type="button"
                   onClick={() => {
@@ -228,7 +263,7 @@ export function AgentHubBadge() {
                     borderRadius: 2
                   }}
                 >
-                  Manage Agents ({agentCount})
+                  管理 Agent（{agentCount}）
                 </button>
                 <button
                   type="button"
@@ -249,7 +284,7 @@ export function AgentHubBadge() {
                     borderRadius: 2
                   }}
                 >
-                  Lifecycle Workspace {lifecycleCompatible ? `(${planCount} plans)` : '(unavailable)'}
+                  计划与生命周期{lifecycleCompatible ? `（${planCount} 个计划）` : '（不可用）'}
                 </button>
                 <button
                   type="button"
@@ -270,7 +305,7 @@ export function AgentHubBadge() {
                     borderRadius: 2
                   }}
                 >
-                  Execute Task
+                  执行任务
                 </button>
               </>
             )}
@@ -293,11 +328,100 @@ export function AgentHubBadge() {
                 borderRadius: 2
               }}
             >
-              Review Evidence ({reviewRecordCount})
+              审查结果（{reviewCount}）
             </button>
+            {testMode && (
+              <div
+                data-testid="agenthub-test-toolbar"
+                style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--cth-ink-300, #cbd5e1)' }}
+              >
+                <div style={{ fontWeight: 700 }}>测试工具</div>
+                <div>模式：测试模式</div>
+                <div>数据库：agenthub-test.db</div>
+                <div>
+                  项目 {projectCount} / Agent {agentCount} / 计划 {planCount} / 任务 {taskCount} / Assignment {assignmentCount} / Review {reviewCount}
+                </div>
+                {confirmReset ? (
+                  <div style={{ marginTop: 6 }}>
+                    <div>确认清空测试数据库？</div>
+                    <div>将清空项目、Agent、Plan、Task、Assignment、Review 和相关运行状态。</div>
+                    <div>正式数据库不会受到影响。</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <button
+                        type="button"
+                        disabled={resetting}
+                        onClick={() => setConfirmReset(false)}
+                        style={{ flex: 1, fontSize: 12, cursor: 'pointer' }}
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        disabled={resetting}
+                        onClick={() => {
+                          if (resetting) return;
+                          setResetting(true);
+                          setResetNotice('正在清空...');
+                          void window.agentHub.resetTestDatabase().then(async (result) => {
+                            if (result.ok) {
+                              await refresh();
+                              setResetNotice('✅ 测试数据已清空');
+                            } else {
+                              setResetNotice(`❌ 清空失败：${result.error}`);
+                            }
+                          }).catch((error: unknown) => {
+                            setResetNotice(`❌ 清空失败：${error instanceof Error ? error.message : '清空失败'}`);
+                          }).finally(() => {
+                            setResetting(false);
+                            setConfirmReset(false);
+                          });
+                        }}
+                        style={{ flex: 1, fontSize: 12, cursor: resetting ? 'default' : 'pointer' }}
+                      >
+                        {resetting ? '正在清空...' : '确认清空'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={resetting}
+                    onClick={() => {
+                      if (resetting) return;
+                      setConfirmReset(true);
+                    }}
+                    style={{
+                      marginTop: 6,
+                      width: '100%',
+                      padding: '5px 8px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: resetting ? 'default' : 'pointer'
+                    }}
+                  >
+                    {resetting ? '正在清空...' : '🗑 一键清空测试数据'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { void refresh(); }}
+                  style={{
+                    marginTop: 6,
+                    width: '100%',
+                    padding: '5px 8px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔄 刷新状态
+                </button>
+                {resetNotice && <div style={{ marginTop: 6 }}>{resetNotice}</div>}
+              </div>
+            )}
           </div>
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--cth-ink-500, #64748b)' }}>
-            Click badge to refresh snapshot
+            点击顶部状态栏刷新数据
           </div>
         </div>
       )}

@@ -1475,6 +1475,8 @@ export interface AgentHubPreloadApi {
   requestPlanChanges: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
   rejectPlan: (request: PlanDecisionRequestDto) => Promise<LifecycleMutationResult>;
   startPlan: (request: StartPlanRequestDto) => Promise<LifecycleMutationResult>;
+  isTestMode: () => Promise<boolean>;
+  resetTestDatabase: () => Promise<{ ok: true; databaseName: string } | { ok: false; error: string }>;
 }
 
 const agentHubApi: AgentHubPreloadApi = {
@@ -1522,7 +1524,11 @@ const agentHubApi: AgentHubPreloadApi = {
   rejectPlan: (request: PlanDecisionRequestDto): Promise<LifecycleMutationResult> =>
     ipcRenderer.invoke('agenthub:lifecycle:reject', request),
   startPlan: (request: StartPlanRequestDto): Promise<LifecycleMutationResult> =>
-    ipcRenderer.invoke('agenthub:lifecycle:start', request)
+    ipcRenderer.invoke('agenthub:lifecycle:start', request),
+  isTestMode: (): Promise<boolean> =>
+    ipcRenderer.invoke('agenthub:test:isTestMode'),
+  resetTestDatabase: (): Promise<{ ok: true; databaseName: string } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('agenthub:test:resetDatabase')
 };
 
 

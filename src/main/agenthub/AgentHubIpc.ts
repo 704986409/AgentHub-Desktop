@@ -17,6 +17,7 @@ import { AgentHubReviewDecision } from './AgentHubReviewDecision';
 import { AgentHubAgentManagement } from './AgentHubAgentManagement';
 import { AgentHubLifecycle } from './AgentHubLifecycle';
 import { AgentHubProjectManagement } from './AgentHubProjectManagement';
+import { isAgentHubTestMode, resetOwnedTestDatabase, type ResetTestDatabaseResult } from './AgentHubTestReset';
 
 export const AGENTHUB_IPC_CHANNELS = {
   GET_STATE: 'agenthub:getConnectionState',
@@ -40,7 +41,9 @@ export const AGENTHUB_IPC_CHANNELS = {
   LIFECYCLE_REQUEST_CHANGES: 'agenthub:lifecycle:request-changes',
   LIFECYCLE_REJECT: 'agenthub:lifecycle:reject',
   LIFECYCLE_START: 'agenthub:lifecycle:start',
-  LIFECYCLE_RESYNC: 'agenthub:lifecycle:resync'
+  LIFECYCLE_RESYNC: 'agenthub:lifecycle:resync',
+  IS_TEST_MODE: 'agenthub:test:isTestMode',
+  RESET_TEST_DATABASE: 'agenthub:test:resetDatabase'
 } as const;
 
 export function registerAgentHubIpc(
@@ -59,6 +62,18 @@ export function registerAgentHubIpc(
   const lifecycleClient = lifecycle ?? new AgentHubLifecycle(connection);
   const projects = projectManagement ?? new AgentHubProjectManagement(connection);
 
+
+  ipcMain.handle(AGENTHUB_IPC_CHANNELS.IS_TEST_MODE, (): boolean => {
+    return isAgentHubTestMode();
+  });
+
+  ipcMain.handle(AGENTHUB_IPC_CHANNELS.RESET_TEST_DATABASE, async (): Promise<ResetTestDatabaseResult> => {
+    const result = await resetOwnedTestDatabase();
+    if (result.ok) {
+      try { await connection.refresh(); } catch { /* renderer reads the restarted snapshot */ }
+    }
+    return result;
+  });
 
   ipcMain.handle(AGENTHUB_IPC_CHANNELS.GET_STATE, (): AgentHubDesktopState => {
     return connection.getState();
@@ -180,6 +195,8 @@ export function registerAgentHubIpc(
     projects.stop();
     lifecycleClient.stop();
     connection.cache.off('change', handleChange);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.IS_TEST_MODE);
+    ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.RESET_TEST_DATABASE);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_STATE);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.GET_SNAPSHOT);
     ipcMain.removeHandler(AGENTHUB_IPC_CHANNELS.REFRESH);

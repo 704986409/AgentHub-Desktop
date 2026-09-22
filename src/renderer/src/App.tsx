@@ -317,7 +317,7 @@ export function App() {
           fontSize: 13,
           color: 'var(--cth-ink-500)'
         }}>
-          {config.autoMode ? 'auto mode on' : 'auto mode off'}
+          {config.autoMode ? '自动模式：开启' : '自动模式：关闭'}
         </span>
         {/* v0.3.4: theme + fullscreen live HERE (top right), not buried in the
             terminal header — and the theme darkens the whole app, terminals
