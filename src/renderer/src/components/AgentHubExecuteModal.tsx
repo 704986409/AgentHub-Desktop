@@ -6,6 +6,11 @@ import { AGENTHUB_MODAL_Z } from './agentHubPanel';
 import { useAgentHubReviewSessionStore } from '../stores/agentHubReviewSessionStore';
 import type { ExecuteTaskInputDto, ExecuteTaskResultDto, TaskDto } from '@shared/agenthubTypes';
 import { TaskExecutionIdLifecycle } from '@shared/agenthubExecutionLifecycle';
+import {
+  DEFAULT_EXECUTE_BASE_REF,
+  EXECUTE_VALIDATION_MESSAGE,
+  validateExecuteDraft
+} from '@shared/agenthubExecuteDraft';
 
 interface AgentHubExecuteModalProps {
   isOpen: boolean;
@@ -58,16 +63,34 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
   const tasks = snapshot?.tasks ?? [];
 
   const [taskId, setTaskId] = useState('');
-  const [baseRef, setBaseRef] = useState('');
+  const [baseRef, setBaseRef] = useState(DEFAULT_EXECUTE_BASE_REF);
   const [prompt, setPrompt] = useState('');
 
   const lifecycleRef = React.useRef(new TaskExecutionIdLifecycle());
+  const wasOpenRef = React.useRef(false);
   const [executionId, setExecutionId] = useState(lifecycleRef.current.id);
   const [status, setStatus] = useState<'idle' | 'executing' | 'executed' | 'ambiguous' | 'failed'>('idle');
   const [executeResult, setExecuteResult] = useState<ExecuteTaskResultDto | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastExecutedInput, setLastExecutedInput] = useState<{ taskId: string; input: ExecuteTaskInputDto } | null>(null);
+
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      const nextLifecycle = new TaskExecutionIdLifecycle();
+      lifecycleRef.current = nextLifecycle;
+      setExecutionId(nextLifecycle.id);
+      setBaseRef(DEFAULT_EXECUTE_BASE_REF);
+      setPrompt('');
+      setStatus('idle');
+      setExecuteResult(null);
+      setWarningMessage(null);
+      setErrorMessage(null);
+      setLastExecutedInput(null);
+      setTaskId(tasks[0]?.taskId ?? '');
+    }
+    wasOpenRef.current = isOpen;
+  }, [isOpen, tasks]);
 
   useEffect(() => {
     if (!taskId && tasks.length > 0) {
@@ -93,8 +116,14 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
     e.preventDefault();
     if (status === 'executing' || status === 'ambiguous') return;
     if (!tasks.some((task) => task.taskId === taskId)) return;
+    if ((snapshot?.planTasks ?? []).some((task) => task.runtimeTaskId === taskId)) return;
 
-    const input: ExecuteTaskInputDto = { baseRef, prompt };
+    const draft = validateExecuteDraft(baseRef, prompt);
+    if (!draft.ok) {
+      setErrorMessage(draft.message);
+      return;
+    }
+    const input: ExecuteTaskInputDto = { baseRef: draft.baseRef, prompt: draft.prompt };
     let id: string;
     try {
       id = lifecycleRef.current.beginExecute();
@@ -200,9 +229,11 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
 
   const INK = 'var(--cth-ink-900, #0f172a)';
   const selectedTaskInSnapshot = tasks.some((task) => task.taskId === taskId);
+  const planOwnedTask = selectedTaskInSnapshot && (snapshot?.planTasks ?? []).some((task) => task.runtimeTaskId === taskId);
   const canSubmit =
     connection !== 'disconnected' &&
     selectedTaskInSnapshot &&
+    !planOwnedTask &&
     status !== 'executing' &&
     status !== 'ambiguous';
 
@@ -353,7 +384,6 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
             <input
               type="text"
               value={baseRef}
-              placeholder="main"
               onChange={(e) => onFieldChange(setBaseRef, e.target.value)}
               disabled={status === 'executing'}
               style={{
@@ -385,6 +415,12 @@ export function AgentHubExecuteModal({ isOpen, onClose }: AgentHubExecuteModalPr
               }}
             />
           </div>
+
+          {planOwnedTask && (
+            <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--cth-amber-dark, #ca8a04)' }}>
+              {t('agenthub.execute.planOwned', EXECUTE_VALIDATION_MESSAGE.planOwned)}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button

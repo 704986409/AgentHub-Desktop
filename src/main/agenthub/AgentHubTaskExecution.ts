@@ -9,6 +9,7 @@ import {
   snapshotExecuteTaskRequest,
   AgentHubValidationError
 } from './AgentHubTypes';
+import { buildExecuteHttpBody } from '../../shared/agenthubExecuteDraft';
 import { AgentHubContractError, isDefinitiveMutationFailure } from './AgentHubRestClient';
 
 interface ExecutionRecord {
@@ -143,12 +144,16 @@ export class AgentHubTaskExecution {
     this.#activeControllers.add(controller);
 
     const idempotencyKey = `desktop-execute:${executionId}`;
+    const body = buildExecuteHttpBody(input);
+    console.info(
+      `[AgentHub Execute] taskId=${taskId} bodyKeys=baseRef,prompt baseRef=${body.baseRef} promptLength=${body.prompt.length} idempotencyKeyPresent=true`
+    );
     let executeResult: ExecuteTaskResultDto | null = null;
 
     try {
       executeResult = await this.#connection.restClient.executeTask(
         taskId,
-        input,
+        body,
         idempotencyKey,
         controller.signal
       );

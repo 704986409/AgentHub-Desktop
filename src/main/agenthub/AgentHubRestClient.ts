@@ -323,7 +323,11 @@ export class AgentHubRestClient {
       throw new AgentHubContractError('INVALID_IDEMPOTENCY_KEY', 'Idempotency-Key must be a non-empty string');
     }
 
-    const bodyString = JSON.stringify(validatedInput);
+    const body = {
+      baseRef: validatedInput.baseRef.trim(),
+      prompt: validatedInput.prompt.trim()
+    };
+    const bodyString = JSON.stringify(body);
     if (new TextEncoder().encode(bodyString).length > 1024 * 1024) {
       throw new AgentHubContractError('BODY_OVERFLOW', 'Request body exceeds 1 MiB limit');
     }
