@@ -1234,7 +1234,8 @@ describe('AgentHub V0.8.6 mutation surface allowlist', () => {
     assert.match(ui, /Retry Same Submission/);
     assert.match(ui, /status === 'ambiguous'/);
     assert.match(ui, /status === 'submitting' \|\| status === 'ambiguous'/);
-    assert.match(ui, /No authoritative projects are available/);
+    assert.match(ui, /No authoritative Project exists on this Backend\./);
+    assert.match(ui, /Create a Project before submitting a Task\./);
     assert.equal(ui.includes('No projects loaded from snapshot'), false);
     assert.match(ui, /projects\.some\(\(p\) => p\.projectId === projectId\)/);
     const store = fs.readFileSync(path.join(process.cwd(), 'src/renderer/src/stores/agentHubStore.ts'), 'utf8');
